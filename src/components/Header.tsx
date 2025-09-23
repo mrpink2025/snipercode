@@ -2,6 +2,7 @@ import { Bell, Settings, User, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const Header = () => {
   return (
@@ -39,6 +40,7 @@ const Header = () => {
                 3
               </Badge>
             </Button>
+            <ThemeToggle />
             <Button variant="outline" size="sm">
               <Settings className="w-4 h-4" />
             </Button>

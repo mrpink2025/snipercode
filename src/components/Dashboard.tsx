@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Search, Filter, RefreshCw, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,98 +7,38 @@ import { Badge } from "@/components/ui/badge";
 import KPICards from "./KPICards";
 import IncidentCard from "./IncidentCard";
 import { toast } from "@/hooks/use-toast";
+import { useAppStore } from "@/lib/store";
+import { useMemo } from "react";
 
-// Mock data para demonstração
-const mockIncidents = [
-  {
-    id: "INC-169001",
-    host: "facebook.com",
-    machineId: "WKS-001-SP",
-    user: "maria.santos",
-    timestamp: new Date().toISOString(),
-    tabUrl: "https://facebook.com/login",
-    severity: "RED" as const,
-    cookieExcerpt: "_fbp=fb.1.1234567890.1234567890",
-    status: "new" as const,
-    isRedList: true,
-  },
-  {
-    id: "INC-169002", 
-    host: "instagram.com",
-    machineId: "WKS-002-RJ",
-    user: "joao.silva",
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-    tabUrl: "https://instagram.com/explore",
-    severity: "RED" as const,
-    cookieExcerpt: "sessionid=ABC123DEF456",
-    status: "in-progress" as const,
-    isRedList: true,
-  },
-  {
-    id: "INC-169003",
-    host: "x.com",
-    machineId: "WKS-003-SP",
-    user: "ana.costa",
-    timestamp: new Date(Date.now() - 7200000).toISOString(),
-    tabUrl: "https://x.com/home",
-    severity: "RED" as const,
-    cookieExcerpt: "auth_token=xyz789abc123",
-    status: "blocked" as const,
-    isRedList: true,
-  },
-  {
-    id: "INC-169004",
-    host: "linkedin.com",
-    machineId: "WKS-004-SP",
-    user: "carlos.lima",
-    timestamp: new Date(Date.now() - 10800000).toISOString(),
-    severity: "NORMAL" as const,
-    cookieExcerpt: "li_at=professional_session_123",
-    status: "approved" as const,
-    isRedList: false,
-  },
-  {
-    id: "INC-169005",
-    host: "github.com",
-    machineId: "WKS-005-RJ",
-    user: "dev.team",
-    timestamp: new Date(Date.now() - 14400000).toISOString(),
-    tabUrl: "https://github.com/corporate/repo",
-    severity: "NORMAL" as const,
-    cookieExcerpt: "_gh_sess=work_session_456",
-    status: "new" as const,
-    isRedList: false,
-  },
-  {
-    id: "INC-169006",
-    host: "dropbox.com",
-    machineId: "WKS-006-SP",
-    user: "admin.user",
-    timestamp: new Date(Date.now() - 18000000).toISOString(),
-    severity: "NORMAL" as const,
-    cookieExcerpt: "t=business_token_789",
-    status: "approved" as const,
-    isRedList: false,
-  },
-];
+// Remove mock data - now using store
 
 const Dashboard = () => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [severityFilter, setSeverityFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const { 
+    incidents, 
+    searchTerm, 
+    severityFilter, 
+    statusFilter,
+    setSearchTerm,
+    setSeverityFilter,
+    setStatusFilter,
+    updateIncidentStatus
+  } = useAppStore();
 
-  const filteredIncidents = mockIncidents.filter(incident => {
-    const matchesSearch = incident.host.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         incident.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         incident.user.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesSeverity = severityFilter === "all" || incident.severity === severityFilter;
-    const matchesStatus = statusFilter === "all" || incident.status === statusFilter;
-    
-    return matchesSearch && matchesSeverity && matchesStatus;
-  });
+  const filteredIncidents = useMemo(() => {
+    return incidents.filter(incident => {
+      const matchesSearch = incident.host.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           incident.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           incident.user.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesSeverity = severityFilter === "all" || incident.severity === severityFilter;
+      const matchesStatus = statusFilter === "all" || incident.status === statusFilter;
+      
+      return matchesSearch && matchesSeverity && matchesStatus;
+    });
+  }, [incidents, searchTerm, severityFilter, statusFilter]);
 
   const handleBlock = (incidentId: string) => {
+    updateIncidentStatus(incidentId, 'blocked');
     toast({
       title: "Bloqueio iniciado",
       description: `Processando bloqueio para incidente ${incidentId}`,
@@ -107,6 +46,7 @@ const Dashboard = () => {
   };
 
   const handleRequestRaw = (incidentId: string) => {
+    updateIncidentStatus(incidentId, 'in-progress');
     toast({
       title: "Solicitação de cookie raw",
       description: `Solicitação enviada para aprovação - ${incidentId}`,
@@ -114,6 +54,7 @@ const Dashboard = () => {
   };
 
   const handleIsolate = (incidentId: string) => {
+    updateIncidentStatus(incidentId, 'blocked');
     toast({
       title: "Isolamento de host",
       description: `Iniciando isolamento para incidente ${incidentId}`,
