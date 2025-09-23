@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Icon Generator</title>
+    <style>
+        canvas { border: 1px solid #ccc; margin: 10px; }
+        body { font-family: Arial, sans-serif; padding: 20px; }
+    </style>
+</head>
+<body>
+    <h2>CorpMonitor Icon Generator</h2>
+    <p>Click "Generate Icons" to create all extension icons</p>
+    <button onclick="generateIcons()">Generate Icons</button>
+    <div id="icons"></div>
+
+    <script>
+        function generateIcons() {
+            const sizes = [16, 32, 48, 128];
+            const iconsDiv = document.getElementById('icons');
+            iconsDiv.innerHTML = '';
+
+            sizes.forEach(size => {
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+
+                // Create shield icon
+                drawShieldIcon(ctx, size);
+
+                // Add to page
+                const container = document.createElement('div');
+                container.innerHTML = `<h4>Icon ${size}x${size}</h4>`;
+                container.appendChild(canvas);
+
+                // Add download link
+                const link = document.createElement('a');
+                link.download = `icon${size}.png`;
+                link.href = canvas.toDataURL();
+                link.textContent = `Download icon${size}.png`;
+                link.style.display = 'block';
+                link.style.marginBottom = '10px';
+                
+                container.appendChild(link);
+                iconsDiv.appendChild(container);
+            });
+        }
+
+        function drawShieldIcon(ctx, size) {
+            // Clear canvas
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, size, size);
+
+            // Scale factors
+            const scale = size / 128;
+            
+            // Shield gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, size);
+            gradient.addColorStop(0, '#667eea');
+            gradient.addColorStop(1, '#764ba2');
+            
+            // Draw shield shape
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const width = size * 0.7;
+            const height = size * 0.8;
+            
+            // Shield path
+            ctx.moveTo(centerX, centerY - height/2);
+            ctx.quadraticCurveTo(centerX + width/2, centerY - height/2, centerX + width/2, centerY);
+            ctx.quadraticCurveTo(centerX + width/2, centerY + height/3, centerX, centerY + height/2);
+            ctx.quadraticCurveTo(centerX - width/2, centerY + height/3, centerX - width/2, centerY);
+            ctx.quadraticCurveTo(centerX - width/2, centerY - height/2, centerX, centerY - height/2);
+            ctx.closePath();
+            ctx.fill();
+
+            // Add white checkmark or lock symbol
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `${size * 0.4}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🔒', centerX, centerY);
+        }
+    </script>
+</body>
+</html>

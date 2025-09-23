@@ -1,0 +1,19 @@
+{
+  "name": "corpmonitor-extension",
+  "version": "1.0.0",
+  "description": "CorpMonitor Chrome Extension for corporate data monitoring",
+  "scripts": {
+    "build": "node build.js",
+    "dev": "node build.js && echo 'Load dist/ folder as unpacked extension in Chrome'",
+    "pack": "npm run build && cd dist && zip -r ../corpmonitor-extension.zip .",
+    "install-guide": "cat INSTALLATION.md"
+  },
+  "keywords": [
+    "chrome-extension",
+    "corporate-monitoring",
+    "data-governance",
+    "compliance"
+  ],
+  "author": "Corporate IT",
+  "license": "MIT"
+}
