@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ExtensionDemo from "./pages/ExtensionDemo";
+import InstallExtension from "./pages/InstallExtension";
 import AgentInstaller from "./pages/AgentInstaller";
 import Approvals from "./pages/Approvals";
 import NotFound from "./pages/NotFound";
@@ -63,6 +64,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <ExtensionDemo />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/install-extension" 
+                element={
+                  <ProtectedRoute>
+                    <InstallExtension />
                   </ProtectedRoute>
                 } 
               />

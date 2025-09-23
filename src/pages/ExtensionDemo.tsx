@@ -93,6 +93,11 @@ const ExtensionDemo = () => {
               <div className="space-y-2">
                 <h4 className="font-medium">Arquivos Disponíveis:</h4>
                 <div className="space-y-2">
+                  <Button asChild>
+                    <Link to="/install-extension">
+                      Instalar Extensão
+                    </Link>
+                  </Button>
                   <Button variant="outline" size="sm" className="w-full justify-start">
                     <Download className="w-4 h-4 mr-2" />
                     corpmonitor-extension.crx
