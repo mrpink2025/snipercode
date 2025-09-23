@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { NotificationSystem } from "@/components/NotificationSystem";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 
@@ -58,12 +59,7 @@ const Header = () => {
           
           {/* Action Buttons */}
           <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm" className="relative">
-              <Bell className="w-4 h-4" />
-              <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 text-xs bg-danger text-danger-foreground">
-                3
-              </Badge>
-            </Button>
+            <NotificationSystem />
             <ThemeToggle />
             
             {/* User Menu */}
