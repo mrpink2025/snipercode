@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface RawCookieRequestModalProps {
   isOpen: boolean;
@@ -42,16 +42,18 @@ const RawCookieRequestModal = ({ isOpen, onClose, incidentId, host }: RawCookieR
     
     setIsSubmitting(true);
     
-    // Simular envio
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setIsSubmitted(true);
+    try {
+      const { createRawCookieRequest } = await import('@/lib/supabase-helpers');
+      await createRawCookieRequest(incidentId, justification);
       
-      toast({
-        title: "Solicitação enviada",
-        description: "Sua solicitação de acesso ao cookie raw foi enviada para aprovação.",
-      });
-    }, 2000);
+      setIsSubmitted(true);
+      toast.success("Sua solicitação de acesso ao cookie raw foi enviada para aprovação.");
+    } catch (error) {
+      console.error('Error submitting request:', error);
+      toast.error(`Erro ao enviar solicitação: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (isSubmitted) {

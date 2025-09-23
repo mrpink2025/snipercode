@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface ApprovalModalProps {
   isOpen: boolean;
@@ -39,35 +39,31 @@ const ApprovalModal = ({ isOpen, onClose, request }: ApprovalModalProps) => {
 
   const handleDecision = async (action: 'approve' | 'reject') => {
     if (action === 'approve' && !mfaCode) {
-      toast({
-        title: "MFA obrigatório",
-        description: "Código MFA é obrigatório para aprovações.",
-        variant: "destructive",
-      });
+      toast.error("Código MFA é obrigatório para aprovações.");
       return;
     }
 
     setIsProcessing(true);
     setDecision(action);
     
-    // Simular processamento
-    setTimeout(() => {
-      setIsProcessing(false);
+    try {
+      const { approveRequest } = await import('@/lib/supabase-helpers');
+      await approveRequest(request.id, action === 'approve', comment);
       
       if (action === 'approve') {
-        toast({
-          title: "Solicitação aprovada",
-          description: `Acesso ao cookie raw foi aprovado para ${request.incidentId}.`,
-        });
+        toast.success(`Acesso ao cookie raw foi aprovado para ${request.incidentId}.`);
       } else {
-        toast({
-          title: "Solicitação rejeitada",
-          description: `Solicitação foi rejeitada e o solicitante foi notificado.`,
-        });
+        toast.success(`Solicitação foi rejeitada e o solicitante foi notificado.`);
       }
       
       onClose();
-    }, 2000);
+    } catch (error) {
+      console.error('Error processing approval:', error);
+      toast.error(`Erro ao processar ${action === 'approve' ? 'aprovação' : 'rejeição'}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    } finally {
+      setIsProcessing(false);
+      setDecision(null);
+    }
   };
 
   return (

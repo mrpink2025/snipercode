@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ExtensionDemo from "./pages/ExtensionDemo";
 import AgentInstaller from "./pages/AgentInstaller";
+import Approvals from "./pages/Approvals";
 import NotFound from "./pages/NotFound";
 import { UserProfile } from "./components/UserProfile";
 import { useAppStore } from './lib/store';
@@ -46,6 +47,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <Index />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/approvals" 
+                element={
+                  <ProtectedRoute requiredRole="approver">
+                    <Approvals />
                   </ProtectedRoute>
                 } 
               />

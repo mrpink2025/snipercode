@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface BlockDomainModalProps {
   isOpen: boolean;
@@ -34,33 +34,32 @@ const BlockDomainModal = ({ isOpen, onClose, domain, incidentId }: BlockDomainMo
     
     setIsBlocking(true);
     
-    // Simular bloqueio
-    setTimeout(() => {
-      setIsBlocking(false);
+    try {
+      const { blockDomain } = await import('@/lib/supabase-helpers');
+      await blockDomain(domain, `Bloqueio relacionado ao incidente ${incidentId}`);
+      
       setIsBlocked(true);
+      toast.success(`${domain} foi bloqueado em toda a rede corporativa.`);
       
-      toast({
-        title: "Domínio bloqueado com sucesso",
-        description: `${domain} foi bloqueado em toda a rede corporativa.`,
-      });
-      
-      // Auto close após 3 segundos ou permitir rollback
+      // Auto close após 3 segundos se ainda estiver bloqueado
       setTimeout(() => {
         if (isBlocked) {
           onClose();
         }
       }, 3000);
-    }, 2000);
+    } catch (error) {
+      console.error('Error blocking domain:', error);
+      toast.error(`Erro ao bloquear domínio: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    } finally {
+      setIsBlocking(false);
+    }
   };
 
   const handleRollback = () => {
     setIsBlocked(false);
     setConfirmText("");
     
-    toast({
-      title: "Bloqueio revertido",
-      description: `Acesso a ${domain} foi restaurado.`,
-    });
+    toast.success(`Acesso a ${domain} foi restaurado.`);
   };
 
   if (isBlocked) {
