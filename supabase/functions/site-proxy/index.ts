@@ -77,73 +77,14 @@ serve(async (req) => {
       // Add random delay to simulate human behavior
       await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
 
-      let providerUsed = 'direct';
-      let response = await fetch(url, {
+      const response = await fetch(url, {
         method: 'GET',
         headers: headers,
         redirect: 'follow'
       });
 
-      // If blocked by anti-bot, try fallbacks (if configured)
-      if (!response.ok && [401, 403, 429, 503].includes(response.status)) {
-        const scraperKey = Deno.env.get('SCRAPERAPI_KEY') ?? '';
-        const zyteKey = Deno.env.get('ZYTE_API_KEY') ?? '';
-        const browserlessUrl = Deno.env.get('BROWSERLESS_URL') ?? '';
-        const browserlessToken = Deno.env.get('BROWSERLESS_TOKEN') ?? '';
-
-        // 1) ScraperAPI fallback
-        if (scraperKey) {
-          try {
-            providerUsed = 'scraperapi';
-            const scraperUrl = `https://api.scraperapi.com/?api_key=${scraperKey}&render=true&keep_headers=true&device_type=desktop&country=br&url=${encodeURIComponent(url)}${cookieHeader ? `&cookies=${encodeURIComponent(cookieHeader)}` : ''}`;
-            response = await fetch(scraperUrl, { method: 'GET' });
-          } catch (e) {
-            console.warn('ScraperAPI fallback failed:', e);
-          }
-        }
-
-        // 2) Zyte (optional)
-        if ((!response || !response.ok) && zyteKey) {
-          try {
-            providerUsed = 'zyte';
-            const zyteUrl = `https://api.zyte.com/v1/extract?url=${encodeURIComponent(url)}`;
-            const auth = 'Basic ' + btoa(`${zyteKey}:`);
-            response = await fetch(zyteUrl, {
-              method: 'GET',
-              headers: {
-                'Authorization': auth,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-              }
-            });
-          } catch (e) {
-            console.warn('Zyte fallback failed:', e);
-          }
-        }
-
-        // 3) Browserless (optional)
-        if ((!response || !response.ok) && browserlessUrl && browserlessToken) {
-          try {
-            providerUsed = 'browserless';
-            const navUrl = `${browserlessUrl.replace(/\/$/, '')}/content?token=${browserlessToken}`;
-            const payload = { url, gotoOptions: { waitUntil: 'networkidle2' }, headers };
-            response = await fetch(navUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-            });
-          } catch (e) {
-            console.warn('Browserless fallback failed:', e);
-          }
-        }
-
-        // If still not ok, return structured error
-        if (!response || !response.ok) {
-          const status = response?.status ?? 502;
-          return new Response(
-            JSON.stringify({ error: 'Failed to fetch target URL', status, provider: providerUsed }),
-            { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
+      if (!response.ok) {
+        throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
       }
 
       let content = await response.text();
@@ -192,10 +133,9 @@ serve(async (req) => {
       return new Response(content, {
         headers: {
           ...corsHeaders,
-          'Content-Type': contentType || 'text/html; charset=utf-8',
+          'Content-Type': contentType,
           'X-Frame-Options': 'ALLOWALL',
-          'Content-Security-Policy': 'frame-ancestors *',
-          'X-Proxy-Provider': providerUsed
+          'Content-Security-Policy': 'frame-ancestors *'
         }
       });
     }
