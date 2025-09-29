@@ -46,19 +46,36 @@ serve(async (req) => {
         .map(cookie => `${cookie.name}=${cookie.value}`)
         .join('; ');
 
-      // Fetch the target site with captured cookies
+      // Get the base URL for referrer
+      const baseUrl = new URL(url);
+      const referrerUrl = `${baseUrl.protocol}//${baseUrl.host}`;
+
+      // Realistic headers to bypass bot detection
       const headers: Record<string, string> = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
         'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'max-age=0',
         'Connection': 'keep-alive',
+        'DNT': '1',
+        'Referer': referrerUrl,
+        'Sec-CH-UA': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-CH-UA-Mobile': '?0',
+        'Sec-CH-UA-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Sec-Fetch-User': '?1',
         'Upgrade-Insecure-Requests': '1'
       };
 
       if (cookieHeader) {
         headers['Cookie'] = cookieHeader;
       }
+
+      // Add random delay to simulate human behavior
+      await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
 
       const response = await fetch(url, {
         method: 'GET',

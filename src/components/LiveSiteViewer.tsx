@@ -13,6 +13,7 @@ interface LiveSiteViewerProps {
     host: string;
     tab_url?: string;
     cookie_data?: any;
+    full_cookie_data?: any;
   };
   onClose: () => void;
 }
@@ -24,11 +25,42 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [cookies, setCookies] = useState<any[]>([]);
 
   useEffect(() => {
-    // Parse cookie data from incident
-    if (incident.cookie_data?.cookies) {
-      setCookies(incident.cookie_data.cookies);
+    // Try to get cookies from full_cookie_data first, then fallback to cookie_data
+    const cookieSource = incident.full_cookie_data || incident.cookie_data;
+    
+    if (cookieSource) {
+      try {
+        let parsedData;
+        
+        if (typeof cookieSource === 'string') {
+          parsedData = JSON.parse(cookieSource);
+        } else {
+          parsedData = cookieSource;
+        }
+
+        // Convert different cookie data formats to standard format
+        let cookieArray = [];
+        
+        if (Array.isArray(parsedData)) {
+          // Already in array format
+          cookieArray = parsedData;
+        } else if (typeof parsedData === 'object') {
+          // Convert object format {name: value} to array format
+          cookieArray = Object.entries(parsedData).map(([name, value]) => ({
+            name,
+            value: String(value),
+            domain: incident.host,
+            path: '/'
+          }));
+        }
+        
+        setCookies(cookieArray);
+      } catch (error) {
+        console.error('Error parsing cookie data:', error);
+        setCookies([]);
+      }
     }
-  }, [incident]);
+  }, [incident.full_cookie_data, incident.cookie_data, incident.host]);
 
   const loadSiteWithCookies = async () => {
     if (!incident.tab_url) {
@@ -102,7 +134,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           <span>{incident.host}</span>
           {cookies.length > 0 && (
             <Badge variant="secondary" className="ml-2">
-              {cookies.length} cookies
+              {cookies.length} cookies • Anti-bot bypass
             </Badge>
           )}
         </div>
