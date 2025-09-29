@@ -11,3 +11,9 @@ verify_jwt = true
 
 [functions.site-proxy]
 verify_jwt = true
+
+[functions.extension-config]
+verify_jwt = true
+
+[functions.extension-update-server]
+verify_jwt = false

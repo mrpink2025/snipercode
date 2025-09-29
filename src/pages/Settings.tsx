@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
+import { ExtensionSettings } from "@/components/ExtensionSettings";
 
 interface UserProfile {
   id: string;
@@ -200,7 +201,7 @@ const Settings = () => {
             </div>
 
             <Tabs defaultValue="profile" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="profile" className="flex items-center gap-2">
                   <User className="h-4 w-4" />
                   Perfil
@@ -217,6 +218,12 @@ const Settings = () => {
                   <Shield className="h-4 w-4" />
                   Segurança
                 </TabsTrigger>
+                {profile?.role === 'admin' && (
+                  <TabsTrigger value="extension" className="flex items-center gap-2">
+                    <SettingsIcon className="h-4 w-4" />
+                    Extensão
+                  </TabsTrigger>
+                )}
               </TabsList>
 
               <TabsContent value="profile">
@@ -549,6 +556,12 @@ const Settings = () => {
                   </CardContent>
                 </Card>
               </TabsContent>
+
+              {profile?.role === 'admin' && (
+                <TabsContent value="extension">
+                  <ExtensionSettings />
+                </TabsContent>
+              )}
             </Tabs>
           </div>
         </main>

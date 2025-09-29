@@ -328,6 +328,53 @@ export type Database = {
           },
         ]
       }
+      system_settings: {
+        Row: {
+          auto_update_enabled: boolean
+          created_at: string
+          extension_update_url: string | null
+          extension_version: string | null
+          force_update_version: string | null
+          id: string
+          rollback_version: string | null
+          update_channel: Database["public"]["Enums"]["update_channel"]
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          auto_update_enabled?: boolean
+          created_at?: string
+          extension_update_url?: string | null
+          extension_version?: string | null
+          force_update_version?: string | null
+          id?: string
+          rollback_version?: string | null
+          update_channel?: Database["public"]["Enums"]["update_channel"]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          auto_update_enabled?: boolean
+          created_at?: string
+          extension_update_url?: string | null
+          extension_version?: string | null
+          force_update_version?: string | null
+          id?: string
+          rollback_version?: string | null
+          update_channel?: Database["public"]["Enums"]["update_channel"]
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "system_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -367,6 +414,7 @@ export type Database = {
         | "blocked"
         | "approved"
         | "resolved"
+      update_channel: "stable" | "beta" | "dev"
       user_role: "admin" | "operator" | "approver"
     }
     CompositeTypes: {
@@ -513,6 +561,7 @@ export const Constants = {
         "approved",
         "resolved",
       ],
+      update_channel: ["stable", "beta", "dev"],
       user_role: ["admin", "operator", "approver"],
     },
   },
