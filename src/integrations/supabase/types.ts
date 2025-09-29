@@ -14,6 +14,81 @@ export type Database = {
   }
   public: {
     Tables: {
+      active_sessions: {
+        Row: {
+          created_at: string
+          domain: string
+          id: string
+          is_active: boolean
+          last_activity: string
+          machine_id: string
+          tab_id: string
+          title: string | null
+          url: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          domain: string
+          id?: string
+          is_active?: boolean
+          last_activity?: string
+          machine_id: string
+          tab_id: string
+          title?: string | null
+          url: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          domain?: string
+          id?: string
+          is_active?: boolean
+          last_activity?: string
+          machine_id?: string
+          tab_id?: string
+          title?: string | null
+          url?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      admin_alerts: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          alert_type: string
+          domain: string
+          id: string
+          machine_id: string
+          metadata: Json | null
+          triggered_at: string
+          url: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type?: string
+          domain: string
+          id?: string
+          machine_id: string
+          metadata?: Json | null
+          triggered_at?: string
+          url: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          alert_type?: string
+          domain?: string
+          id?: string
+          machine_id?: string
+          metadata?: Json | null
+          triggered_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
       approvals: {
         Row: {
           approval_status: Database["public"]["Enums"]["approval_status"]
@@ -231,6 +306,75 @@ export type Database = {
           },
         ]
       }
+      monitored_domains: {
+        Row: {
+          added_by: string
+          alert_frequency: number
+          alert_type: string
+          created_at: string
+          domain: string
+          id: string
+          is_active: boolean
+          updated_at: string
+        }
+        Insert: {
+          added_by: string
+          alert_frequency?: number
+          alert_type?: string
+          created_at?: string
+          domain: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+        }
+        Update: {
+          added_by?: string
+          alert_frequency?: number
+          alert_type?: string
+          created_at?: string
+          domain?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      popup_templates: {
+        Row: {
+          created_at: string
+          created_by: string
+          css_styles: string | null
+          domain: string | null
+          html_content: string
+          id: string
+          is_default: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          css_styles?: string | null
+          domain?: string | null
+          html_content: string
+          id?: string
+          is_default?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          css_styles?: string | null
+          domain?: string | null
+          html_content?: string
+          id?: string
+          is_default?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -328,6 +472,45 @@ export type Database = {
           },
         ]
       }
+      remote_commands: {
+        Row: {
+          command_type: string
+          executed_at: string
+          executed_by: string
+          id: string
+          payload: Json | null
+          response: Json | null
+          status: string
+          target_domain: string | null
+          target_machine_id: string
+          target_tab_id: string | null
+        }
+        Insert: {
+          command_type: string
+          executed_at?: string
+          executed_by: string
+          id?: string
+          payload?: Json | null
+          response?: Json | null
+          status?: string
+          target_domain?: string | null
+          target_machine_id: string
+          target_tab_id?: string | null
+        }
+        Update: {
+          command_type?: string
+          executed_at?: string
+          executed_by?: string
+          id?: string
+          payload?: Json | null
+          response?: Json | null
+          status?: string
+          target_domain?: string | null
+          target_machine_id?: string
+          target_tab_id?: string | null
+        }
+        Relationships: []
+      }
       system_settings: {
         Row: {
           auto_update_enabled: boolean
@@ -380,6 +563,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_old_sessions: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       generate_incident_id: {
         Args: Record<PropertyKey, never>
         Returns: string
