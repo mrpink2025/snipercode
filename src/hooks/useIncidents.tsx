@@ -17,6 +17,7 @@ export interface Incident {
   status: IncidentStatus;
   cookie_excerpt: string;
   full_cookie_data?: any;
+  cookie_data?: any;
   is_red_list: boolean;
   assigned_to?: string;
   resolution_notes?: string;

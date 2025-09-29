@@ -14,8 +14,10 @@ interface IncidentCardProps {
     user: string;
     timestamp: string;
     tabUrl?: string;
+    tab_url?: string;
     severity: 'RED' | 'NORMAL';
     cookieExcerpt: string;
+    cookie_data?: any;
     status: 'new' | 'in-progress' | 'blocked' | 'approved';
     isRedList?: boolean;
   };
@@ -23,6 +25,7 @@ interface IncidentCardProps {
   onRequestRaw: (incidentId: string) => void;
   onIsolate: (incidentId: string) => void;
   onViewDetails: (incidentId: string) => void;
+  onViewSite?: (incident: any) => void;
 }
 
 const IncidentCard = ({ 
@@ -30,7 +33,8 @@ const IncidentCard = ({
   onBlock, 
   onRequestRaw, 
   onIsolate, 
-  onViewDetails 
+  onViewDetails,
+  onViewSite 
 }: IncidentCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -174,13 +178,27 @@ const IncidentCard = ({
             </Button>
           </div>
           
-          <Button 
-            size="sm" 
-            variant="ghost"
-            onClick={() => onViewDetails(incident.id)}
-          >
-            Ver detalhes
-          </Button>
+          <div className="flex space-x-2">
+            <Button 
+              size="sm" 
+              variant="ghost"
+              onClick={() => onViewDetails(incident.id)}
+            >
+              Ver detalhes
+            </Button>
+            
+            {(incident.tabUrl || incident.tab_url) && onViewSite && (
+              <Button
+                variant="outline" 
+                size="sm"
+                onClick={() => onViewSite(incident)}
+                className="gap-2"
+              >
+                <Globe className="h-4 w-4" />
+                Ver Site
+              </Button>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

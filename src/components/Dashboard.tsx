@@ -3,6 +3,7 @@ import { KPICards } from '@/components/KPICards';
 import IncidentCard from '@/components/IncidentCard';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { DemoDataButton } from '@/components/DemoDataButton';
+import { LiveSiteViewer } from '@/components/LiveSiteViewer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,6 +25,8 @@ const Dashboard = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [kpiData, setKpiData] = useState<any>(null);
   const [kpiLoading, setKpiLoading] = useState(true);
+  const [selectedIncident, setSelectedIncident] = useState<any>(null);
+  const [showSiteViewer, setShowSiteViewer] = useState(false);
 
   // Use the real incidents hook
   const { 
@@ -110,6 +113,12 @@ const Dashboard = () => {
   const handleViewDetails = (incidentId: string) => {
     toast.info(`Detalhes do incidente ${incidentId}`);
     // In a real app, you'd navigate to a details page
+  };
+
+  const handleViewSite = (incident: any) => {
+    console.log('Viewing site for incident:', incident);
+    setSelectedIncident(incident);
+    setShowSiteViewer(true);
   };
 
   if (incidentsLoading && incidents.length === 0) {
@@ -290,8 +299,10 @@ const Dashboard = () => {
                         locale: ptBR
                       }),
                       tabUrl: incident.tab_url,
+                      tab_url: incident.tab_url,
                       severity: incident.severity === 'critical' ? 'RED' : 'NORMAL',
                       cookieExcerpt: incident.cookie_excerpt,
+                      cookie_data: incident.cookie_data,
                       status: incident.status as 'new' | 'in-progress' | 'blocked' | 'approved',
                       isRedList: incident.is_red_list
                     }}
@@ -299,6 +310,7 @@ const Dashboard = () => {
                     onRequestRaw={handleRequestRaw}
                     onIsolate={handleIsolate}
                     onViewDetails={handleViewDetails}
+                    onViewSite={handleViewSite}
                   />
                 ))}
                 
@@ -317,6 +329,21 @@ const Dashboard = () => {
 
       {/* Notification Center */}
       <NotificationCenter />
+
+      {/* Site Viewer Modal */}
+      {showSiteViewer && selectedIncident && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-6xl h-[90vh] bg-background border rounded-lg shadow-lg">
+            <LiveSiteViewer
+              incident={selectedIncident}
+              onClose={() => {
+                setShowSiteViewer(false);
+                setSelectedIncident(null);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
