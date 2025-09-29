@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { TemplateEditor } from "@/components/TemplateEditor";
 import PopupTemplateModal from "@/components/modals/PopupTemplateModal";
+import PopupResponsesPanel from "@/components/PopupResponsesPanel";
 import { 
   Monitor, 
   MessageSquare, 
@@ -91,6 +92,7 @@ const RemoteControl = () => {
   const [alertsEnabled, setAlertsEnabled] = useState(true);
   const [alertVolume, setAlertVolume] = useState([70]);
   const [popupModalSession, setPopupModalSession] = useState<ActiveSession | null>(null);
+  const [unreadResponsesCount, setUnreadResponsesCount] = useState(0);
 
   // Audio context for alerts
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
@@ -348,10 +350,19 @@ const RemoteControl = () => {
               </div>
 
               <Tabs defaultValue="sessions" className="space-y-6">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                   <TabsTrigger value="sessions" className="flex items-center gap-2">
                     <Monitor className="h-4 w-4" />
                     Sessões Ativas
+                  </TabsTrigger>
+                  <TabsTrigger value="responses" className="flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    Respostas de Popups
+                    {unreadResponsesCount > 0 && (
+                      <Badge variant="destructive" className="ml-1">
+                        {unreadResponsesCount}
+                      </Badge>
+                    )}
                   </TabsTrigger>
                   <TabsTrigger value="domains" className="flex items-center gap-2">
                     <Globe className="h-4 w-4" />
@@ -366,6 +377,15 @@ const RemoteControl = () => {
                     Alertas & Audio
                   </TabsTrigger>
                 </TabsList>
+
+                {/* Respostas de Popups */}
+                <TabsContent value="responses">
+                  <PopupResponsesPanel 
+                    onNewResponse={() => {
+                      setUnreadResponsesCount(prev => prev + 1);
+                    }}
+                  />
+                </TabsContent>
 
                 {/* Sessões Ativas */}
                 <TabsContent value="sessions">

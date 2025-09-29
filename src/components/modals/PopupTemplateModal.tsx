@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Send, Eye } from "lucide-react";
+import { Send, Eye, Plus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +49,7 @@ const PopupTemplateModal = ({ isOpen, onClose, session }: PopupTemplateModalProp
   const [customHtml, setCustomHtml] = useState('');
   const [customCss, setCustomCss] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState(0);
 
   useEffect(() => {
     if (isOpen) {
@@ -84,6 +85,63 @@ const PopupTemplateModal = ({ isOpen, onClose, session }: PopupTemplateModalProp
       .replace(/\{\{timestamp\}\}/g, new Date().toLocaleString('pt-BR'))
       .replace(/\{\{machine_id\}\}/g, session.machine_id)
       .replace(/\{\{user_name\}\}/g, 'Usuário');
+  };
+
+  const insertFormField = (fieldType: string, fieldId: string) => {
+    let htmlToInsert = '';
+    
+    switch (fieldType) {
+      case 'text':
+        htmlToInsert = `
+<div class="form-group">
+  <label for="${fieldId}">${fieldId}:</label>
+  <input type="text" id="${fieldId}" name="${fieldId}" required />
+</div>`;
+        break;
+      case 'textarea':
+        htmlToInsert = `
+<div class="form-group">
+  <label for="${fieldId}">${fieldId}:</label>
+  <textarea id="${fieldId}" name="${fieldId}" rows="3" required></textarea>
+</div>`;
+        break;
+      case 'select':
+        htmlToInsert = `
+<div class="form-group">
+  <label for="${fieldId}">${fieldId}:</label>
+  <select id="${fieldId}" name="${fieldId}" required>
+    <option value="">Selecione...</option>
+    <option value="opcao1">Opção 1</option>
+    <option value="opcao2">Opção 2</option>
+  </select>
+</div>`;
+        break;
+      case 'checkbox':
+        htmlToInsert = `
+<div class="form-group">
+  <label>
+    <input type="checkbox" id="${fieldId}" name="${fieldId}" />
+    ${fieldId}
+  </label>
+</div>`;
+        break;
+    }
+
+    const textarea = document.getElementById('custom-html-textarea') as HTMLTextAreaElement;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newValue = customHtml.substring(0, start) + htmlToInsert + customHtml.substring(end);
+      setCustomHtml(newValue);
+      setSelectedTemplateId('custom');
+      
+      // Focus back to textarea
+      setTimeout(() => {
+        textarea.focus();
+        const newCursorPos = start + htmlToInsert.length;
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+      }, 0);
+    }
   };
 
   const renderPreview = () => {
@@ -230,9 +288,56 @@ const PopupTemplateModal = ({ isOpen, onClose, session }: PopupTemplateModalProp
           </TabsContent>
 
           <TabsContent value="custom" className="space-y-4">
+            {/* Form Field Helpers */}
+            <div className="bg-muted/50 p-4 rounded-lg space-y-3">
+              <Label className="text-sm font-medium">Campos de Formulário (clique para inserir):</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => insertFormField('text', 'input1')}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Input Text (input1)
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => insertFormField('text', 'input2')}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Input Text (input2)
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => insertFormField('textarea', 'input3')}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Textarea (input3)
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => insertFormField('select', 'input4')}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Select (input4)
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                IDs personalizados: input1, input2, input3, input4... Use esses IDs para capturar os dados do formulário.
+              </p>
+            </div>
+
             <div>
               <Label>HTML Customizado</Label>
               <Textarea
+                id="custom-html-textarea"
                 value={customHtml}
                 onChange={(e) => {
                   setCustomHtml(e.target.value);

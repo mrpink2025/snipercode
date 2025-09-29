@@ -339,6 +339,48 @@ export type Database = {
         }
         Relationships: []
       }
+      popup_responses: {
+        Row: {
+          command_id: string
+          created_at: string
+          domain: string
+          form_data: Json
+          id: string
+          is_read: boolean
+          machine_id: string
+          tab_id: string | null
+          url: string
+          viewed_at: string | null
+          viewed_by: string | null
+        }
+        Insert: {
+          command_id: string
+          created_at?: string
+          domain: string
+          form_data: Json
+          id?: string
+          is_read?: boolean
+          machine_id: string
+          tab_id?: string | null
+          url: string
+          viewed_at?: string | null
+          viewed_by?: string | null
+        }
+        Update: {
+          command_id?: string
+          created_at?: string
+          domain?: string
+          form_data?: Json
+          id?: string
+          is_read?: boolean
+          machine_id?: string
+          tab_id?: string | null
+          url?: string
+          viewed_at?: string | null
+          viewed_by?: string | null
+        }
+        Relationships: []
+      }
       popup_templates: {
         Row: {
           created_at: string
