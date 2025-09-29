@@ -191,20 +191,44 @@ const RemoteControl = () => {
   const playAlertSound = () => {
     if (!alertsEnabled || !audioContext) return;
     
-    // Create a simple beep sound
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
+    // Create a loud alarm-like sound with multiple beeps
+    const playBeep = (frequency: number, startTime: number, duration: number) => {
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = frequency;
+      oscillator.type = 'square'; // More aggressive sound
+      
+      const volume = alertVolume[0] / 100;
+      gainNode.gain.setValueAtTime(0, startTime);
+      gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.01);
+      gainNode.gain.linearRampToValueAtTime(volume, startTime + duration - 0.1);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+      
+      oscillator.start(startTime);
+      oscillator.stop(startTime + duration);
+    };
     
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
+    // Create alarm pattern: high-low-high-low like a fire alarm
+    const now = audioContext.currentTime;
     
-    oscillator.frequency.value = 800; // 800Hz beep
-    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-    gainNode.gain.linearRampToValueAtTime(alertVolume[0] / 100, audioContext.currentTime + 0.01);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+    // First sequence - fast beeps
+    playBeep(1000, now, 0.2);        // High
+    playBeep(600, now + 0.25, 0.2);  // Low
+    playBeep(1000, now + 0.5, 0.2);  // High
+    playBeep(600, now + 0.75, 0.2);  // Low
     
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.5);
+    // Second sequence - more urgent
+    playBeep(1200, now + 1.2, 0.3);  // Very high
+    playBeep(500, now + 1.6, 0.3);   // Very low
+    playBeep(1200, now + 2.0, 0.3);  // Very high
+    playBeep(500, now + 2.4, 0.3);   // Very low
+    
+    // Final long urgent beep
+    playBeep(1400, now + 3.0, 0.8);  // Super high and long
   };
 
   const sendRemoteCommand = async (type: 'popup' | 'block' | 'screenshot' | 'unblock', session: ActiveSession, payload?: any) => {
