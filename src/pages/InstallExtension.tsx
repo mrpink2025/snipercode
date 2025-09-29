@@ -13,32 +13,89 @@ export default function InstallExtension() {
   const [downloadStarted, setDownloadStarted] = useState(false);
 
   useEffect(() => {
-    // Check if extension is already installed
+    // Real extension detection using message passing
     const checkExtensionInstalled = () => {
-      // This will be implemented when we have the actual extension ID
-      // For now, simulate checking
-      const installed = localStorage.getItem('corpmonitor-extension-installed') === 'true';
-      setIsInstalled(installed);
+      try {
+        // Try to communicate with the extension
+        const extensionId = 'corpmonitor-extension'; // This will be the actual ID
+        
+        // Listen for extension messages
+        const handleMessage = (event: MessageEvent) => {
+          if (event.data.type === 'CORPMONITOR_EXTENSION_DETECTED') {
+            setIsInstalled(true);
+            localStorage.setItem('corpmonitor-extension-installed', 'true');
+            localStorage.setItem('corpmonitor-extension-version', event.data.version || '1.0.0');
+          }
+        };
+
+        window.addEventListener('message', handleMessage);
+        
+        // Check existing localStorage state
+        const installed = localStorage.getItem('corpmonitor-extension-installed') === 'true';
+        if (installed) {
+          setIsInstalled(true);
+        }
+
+        // Try to ping extension by creating a hidden iframe that might trigger extension
+        const checkFrame = document.createElement('iframe');
+        checkFrame.style.display = 'none';
+        checkFrame.src = 'chrome-extension://invalid/popup.html'; // This will fail but might trigger extension detection
+        document.body.appendChild(checkFrame);
+        
+        setTimeout(() => {
+          document.body.removeChild(checkFrame);
+        }, 1000);
+
+        return () => {
+          window.removeEventListener('message', handleMessage);
+        };
+      } catch (error) {
+        console.log('Extension detection method not available');
+      }
     };
 
-    checkExtensionInstalled();
-    const interval = setInterval(checkExtensionInstalled, 2000);
-    return () => clearInterval(interval);
+    const cleanup = checkExtensionInstalled();
+    const interval = setInterval(checkExtensionInstalled, 3000);
+    
+    return () => {
+      cleanup?.();
+      clearInterval(interval);
+    };
   }, []);
 
-  const handleDownloadExtension = () => {
+  const handleDownloadExtension = async () => {
     setDownloadStarted(true);
     setCurrentStep(2);
     
-    // Create download link for the CRX file
-    const link = document.createElement('a');
-    link.href = '/chrome-extension/corpmonitor-extension.crx';
-    link.download = 'corpmonitor-extension.crx';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    toast.success('Download iniciado! Siga as instruções abaixo.');
+    try {
+      // Try to download the actual CRX file
+      const response = await fetch('/chrome-extension/corpmonitor-extension.crx');
+      
+      if (response.ok) {
+        // File exists, proceed with download
+        const link = document.createElement('a');
+        link.href = '/chrome-extension/corpmonitor-extension.crx';
+        link.download = 'corpmonitor-extension.crx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        toast.success('Download iniciado! Siga as instruções abaixo.');
+      } else {
+        // Fallback to ZIP file
+        const link = document.createElement('a');
+        link.href = '/chrome-extension/corpmonitor-extension.zip';
+        link.download = 'corpmonitor-extension.zip';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        toast.info('Baixando arquivo ZIP. Extraia e carregue como extensão sem compactação.');
+      }
+    } catch (error) {
+      console.error('Download failed:', error);
+      toast.error('Erro no download. Tente o método de instalação manual.');
+    }
   };
 
   const handleManualInstall = () => {

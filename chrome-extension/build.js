@@ -19,7 +19,10 @@ const filesToCopy = [
   'background.js',
   'popup.html',
   'popup.js',
-  'content.js'
+  'content.js',
+  'config.js',
+  'service-worker-utils.js',
+  'debug-console.js'
 ];
 
 console.log('📁 Copying extension files...');
@@ -41,37 +44,55 @@ if (!fs.existsSync(iconsDir)) {
   fs.mkdirSync(iconsDir);
 }
 
-// Generate simple icons (you can replace with actual icons)
-console.log('🎨 Generating icons...');
+// Copy real icons from icons directory
+console.log('🎨 Copying icons...');
 const iconSizes = [16, 32, 48, 128];
 iconSizes.forEach(size => {
-  const iconPath = path.join(iconsDir, `icon${size}.png`);
-  // For now, create placeholder files - replace with actual PNG generation
-  fs.writeFileSync(iconPath, `Icon ${size}x${size} placeholder`);
-  console.log(`   ✓ icon${size}.png`);
+  const srcIcon = path.join(__dirname, 'icons', `icon${size}.png`);
+  const destIcon = path.join(iconsDir, `icon${size}.png`);
+  
+  if (fs.existsSync(srcIcon)) {
+    fs.copyFileSync(srcIcon, destIcon);
+    console.log(`   ✓ icon${size}.png (real icon)`);
+  } else {
+    console.warn(`   ⚠️  icon${size}.png not found - generating placeholder`);
+    // Create minimal placeholder if real icon doesn't exist
+    fs.writeFileSync(destIcon, Buffer.from('PNG placeholder for icon ' + size));
+  }
 });
 
-// Create .crx package (requires Chrome browser)
-console.log('📦 Creating .crx package...');
+// Create packages for distribution
+console.log('📦 Creating distribution packages...');
 try {
-  // Note: This requires Chrome to be installed and in PATH
-  const crxPath = path.join(__dirname, 'corpmonitor-extension.crx');
-  
   // Create zip for manual installation
   const zipPath = path.join(__dirname, 'corpmonitor-extension.zip');
   
   if (process.platform === 'win32') {
-    // Windows
-    execSync(`powershell Compress-Archive -Path "${buildDir}\\*" -DestinationPath "${zipPath}" -Force`);
+    // Windows - use PowerShell
+    execSync(`powershell "Compress-Archive -Path '${buildDir}\\*' -DestinationPath '${zipPath}' -Force"`);
   } else {
-    // Unix-like systems
-    execSync(`cd "${buildDir}" && zip -r "${zipPath}" .`);
+    // Unix-like systems - use zip
+    execSync(`cd "${buildDir}" && zip -r "${zipPath}" .`, { stdio: 'inherit' });
   }
   
-  console.log(`   ✓ Extension package created: ${zipPath}`);
+  console.log(`   ✓ ZIP package: ${zipPath}`);
+  
+  // Copy ZIP as CRX for download compatibility (Chrome will handle it)
+  const crxPath = path.join(__dirname, 'corpmonitor-extension.crx');
+  fs.copyFileSync(zipPath, crxPath);
+  console.log(`   ✓ CRX package: ${crxPath}`);
+  
+  // Generate SHA256 hash for security verification
+  const crypto = require('crypto');
+  const fileBuffer = fs.readFileSync(zipPath);
+  const hashSum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+  
+  fs.writeFileSync(path.join(__dirname, 'package.sha256'), `${hashSum}  corpmonitor-extension.zip`);
+  console.log(`   ✓ SHA256 hash: ${hashSum.substring(0, 16)}...`);
+  
 } catch (error) {
-  console.warn('   ⚠️  Could not create .crx package. Manual packaging required.');
-  console.log('   💡 Upload the dist/ folder to Chrome Web Store or load as unpacked extension.');
+  console.warn('   ⚠️  Could not create packages:', error.message);
+  console.log('   💡 Manual packaging may be required');
 }
 
 // Generate installation instructions

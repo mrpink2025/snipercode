@@ -3,19 +3,73 @@ document.addEventListener('DOMContentLoaded', async () => {
   await initializePopup();
 });
 
-// Initialize popup interface
+// Initialize popup interface with extension detection
 async function initializePopup() {
-  const { userConsented } = await chrome.storage.local.get(['userConsented']);
-  
-  if (!userConsented) {
-    showOnboarding();
-  } else {
-    showMainInterface();
-    await loadStatus();
-    updateStats();
+  try {
+    // Check if we can communicate with background script
+    const isExtensionActive = await checkExtensionActive();
+    
+    if (!isExtensionActive) {
+      showExtensionNotActive();
+      return;
+    }
+    
+    const { userConsented } = await chrome.storage.local.get(['userConsented']);
+    
+    if (!userConsented) {
+      showOnboarding();
+    } else {
+      showMainInterface();
+      await loadStatus();
+      updateStats();
+    }
+    
+    setupEventListeners();
+    
+    // Notify parent page (if opened from web)
+    if (window.parent !== window) {
+      window.parent.postMessage({ 
+        type: 'CORPMONITOR_EXTENSION_DETECTED', 
+        installed: true, 
+        version: chrome.runtime.getManifest().version 
+      }, '*');
+    }
+  } catch (error) {
+    console.error('Failed to initialize popup:', error);
+    showExtensionError(error);
   }
-  
-  setupEventListeners();
+}
+
+// Check if extension is properly active
+async function checkExtensionActive() {
+  try {
+    const response = await chrome.runtime.sendMessage({ action: 'ping' });
+    return response && response.pong;
+  } catch (error) {
+    return false;
+  }
+}
+
+// Show extension not active message
+function showExtensionNotActive() {
+  document.body.innerHTML = `
+    <div style="padding: 20px; text-align: center; color: #666;">
+      <h3>Extensão não está ativa</h3>
+      <p>Por favor, recarregue a página e tente novamente.</p>
+      <button onclick="window.close()">Fechar</button>
+    </div>
+  `;
+}
+
+// Show extension error message
+function showExtensionError(error) {
+  document.body.innerHTML = `
+    <div style="padding: 20px; text-align: center; color: #d32f2f;">
+      <h3>Erro na Extensão</h3>
+      <p>Ocorreu um erro: ${error.message}</p>
+      <button onclick="window.close()">Fechar</button>
+    </div>
+  `;
 }
 
 // Show onboarding screen
