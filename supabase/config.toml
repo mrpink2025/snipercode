@@ -17,3 +17,12 @@ verify_jwt = true
 
 [functions.extension-update-server]
 verify_jwt = false
+
+[functions.session-tracker]
+verify_jwt = false
+
+[functions.command-dispatcher]
+verify_jwt = false
+
+[functions.screenshot-capture]
+verify_jwt = false

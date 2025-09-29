@@ -6,16 +6,19 @@ import {
   FileText, 
   Settings,
   Database,
-  Clock
+  Clock,
+  MonitorSpeaker
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/useAuth";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard, current: true },
   { name: "Incidentes", href: "/incidents", icon: AlertTriangle, badge: "12" },
   { name: "Hosts Monitorados", href: "/hosts", icon: Shield },
+  { name: "Controle Remoto", href: "/remote-control", icon: MonitorSpeaker, adminOnly: true },
   { name: "Aprovações", href: "/approvals", icon: Users, badge: "3" },
   { name: "Auditoria", href: "/audit", icon: FileText },
   { name: "Logs do Sistema", href: "/logs", icon: Database },
@@ -25,6 +28,7 @@ const navigation = [
 
 const Sidebar = () => {
   const location = useLocation();
+  const { isAdmin } = useAuth();
 
   return (
     <div className="flex flex-col w-sidebar bg-sidebar border-r h-screen sticky top-0">
@@ -32,6 +36,12 @@ const Sidebar = () => {
       <nav className="flex-1 space-y-1 p-4">
         {navigation.map((item) => {
           const isActive = location.pathname === item.href;
+          
+          // Hide admin-only items for non-admin users
+          if (item.adminOnly && !isAdmin) {
+            return null;
+          }
+          
           return (
             <NavLink
               key={item.name}

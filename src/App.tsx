@@ -17,6 +17,7 @@ import Audit from "./pages/Audit";
 import Logs from "./pages/Logs";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
+import RemoteControl from "./pages/RemoteControl";
 import NotFound from "./pages/NotFound";
 import { UserProfile } from "./components/UserProfile";
 import { useAppStore } from './lib/store';
@@ -142,6 +143,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <Settings />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/remote-control" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <RemoteControl />
                   </ProtectedRoute>
                 } 
               />
