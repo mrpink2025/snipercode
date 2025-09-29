@@ -541,23 +541,41 @@ async function handleRemoteCommand(data) {
   }
 }
 
-// Handle popup command
+// Handle popup command with dynamic template
 async function handlePopupCommand(data) {
   const tabId = parseInt(data.target_tab_id);
+  const htmlContent = data.payload?.html_content || '';
+  const cssStyles = data.payload?.css_styles || '';
   
   await chrome.scripting.executeScript({
     target: { tabId },
-    func: () => {
+    func: (html, css) => {
+      // Remove existing popup if any
+      const existingOverlay = document.querySelector('.corpmonitor-popup-overlay');
+      if (existingOverlay) {
+        existingOverlay.remove();
+      }
+      
+      // Create overlay
       const overlay = document.createElement('div');
-      overlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; display: flex; align-items: center; justify-content: center;`;
+      overlay.className = 'corpmonitor-popup-overlay';
+      overlay.classList.add('popup-overlay');
       
-      const popup = document.createElement('div');
-      popup.style.cssText = `background: white; padding: 20px; border-radius: 8px; text-align: center;`;
-      popup.innerHTML = `<h2 style="color: #e11d48;">⚠️ Aviso Corporativo</h2><p>Site monitorado pela administração.</p><button onclick="this.parentElement.parentElement.remove()" style="background: #e11d48; color: white; border: none; padding: 10px 20px; border-radius: 4px;">Entendi</button>`;
+      // Inject CSS
+      const style = document.createElement('style');
+      style.textContent = css;
+      document.head.appendChild(style);
       
-      overlay.appendChild(popup);
+      // Inject HTML
+      overlay.innerHTML = html;
       document.body.appendChild(overlay);
-    }
+      
+      // Add close handler to all buttons with data-close attribute
+      overlay.querySelectorAll('[data-close], .popup-btn-primary, .popup-btn-danger, .popup-btn-info').forEach(btn => {
+        btn.addEventListener('click', () => overlay.remove());
+      });
+    },
+    args: [htmlContent, cssStyles]
   });
 }
 

@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.screenshot-capture]
 verify_jwt = false
+
+[functions.template-processor]
+verify_jwt = true

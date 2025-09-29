@@ -11,6 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { TemplateEditor } from "@/components/TemplateEditor";
+import PopupTemplateModal from "@/components/modals/PopupTemplateModal";
 import { 
   Monitor, 
   MessageSquare, 
@@ -88,6 +90,7 @@ const RemoteControl = () => {
   const [loading, setLoading] = useState(true);
   const [alertsEnabled, setAlertsEnabled] = useState(true);
   const [alertVolume, setAlertVolume] = useState([70]);
+  const [popupModalSession, setPopupModalSession] = useState<ActiveSession | null>(null);
 
   // Audio context for alerts
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
@@ -229,6 +232,10 @@ const RemoteControl = () => {
     
     // Final long urgent beep
     playBeep(1400, now + 3.0, 0.8);  // Super high and long
+  };
+
+  const openPopupModal = (session: ActiveSession) => {
+    setPopupModalSession(session);
   };
 
   const sendRemoteCommand = async (type: 'popup' | 'block' | 'screenshot' | 'unblock', session: ActiveSession, payload?: any) => {
@@ -409,11 +416,11 @@ const RemoteControl = () => {
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  <div className="flex gap-2">
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline"
-                                      onClick={() => sendRemoteCommand('popup', session, { template_id: 'default' })}
+                                   <div className="flex gap-2">
+                                     <Button 
+                                       size="sm" 
+                                       variant="outline"
+                                       onClick={() => openPopupModal(session)}
                                     >
                                       <MessageSquare className="h-3 w-3 mr-1" />
                                       Popup
@@ -524,9 +531,7 @@ const RemoteControl = () => {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-center py-8 text-muted-foreground">
-                        Funcionalidade de templates em desenvolvimento...
-                      </div>
+                      <TemplateEditor />
                     </CardContent>
                   </Card>
                 </TabsContent>
@@ -606,6 +611,14 @@ const RemoteControl = () => {
           </main>
         </div>
       </div>
+
+      {popupModalSession && (
+        <PopupTemplateModal
+          isOpen={!!popupModalSession}
+          onClose={() => setPopupModalSession(null)}
+          session={popupModalSession}
+        />
+      )}
     </div>
   );
 };
