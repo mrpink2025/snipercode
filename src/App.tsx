@@ -11,6 +11,12 @@ import ExtensionDemo from "./pages/ExtensionDemo";
 import InstallExtension from "./pages/InstallExtension";
 import AgentInstaller from "./pages/AgentInstaller";
 import Approvals from "./pages/Approvals";
+import Incidents from "./pages/Incidents";
+import Hosts from "./pages/Hosts";
+import Audit from "./pages/Audit";
+import Logs from "./pages/Logs";
+import History from "./pages/History";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import { UserProfile } from "./components/UserProfile";
 import { useAppStore } from './lib/store';
@@ -88,6 +94,54 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <UserProfile />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/incidents" 
+                element={
+                  <ProtectedRoute>
+                    <Incidents />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/hosts" 
+                element={
+                  <ProtectedRoute>
+                    <Hosts />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/audit" 
+                element={
+                  <ProtectedRoute>
+                    <Audit />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/logs" 
+                element={
+                  <ProtectedRoute>
+                    <Logs />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/history" 
+                element={
+                  <ProtectedRoute>
+                    <History />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/settings" 
+                element={
+                  <ProtectedRoute>
+                    <Settings />
                   </ProtectedRoute>
                 } 
               />
