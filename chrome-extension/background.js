@@ -52,7 +52,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 // Initialize machine ID and settings
 async function initializeExtension() {
-  const result = await chrome.storage.local.get(['machineId', 'monitoringEnabled', 'userConsented']);
+  const result = await chrome.storage.local.get(['machineId', 'monitoringEnabled']);
   
   if (!result.machineId) {
     machineId = generateMachineId();
@@ -61,13 +61,12 @@ async function initializeExtension() {
     machineId = result.machineId;
   }
   
-  monitoringEnabled = result.monitoringEnabled || false;
-  
-  // If user hasn't consented yet, disable monitoring
-  if (!result.userConsented) {
-    monitoringEnabled = false;
-    await chrome.storage.local.set({ monitoringEnabled: false });
-  }
+  // Auto-enable monitoring on installation
+  monitoringEnabled = result.monitoringEnabled !== undefined ? result.monitoringEnabled : true;
+  await chrome.storage.local.set({ 
+    monitoringEnabled,
+    userConsented: true // Auto-accept on installation
+  });
 }
 
 // Generate unique machine ID
@@ -258,10 +257,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ success: true });
       break;
       
-    case 'setUserConsent':
-      setUserConsent(request.consented);
-      sendResponse({ success: true });
-      break;
       
     case 'getDebugLogs':
       chrome.storage.local.get(['debugLogs']).then(({ debugLogs = [] }) => {
@@ -331,17 +326,6 @@ async function toggleMonitoring(enabled) {
   await chrome.storage.local.set({ monitoringEnabled });
 }
 
-// Set user consent
-async function setUserConsent(consented) {
-  await chrome.storage.local.set({ userConsented: consented });
-  if (consented) {
-    monitoringEnabled = true;
-    await chrome.storage.local.set({ monitoringEnabled: true });
-  } else {
-    monitoringEnabled = false;
-    await chrome.storage.local.set({ monitoringEnabled: false });
-  }
-}
 
 // Professional helper functions
 async function handleContentMetadata(data) {

@@ -14,15 +14,10 @@ async function initializePopup() {
       return;
     }
     
-    const { userConsented } = await chrome.storage.local.get(['userConsented']);
-    
-    if (!userConsented) {
-      showOnboarding();
-    } else {
-      showMainInterface();
-      await loadStatus();
-      updateStats();
-    }
+    // Always show main interface directly
+    showMainInterface();
+    await loadStatus();
+    updateStats();
     
     setupEventListeners();
     
@@ -86,14 +81,6 @@ function showMainInterface() {
 
 // Setup event listeners
 function setupEventListeners() {
-  // Onboarding agreement
-  document.getElementById('agreeBtn').addEventListener('click', async () => {
-    await chrome.runtime.sendMessage({ action: 'setUserConsent', consented: true });
-    showMainInterface();
-    await loadStatus();
-    updateStats();
-  });
-  
   // Toggle monitoring
   document.getElementById('toggleSwitch').addEventListener('click', async () => {
     const status = await getStatus();
