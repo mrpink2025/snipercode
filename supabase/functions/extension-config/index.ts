@@ -23,9 +23,21 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabase = createClient(
+    // Create anon client for auth verification
+    const anonSupabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        auth: {
+          persistSession: false,
+        },
+      }
+    )
+
+    // Create service role client for admin verification (bypass RLS)
+    const serviceSupabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       {
         auth: {
           persistSession: false,
@@ -39,30 +51,43 @@ Deno.serve(async (req) => {
       throw new Error('No authorization header')
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
+    const { data: { user }, error: authError } = await anonSupabase.auth.getUser(
       authHeader.replace('Bearer ', '')
     )
 
     if (authError || !user) {
+      console.error('Auth error:', authError)
       throw new Error('Unauthorized')
     }
 
-    // Check if user is admin
-    const { data: profile, error: profileError } = await supabase
+    console.log('User authenticated:', user.id, user.email)
+
+    // Check if user is admin using service role to bypass RLS
+    const { data: profile, error: profileError } = await serviceSupabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
-    if (profileError || profile?.role !== 'admin') {
+    console.log('Profile query result:', { profile, profileError })
+
+    if (profileError) {
+      console.error('Profile error:', profileError)
+      throw new Error('Failed to verify user role')
+    }
+
+    if (profile?.role !== 'admin') {
+      console.error('Access denied for user:', user.email, 'Role:', profile?.role)
       throw new Error('Access denied - admin role required')
     }
+
+    console.log('Admin access verified for:', user.email)
 
     const method = req.method
 
     if (method === 'GET') {
       // Get current extension settings
-      const { data: settings, error } = await supabase
+      const { data: settings, error } = await serviceSupabase
         .from('system_settings')
         .select('*')
         .eq('id', '00000000-0000-0000-0000-000000000001')
@@ -120,7 +145,7 @@ Deno.serve(async (req) => {
       }
 
       // Update settings
-      const { data, error } = await supabase
+      const { data, error } = await serviceSupabase
         .from('system_settings')
         .upsert({
           id: '00000000-0000-0000-0000-000000000001',
