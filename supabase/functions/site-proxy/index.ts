@@ -1014,13 +1014,6 @@ const runtimePatchScript = `
             'X-Debug-Variant': attemptVariant
           }
         });
-            'X-Debug-IsLikelyHtml': String(detectedHtml),
-            'X-Debug-ForceHtml': String(forceHtmlParam),
-            'X-Debug-Cookies-Attached': String(cookieCount),
-            'X-Debug-Attempts': attemptVariant === 'original-with-cookies' ? '1' : (attemptVariant === 'original-no-cookies' ? '2' : '3'),
-            'X-Debug-Variant': attemptVariant
-          }
-        });
       }
 
       if (resourceType === 'css') {
