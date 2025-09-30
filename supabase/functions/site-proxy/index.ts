@@ -1040,7 +1040,8 @@ const runtimePatchScript = `
   const PROXY_BASE = '${proxyBase}';
   const INCIDENT_ID = '${incidentId}';
   const BASE_PAGE_URL = '${decodedUrl}';
-  console.log('[ProxyPatch] Initialized for:', BASE_PAGE_URL);
+  const IS_STANDALONE = window.top === window;
+  console.log('[ProxyPatch] Initialized for:', BASE_PAGE_URL, 'standalone:', IS_STANDALONE);
   
   let lastNavigateUrl = '';
   let lastNavigateTime = 0;
@@ -1048,17 +1049,21 @@ const runtimePatchScript = `
   function deproxify(u){ if(!u||typeof u!=='string')return u; try{ if(u.startsWith(PROXY_BASE)){ const urlObj=new URL(u); const orig=urlObj.searchParams.get('url'); if(orig)return decodeURIComponent(orig); } return u; }catch(e){return u;} }
   function proxify(u) { if (!u || typeof u !== 'string' || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u; try { const absolute = new URL(u, BASE_PAGE_URL).href; if (absolute.startsWith(PROXY_BASE)) return absolute; return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID; } catch (e) { return u; } }
   function normalizeUrl(u) { try { const url = new URL(u); return url.origin + url.pathname + url.search; } catch { return u; } }
-  function sendNavigate(u){ try { const dep=deproxify(u); const absoluteUrl = new URL(dep, BASE_PAGE_URL).href; const normalized = normalizeUrl(absoluteUrl); if (normalized === normalizeUrl(BASE_PAGE_URL)) { console.log('[ProxyPatch] Navigate (ignored - same as base):', absoluteUrl); return; } const now = Date.now(); if (normalized === lastNavigateUrl && (now - lastNavigateTime) < 800) { console.log('[ProxyPatch] Navigate (debounced):', absoluteUrl); return; } lastNavigateUrl = normalized; lastNavigateTime = now; console.log('[ProxyPatch] Navigate:', absoluteUrl); window.parent.postMessage({ type:'proxy:navigate', url:absoluteUrl, incidentId:INCIDENT_ID }, '*'); } catch(e) { console.warn('[ProxyPatch] Invalid URL for navigate:', u); } }
-  try { const baseEl = document.createElement('base'); baseEl.href = BASE_PAGE_URL; document.head && document.head.prepend(baseEl); console.log('[ProxyPatch] Base tag injected, sending proxy:ready (early)'); window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*'); } catch(e) { console.error('[ProxyPatch] Failed to inject base:', e); }
-  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',function(){ console.log('[ProxyPatch] proxy:ready (DOMContentLoaded)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); }); }
-  window.addEventListener('load',function(){ console.log('[ProxyPatch] proxy:ready (load)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); });
-  setTimeout(function(){ console.log('[ProxyPatch] proxy:ready (retry-0ms)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); },0);
-  setTimeout(function(){ console.log('[ProxyPatch] proxy:ready (retry-500ms)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); },500);
-  setTimeout(function(){ console.log('[ProxyPatch] proxy:ready (retry-1500ms)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); },1500);
-  function handleAnchorEvent(e){ let el=e.target; while(el && el.tagName!=='A') el=el.parentElement; if(el && el.tagName==='A'){ const origHref=el.getAttribute('data-orig-href'); const href=origHref||el.getAttribute('href'); if(!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return; e.preventDefault(); e.stopPropagation(); sendNavigate(origHref||(el as HTMLAnchorElement).href); } }
-  ['click','mousedown','pointerup','auxclick','touchend'].forEach((evt)=>{ document.addEventListener(evt, handleAnchorEvent, { capture:true, passive:false }); });
-  const _open=window.open; window.open=function(u){ sendNavigate(deproxify(u as any)); return null; } as any;
-  document.addEventListener('submit', function(e){ const form=e.target as HTMLFormElement; const method=(form.method||'GET').toUpperCase(); if(method==='GET'){ e.preventDefault(); e.stopPropagation(); const formData=new FormData(form); const params=new URLSearchParams(formData as any); const origAction=form.getAttribute('data-orig-action'); const action=origAction||form.action||BASE_PAGE_URL; const dep=deproxify(action); const absoluteUrl=new URL(dep,BASE_PAGE_URL).href; const urlWithParams=absoluteUrl+(absoluteUrl.includes('?')?'&':'?')+params.toString(); sendNavigate(urlWithParams); } else if(method==='POST'){ e.preventDefault(); e.stopPropagation(); console.log('[ProxyPatch] Blocked POST form navigation'); } }, true);
+  function sendNavigate(u){ if(IS_STANDALONE)return; try { const dep=deproxify(u); const absoluteUrl = new URL(dep, BASE_PAGE_URL).href; const normalized = normalizeUrl(absoluteUrl); if (normalized === normalizeUrl(BASE_PAGE_URL)) { console.log('[ProxyPatch] Navigate (ignored - same as base):', absoluteUrl); return; } const now = Date.now(); if (normalized === lastNavigateUrl && (now - lastNavigateTime) < 800) { console.log('[ProxyPatch] Navigate (debounced):', absoluteUrl); return; } lastNavigateUrl = normalized; lastNavigateTime = now; console.log('[ProxyPatch] Navigate:', absoluteUrl); window.parent.postMessage({ type:'proxy:navigate', url:absoluteUrl, incidentId:INCIDENT_ID }, '*'); } catch(e) { console.warn('[ProxyPatch] Invalid URL for navigate:', u); } }
+  try { const baseEl = document.createElement('base'); baseEl.href = BASE_PAGE_URL; document.head && document.head.prepend(baseEl); if(!IS_STANDALONE){ console.log('[ProxyPatch] Base tag injected, sending proxy:ready (early)'); window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*'); } } catch(e) { console.error('[ProxyPatch] Failed to inject base:', e); }
+  if(!IS_STANDALONE){
+    if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',function(){ console.log('[ProxyPatch] proxy:ready (DOMContentLoaded)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); }); }
+    window.addEventListener('load',function(){ console.log('[ProxyPatch] proxy:ready (load)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); });
+    setTimeout(function(){ console.log('[ProxyPatch] proxy:ready (retry-0ms)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); },0);
+    setTimeout(function(){ console.log('[ProxyPatch] proxy:ready (retry-500ms)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); },500);
+    setTimeout(function(){ console.log('[ProxyPatch] proxy:ready (retry-1500ms)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); },1500);
+  }
+  if(!IS_STANDALONE){
+    function handleAnchorEvent(e){ let el=e.target; while(el && el.tagName!=='A') el=el.parentElement; if(el && el.tagName==='A'){ const origHref=el.getAttribute('data-orig-href'); const href=origHref||el.getAttribute('href'); if(!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return; e.preventDefault(); e.stopPropagation(); sendNavigate(origHref||(el as HTMLAnchorElement).href); } }
+    ['click','mousedown','pointerup','auxclick','touchend'].forEach((evt)=>{ document.addEventListener(evt, handleAnchorEvent, { capture:true, passive:false }); });
+    const _open=window.open; window.open=function(u){ sendNavigate(deproxify(u as any)); return null; } as any;
+  }
+  document.addEventListener('submit', function(e){ const form=e.target as HTMLFormElement; const method=(form.method||'GET').toUpperCase(); if(method==='POST'){ e.preventDefault(); e.stopPropagation(); console.log('[ProxyPatch] Blocked POST form navigation'); } else if(!IS_STANDALONE && method==='GET'){ e.preventDefault(); e.stopPropagation(); const formData=new FormData(form); const params=new URLSearchParams(formData as any); const origAction=form.getAttribute('data-orig-action'); const action=origAction||form.action||BASE_PAGE_URL; const dep=deproxify(action); const absoluteUrl=new URL(dep,BASE_PAGE_URL).href; const urlWithParams=absoluteUrl+(absoluteUrl.includes('?')?'&':'?')+params.toString(); sendNavigate(urlWithParams); } }, true);
   const sA=Element.prototype.setAttribute; Element.prototype.setAttribute=function(n,v){ if(['src','action'].includes(String(n).toLowerCase())||(String(n).toLowerCase()==='href' && this.tagName!=='A')) v=proxify(String(v)); return sA.call(this,n,v); };
   ['HTMLLinkElement','HTMLScriptElement','HTMLImageElement','HTMLFormElement','HTMLSourceElement'].forEach(function(cn){ const p=(window as any)[cn] && (window as any)[cn].prototype; if(!p) return; ['href','src','action'].forEach(function(prop){ const d=Object.getOwnPropertyDescriptor(p,prop); if(d && d.set){ const o=d.set; Object.defineProperty(p,prop,{ set(v){ return o!.call(this, proxify(v as any)); }, get:d.get }); } }); });
   const of=window.fetch; window.fetch=function(u,o){ return of(proxify(u as any), o as any); } as any;
@@ -1098,9 +1103,6 @@ const runtimePatchScript = `
             'X-Frame-Options': 'ALLOWALL',
             'Content-Security-Policy': 'frame-ancestors *',
             'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0',
-            'Content-Disposition': 'inline; filename="index.html"',
             'X-Proxy-Status': 'rendered',
             'X-Debug-Upstream-CT': contentType,
             'X-Debug-Final-CT': 'text/html; charset=utf-8',
