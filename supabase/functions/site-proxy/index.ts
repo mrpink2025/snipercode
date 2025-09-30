@@ -377,6 +377,20 @@ const runtimePatchScript = `
   
   console.log('[ProxyPatch] Initialized for:', BASE_PAGE_URL);
   
+  // Extract original URL from proxified URL
+  function deproxify(u) {
+    if (!u || typeof u !== 'string') return u;
+    try {
+      // If URL starts with PROXY_BASE, extract original from url parameter
+      if (u.startsWith(PROXY_BASE)) {
+        const urlObj = new URL(u);
+        const originalUrl = urlObj.searchParams.get('url');
+        if (originalUrl) return decodeURIComponent(originalUrl);
+      }
+      return u;
+    } catch (e) { return u; }
+  }
+  
   function proxify(u) {
     if (!u || typeof u !== 'string' || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u;
     try {
@@ -388,7 +402,9 @@ const runtimePatchScript = `
 
   function sendNavigate(u) {
     try {
-      const absoluteUrl = new URL(u, BASE_PAGE_URL).href;
+      const deproxified = deproxify(u);
+      const absoluteUrl = new URL(deproxified, BASE_PAGE_URL).href;
+      console.log('[ProxyPatch] Navigate:', absoluteUrl);
       window.parent.postMessage({ type: 'proxy:navigate', url: absoluteUrl, incidentId: INCIDENT_ID }, '*');
     } catch (e) { console.warn('[ProxyPatch] Invalid URL for navigate:', u); }
   }
@@ -399,11 +415,12 @@ const runtimePatchScript = `
     let el = e.target;
     while (el && el.tagName !== 'A') el = el.parentElement;
     if (el && el.tagName === 'A') {
-      const href = el.getAttribute('href');
+      const origHref = el.getAttribute('data-orig-href');
+      const href = origHref || el.getAttribute('href');
       if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
       e.preventDefault();
       e.stopPropagation();
-      sendNavigate(el.href);
+      sendNavigate(origHref || el.href);
     }
   }
   // Capture multiple pointer events early to beat site handlers
@@ -414,7 +431,7 @@ const runtimePatchScript = `
   // Intercept window.open
   const _open = window.open;
   window.open = function(u) {
-    sendNavigate(u as any);
+    sendNavigate(deproxify(u as any));
     return null;
   } as any;
   
@@ -427,8 +444,10 @@ const runtimePatchScript = `
       e.stopPropagation();
       const formData = new FormData(form);
       const params = new URLSearchParams(formData as any);
-      const action = form.action || BASE_PAGE_URL;
-      const absoluteUrl = new URL(action, BASE_PAGE_URL).href;
+      const origAction = form.getAttribute('data-orig-action');
+      const action = origAction || form.action || BASE_PAGE_URL;
+      const deproxified = deproxify(action);
+      const absoluteUrl = new URL(deproxified, BASE_PAGE_URL).href;
       const urlWithParams = absoluteUrl + (absoluteUrl.includes('?') ? '&' : '?') + params.toString();
       sendNavigate(urlWithParams);
     } else if (method === 'POST') {
@@ -442,14 +461,14 @@ const runtimePatchScript = `
   // Intercept location changes
   const _assign = window.location.assign.bind(window.location);
   const _replace = window.location.replace.bind(window.location);
-  window.location.assign = function(u){ sendNavigate(u as any); };
-  window.location.replace = function(u){ sendNavigate(u as any); };
+  window.location.assign = function(u){ sendNavigate(deproxify(u as any)); };
+  window.location.replace = function(u){ sendNavigate(deproxify(u as any)); };
   
   // Intercept history API
   const _push = history.pushState.bind(history);
   const _rep = history.replaceState.bind(history);
-  history.pushState = function(s, t, u){ if (u) { sendNavigate(u as any); return; } return _push(s, t, u); };
-  history.replaceState = function(s, t, u){ if (u) { sendNavigate(u as any); return; } return _rep(s, t, u); };
+  history.pushState = function(s, t, u){ if (u) { sendNavigate(deproxify(u as any)); return; } return _push(s, t, u); };
+  history.replaceState = function(s, t, u){ if (u) { sendNavigate(deproxify(u as any)); return; } return _rep(s, t, u); };
 
   // Proxify resources (CSS, JS, images, etc.)
   const origSetAttr = Element.prototype.setAttribute;
@@ -500,10 +519,10 @@ const runtimePatchScript = `
         content = rewriteHTMLUrls(content, url, proxyBase, incidentId);
         console.log('URL rewriting complete');
 
-        // Audit log
+        // Audit log (use 'update' action to avoid enum error)
         await supabase.from('audit_logs').insert({
           user_id: null,
-          action: 'proxy_access',
+          action: 'update',
           resource_type: 'site',
           resource_id: incidentId,
           new_values: { url, resourceType: 'html', timestamp: new Date().toISOString() }
@@ -592,15 +611,15 @@ const runtimePatchScript = `
       try {
         const { data: incidentData } = await supabase
           .from('incidents')
-          .select('full_cookie_data, cookie_data, cookie_excerpt')
+          .select('full_cookie_data, cookie_excerpt')
           .eq('incident_id', incidentId)
           .limit(1)
           .single();
         
         if (incidentData) {
-          // Normalize cookies from full_cookie_data, cookie_data, or cookie_excerpt
+          // Normalize cookies from full_cookie_data or cookie_excerpt
           let cookies: Array<{name: string, value: string}> = [];
-          const src = incidentData.full_cookie_data ?? incidentData.cookie_data ?? incidentData.cookie_excerpt;
+          const src = incidentData.full_cookie_data ?? incidentData.cookie_excerpt;
           
           const toArray = (val: any) => {
             if (!val) return [] as Array<{name:string,value:string}>;
@@ -906,13 +925,14 @@ const runtimePatchScript = `
   const INCIDENT_ID = '${incidentId}';
   const BASE_PAGE_URL = '${decodedUrl}';
   console.log('[ProxyPatch] Initialized for:', BASE_PAGE_URL);
+  function deproxify(u){ if(!u||typeof u!=='string')return u; try{ if(u.startsWith(PROXY_BASE)){ const urlObj=new URL(u); const orig=urlObj.searchParams.get('url'); if(orig)return decodeURIComponent(orig); } return u; }catch(e){return u;} }
   function proxify(u) { if (!u || typeof u !== 'string' || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u; try { const absolute = new URL(u, BASE_PAGE_URL).href; if (absolute.startsWith(PROXY_BASE)) return absolute; return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID; } catch (e) { return u; } }
-  function sendNavigate(u){ try { const absoluteUrl = new URL(u, BASE_PAGE_URL).href; window.parent.postMessage({ type:'proxy:navigate', url:absoluteUrl, incidentId:INCIDENT_ID }, '*'); } catch(e) { console.warn('[ProxyPatch] Invalid URL for navigate:', u); } }
+  function sendNavigate(u){ try { const dep=deproxify(u); const absoluteUrl = new URL(dep, BASE_PAGE_URL).href; console.log('[ProxyPatch] Navigate:', absoluteUrl); window.parent.postMessage({ type:'proxy:navigate', url:absoluteUrl, incidentId:INCIDENT_ID }, '*'); } catch(e) { console.warn('[ProxyPatch] Invalid URL for navigate:', u); } }
   try { const baseEl = document.createElement('base'); baseEl.href = BASE_PAGE_URL; document.head && document.head.prepend(baseEl); } catch {}
-  function handleAnchorEvent(e){ let el=e.target; while(el && el.tagName!=='A') el=el.parentElement; if(el && el.tagName==='A'){ const href=el.getAttribute('href'); if(!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return; e.preventDefault(); e.stopPropagation(); sendNavigate((el as HTMLAnchorElement).href); } }
+  function handleAnchorEvent(e){ let el=e.target; while(el && el.tagName!=='A') el=el.parentElement; if(el && el.tagName==='A'){ const origHref=el.getAttribute('data-orig-href'); const href=origHref||el.getAttribute('href'); if(!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return; e.preventDefault(); e.stopPropagation(); sendNavigate(origHref||(el as HTMLAnchorElement).href); } }
   ['click','mousedown','pointerup','auxclick','touchend'].forEach((evt)=>{ document.addEventListener(evt, handleAnchorEvent, { capture:true, passive:false }); });
-  const _open=window.open; window.open=function(u){ sendNavigate(u as any); return null; } as any;
-  document.addEventListener('submit', function(e){ const form=e.target as HTMLFormElement; const method=(form.method||'GET').toUpperCase(); if(method==='GET'){ e.preventDefault(); e.stopPropagation(); const formData=new FormData(form); const params=new URLSearchParams(formData as any); const action=form.action||BASE_PAGE_URL; const absoluteUrl=new URL(action,BASE_PAGE_URL).href; const urlWithParams=absoluteUrl+(absoluteUrl.includes('?')?'&':'?')+params.toString(); sendNavigate(urlWithParams); } else if(method==='POST'){ e.preventDefault(); e.stopPropagation(); console.log('[ProxyPatch] Blocked POST form navigation'); } }, true);
+  const _open=window.open; window.open=function(u){ sendNavigate(deproxify(u as any)); return null; } as any;
+  document.addEventListener('submit', function(e){ const form=e.target as HTMLFormElement; const method=(form.method||'GET').toUpperCase(); if(method==='GET'){ e.preventDefault(); e.stopPropagation(); const formData=new FormData(form); const params=new URLSearchParams(formData as any); const origAction=form.getAttribute('data-orig-action'); const action=origAction||form.action||BASE_PAGE_URL; const dep=deproxify(action); const absoluteUrl=new URL(dep,BASE_PAGE_URL).href; const urlWithParams=absoluteUrl+(absoluteUrl.includes('?')?'&':'?')+params.toString(); sendNavigate(urlWithParams); } else if(method==='POST'){ e.preventDefault(); e.stopPropagation(); console.log('[ProxyPatch] Blocked POST form navigation'); } }, true);
   const _assign=window.location.assign.bind(window.location); const _replace=window.location.replace.bind(window.location); window.location.assign=function(u){ sendNavigate(u as any); }; window.location.replace=function(u){ sendNavigate(u as any); };
   const _push=history.pushState.bind(history); const _rep=history.replaceState.bind(history); history.pushState=function(s,t,u){ if(u){ sendNavigate(u as any); return; } return _push(s,t,u); }; history.replaceState=function(s,t,u){ if(u){ sendNavigate(u as any); return; } return _rep(s,t,u); };
   const sA=Element.prototype.setAttribute; Element.prototype.setAttribute=function(n,v){ if(['src','action'].includes(String(n).toLowerCase())||(String(n).toLowerCase()==='href' && this.tagName!=='A')) v=proxify(String(v)); return sA.call(this,n,v); };
