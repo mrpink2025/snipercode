@@ -458,13 +458,13 @@ const runtimePatchScript = `
     }
   }, true);
   
-  // Intercept location changes
+  // Intercept location changes (deproxify before sending)
   const _assign = window.location.assign.bind(window.location);
   const _replace = window.location.replace.bind(window.location);
   window.location.assign = function(u){ sendNavigate(deproxify(u as any)); };
   window.location.replace = function(u){ sendNavigate(deproxify(u as any)); };
   
-  // Intercept history API
+  // Intercept history API (deproxify before sending)
   const _push = history.pushState.bind(history);
   const _rep = history.replaceState.bind(history);
   history.pushState = function(s, t, u){ if (u) { sendNavigate(deproxify(u as any)); return; } return _push(s, t, u); };
@@ -933,8 +933,8 @@ const runtimePatchScript = `
   ['click','mousedown','pointerup','auxclick','touchend'].forEach((evt)=>{ document.addEventListener(evt, handleAnchorEvent, { capture:true, passive:false }); });
   const _open=window.open; window.open=function(u){ sendNavigate(deproxify(u as any)); return null; } as any;
   document.addEventListener('submit', function(e){ const form=e.target as HTMLFormElement; const method=(form.method||'GET').toUpperCase(); if(method==='GET'){ e.preventDefault(); e.stopPropagation(); const formData=new FormData(form); const params=new URLSearchParams(formData as any); const origAction=form.getAttribute('data-orig-action'); const action=origAction||form.action||BASE_PAGE_URL; const dep=deproxify(action); const absoluteUrl=new URL(dep,BASE_PAGE_URL).href; const urlWithParams=absoluteUrl+(absoluteUrl.includes('?')?'&':'?')+params.toString(); sendNavigate(urlWithParams); } else if(method==='POST'){ e.preventDefault(); e.stopPropagation(); console.log('[ProxyPatch] Blocked POST form navigation'); } }, true);
-  const _assign=window.location.assign.bind(window.location); const _replace=window.location.replace.bind(window.location); window.location.assign=function(u){ sendNavigate(u as any); }; window.location.replace=function(u){ sendNavigate(u as any); };
-  const _push=history.pushState.bind(history); const _rep=history.replaceState.bind(history); history.pushState=function(s,t,u){ if(u){ sendNavigate(u as any); return; } return _push(s,t,u); }; history.replaceState=function(s,t,u){ if(u){ sendNavigate(u as any); return; } return _rep(s,t,u); };
+  const _assign=window.location.assign.bind(window.location); const _replace=window.location.replace.bind(window.location); window.location.assign=function(u){ sendNavigate(deproxify(u as any)); }; window.location.replace=function(u){ sendNavigate(deproxify(u as any)); };
+  const _push=history.pushState.bind(history); const _rep=history.replaceState.bind(history); history.pushState=function(s,t,u){ if(u){ sendNavigate(deproxify(u as any)); return; } return _push(s,t,u); }; history.replaceState=function(s,t,u){ if(u){ sendNavigate(deproxify(u as any)); return; } return _rep(s,t,u); };
   const sA=Element.prototype.setAttribute; Element.prototype.setAttribute=function(n,v){ if(['src','action'].includes(String(n).toLowerCase())||(String(n).toLowerCase()==='href' && this.tagName!=='A')) v=proxify(String(v)); return sA.call(this,n,v); };
   ['HTMLLinkElement','HTMLScriptElement','HTMLImageElement','HTMLFormElement','HTMLSourceElement'].forEach(function(cn){ const p=(window as any)[cn] && (window as any)[cn].prototype; if(!p) return; ['href','src','action'].forEach(function(prop){ const d=Object.getOwnPropertyDescriptor(p,prop); if(d && d.set){ const o=d.set; Object.defineProperty(p,prop,{ set(v){ return o!.call(this, proxify(v as any)); }, get:d.get }); } }); });
   const of=window.fetch; window.fetch=function(u,o){ return of(proxify(u as any), o as any); } as any;
@@ -945,7 +945,30 @@ const runtimePatchScript = `
   window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
 })();
 </script>`;
-        content = content.replace('</head>', `${runtimePatchScript}</head>`);
+        // Robust injection: try </head>, </body>, after <html>, or prepend
+        let injected = false;
+        const headMatch = content.match(/<\/head>/i);
+        if (headMatch) {
+          content = content.replace(headMatch[0], `${runtimePatchScript}${headMatch[0]}`);
+          injected = true;
+        } else {
+          const bodyMatch = content.match(/<\/body>/i);
+          if (bodyMatch) {
+            content = content.replace(bodyMatch[0], `${runtimePatchScript}${bodyMatch[0]}`);
+            injected = true;
+          } else {
+            const htmlMatch = content.match(/<html[^>]*>/i);
+            if (htmlMatch) {
+              const pos = content.indexOf(htmlMatch[0]) + htmlMatch[0].length;
+              content = content.slice(0, pos) + runtimePatchScript + content.slice(pos);
+              injected = true;
+            } else {
+              content = runtimePatchScript + content;
+              injected = true;
+            }
+          }
+        }
+        console.log(`  GET html patch injected: ${injected}`);
         content = rewriteHTMLUrls(content, decodedUrl, proxyBase, incidentId);
         return new Response(content, {
           headers: {

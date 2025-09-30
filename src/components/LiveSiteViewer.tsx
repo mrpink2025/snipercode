@@ -146,15 +146,16 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             setSrcDoc(html);
             setProxyUrl(null);
             
-            // Setup ready timeout with data URL fallback
+            // Setup ready timeout with Blob URL fallback
             console.log('[LiveSiteViewer] srcDoc set → aguardando proxy:ready…');
             readyTimeoutRef.current = window.setTimeout(() => {
-              console.warn('[LiveSiteViewer] ⚠️ timeout → usando data URL fallback');
-              const dataUrl = `data:text/html;charset=utf-8;base64,${btoa(unescape(encodeURIComponent(html)))}`;
+              console.warn('[LiveSiteViewer] ⚠️ timeout → usando Blob URL fallback');
+              const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+              const blobUrl = URL.createObjectURL(blob);
               setSrcDoc(null);
-              setProxyUrl(dataUrl);
+              setProxyUrl(blobUrl);
               setIframeKey(k => k + 1);
-            }, 1500);
+            }, 3000);
             
             toast.success('Página carregada');
           } else {
@@ -213,15 +214,16 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         setProxyUrl(null);
         setCurrentUrl(incident.tab_url);
         
-        // Setup ready timeout with data URL fallback
+        // Setup ready timeout with Blob URL fallback
         console.log('[LiveSiteViewer] srcDoc set → aguardando proxy:ready…');
         readyTimeoutRef.current = window.setTimeout(() => {
-          console.warn('[LiveSiteViewer] ⚠️ timeout → usando data URL fallback');
-          const dataUrl = `data:text/html;charset=utf-8;base64,${btoa(unescape(encodeURIComponent(text)))}`;
+          console.warn('[LiveSiteViewer] ⚠️ timeout → usando Blob URL fallback');
+          const blob = new Blob([text], { type: 'text/html;charset=utf-8' });
+          const blobUrl = URL.createObjectURL(blob);
           setSrcDoc(null);
-          setProxyUrl(dataUrl);
+          setProxyUrl(blobUrl);
           setIframeKey(k => k + 1);
-        }, 1500);
+        }, 3000);
         
         toast.success('Site renderizado via proxy');
         return;
