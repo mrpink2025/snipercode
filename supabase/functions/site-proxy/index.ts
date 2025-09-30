@@ -18,6 +18,7 @@ interface ProxyRequest {
     path: string;
   }>;
   forceHtml?: boolean;
+  rawContent?: boolean;
 }
 
 // Utility to detect resource type from URL and Content-Type
@@ -273,7 +274,7 @@ serve(async (req) => {
     );
 
     if (req.method === 'POST') {
-      let { url, incidentId, cookies = [], forceHtml = false }: ProxyRequest = await req.json();
+      let { url, incidentId, cookies = [], forceHtml = false, rawContent = false }: ProxyRequest = await req.json();
       
       console.log('Proxying URL:', url, 'for incident:', incidentId);
       
@@ -381,6 +382,19 @@ serve(async (req) => {
       const resourceType = getResourceType(url, contentType);
       
       console.log(`Resource type detected: ${resourceType} for ${url}`);
+
+      // RAW CONTENT MODE: Return raw content without any processing
+      if (rawContent) {
+        console.log('POST rawContent=true → returning raw text/plain');
+        const rawText = await response.text();
+        return new Response(rawText, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/plain; charset=utf-8',
+            'X-Raw-Content': 'true'
+          }
+        });
+      }
 
       // Get proxy base URL for rewriting
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
@@ -783,6 +797,7 @@ const runtimePatchScript = `
       const targetUrl = urlObj.searchParams.get('url');
       const incidentId = urlObj.searchParams.get('incident');
       const forceHtmlParam = ['1', 'true'].includes((urlObj.searchParams.get('forceHtml') || '').toLowerCase());
+      const rawContentParam = ['1', 'true'].includes((urlObj.searchParams.get('rawContent') || '').toLowerCase());
       
       if (!targetUrl || !incidentId) {
         return new Response(JSON.stringify({ error: 'Missing url or incident parameter' }), {
@@ -1088,6 +1103,19 @@ const runtimePatchScript = `
 
       const contentType = response.headers.get('content-type') || '';
       const resourceType = getResourceType(targetUrl, contentType);
+
+      // RAW CONTENT MODE: Return raw content without any processing
+      if (rawContentParam) {
+        console.log('GET rawContent=true → returning raw text/plain');
+        const rawText = await response.text();
+        return new Response(rawText, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/plain; charset=utf-8',
+            'X-Raw-Content': 'true'
+          }
+        });
+      }
 
       // Handle binary resources
       if (resourceType === 'image' || resourceType === 'font') {
