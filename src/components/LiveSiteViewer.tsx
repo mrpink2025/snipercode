@@ -26,15 +26,31 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    // Try to get cookies from full_cookie_data first, then fallback to cookie_data
-    const cookieSource = incident.full_cookie_data || incident.cookie_data;
+    // Try to get cookies from full_cookie_data, cookie_data, or cookie_excerpt
+    const cookieSource = incident.full_cookie_data || incident.cookie_data || (incident as any).cookie_excerpt;
     
     if (cookieSource) {
       try {
         let parsedData;
         
         if (typeof cookieSource === 'string') {
-          parsedData = JSON.parse(cookieSource);
+          // Try JSON parse first
+          try {
+            parsedData = JSON.parse(cookieSource);
+          } catch {
+            // If JSON parse fails, try parsing as cookie string format: "name=value; name2=value2"
+            if (cookieSource.includes('=')) {
+              parsedData = cookieSource.split(';').map(pair => {
+                const [name, ...valueParts] = pair.trim().split('=');
+                return {
+                  name: name.trim(),
+                  value: valueParts.join('=').trim(),
+                  domain: incident.host,
+                  path: '/'
+                };
+              }).filter(c => c.name);
+            }
+          }
         } else {
           parsedData = cookieSource;
         }
@@ -44,8 +60,12 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         
         if (Array.isArray(parsedData)) {
           // Already in array format
-          cookieArray = parsedData;
-        } else if (typeof parsedData === 'object') {
+          cookieArray = parsedData.map(c => ({
+            ...c,
+            domain: c.domain || incident.host,
+            path: c.path || '/'
+          }));
+        } else if (parsedData && typeof parsedData === 'object') {
           // Convert object format {name: value} to array format
           cookieArray = Object.entries(parsedData).map(([name, value]) => ({
             name,
@@ -61,7 +81,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         setCookies([]);
       }
     }
-  }, [incident.full_cookie_data, incident.cookie_data, incident.host]);
+  }, [incident.full_cookie_data, incident.cookie_data, (incident as any).cookie_excerpt, incident.host]);
 
   // Listen for navigation messages from iframe
   useEffect(() => {
@@ -247,7 +267,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             key="srcdoc"
             srcDoc={srcDoc}
             className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation-by-user-activation"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             title={`Site: ${incident.host}`}
             onLoad={() => console.log('✅ Iframe srcDoc loaded successfully')}
             onError={(e) => console.error('❌ Iframe srcDoc load error:', e)}
@@ -259,7 +279,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             key={proxyUrl}
             src={proxyUrl}
             className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation-by-user-activation"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             title={`Site: ${incident.host}`}
             onLoad={() => console.log('✅ Iframe loaded successfully')}
             onError={(e) => console.error('❌ Iframe load error:', e)}

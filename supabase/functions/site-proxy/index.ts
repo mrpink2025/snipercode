@@ -55,23 +55,33 @@ function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incid
   
   let linkCount = 0, anchorCount = 0, formCount = 0, srcsetCount = 0;
   
-  // Do not rewrite <a href>; navigation is handled via runtime postMessage patch
-  // Keeping anchors intact to allow accurate absolute URLs inside the page.
-  // (Counting anchors for debug parity)
+  // Rewrite <a href> as fallback (navigation primarily handled via runtime postMessage patch)
   html = html.replace(
     /(<a\s[^>]*href=["'])([^"']+)(["'][^>]*)(>)/gi,
-    (match) => {
+    (match, prefix, url, middle, end) => {
       anchorCount++;
-      return match; // no rewrite
+      try {
+        const absoluteUrl = new URL(url, origin).href;
+        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+        return `${prefix}${proxiedUrl}${middle} data-orig-href="${absoluteUrl}"${end}`;
+      } catch (e) {
+        return match;
+      }
     }
   );
   
-  // Do not rewrite <form action>; navigation is handled via runtime patch
+  // Rewrite <form action> as fallback
   html = html.replace(
     /(<form\s[^>]*action=["'])([^"']+)(["'][^>]*)(>)/gi,
-    (match) => {
+    (match, prefix, url, middle, end) => {
       formCount++;
-      return match; // no rewrite
+      try {
+        const absoluteUrl = new URL(url, origin).href;
+        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+        return `${prefix}${proxiedUrl}${middle} data-orig-action="${absoluteUrl}"${end}`;
+      } catch (e) {
+        return match;
+      }
     }
   );
   
@@ -468,11 +478,24 @@ const runtimePatchScript = `
   const of = window.fetch; window.fetch = function(u,o){ return of(proxify(u as any), o as any); } as any;
   const oo = XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open = function(m,u){ arguments[1] = proxify(u as any); return oo.apply(this, arguments as any); } as any;
   document.querySelectorAll('link[data-href]').forEach(function(l){ if(!l.getAttribute('href') || l.getAttribute('href')===window.location.href) l.setAttribute('href', proxify(l.getAttribute('data-href') as any) as any); });
+  
+  // Signal ready to parent
+  window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
 })();
 </script>`;
 
-        // Add runtime and minimal styles
-        content = content.replace('</head>', `<meta name="robots" content="noindex, nofollow">${runtimePatchScript}</head>`);
+        // Inject runtime patch script (try </head>, fallback to </body> or start of <html>)
+        const injectionContent = `<meta name="robots" content="noindex, nofollow">${runtimePatchScript}`;
+        if (content.includes('</head>')) {
+          content = content.replace('</head>', `${injectionContent}</head>`);
+        } else if (content.includes('</body>')) {
+          content = content.replace('</body>', `${injectionContent}</body>`);
+        } else if (content.match(/<html[^>]*>/i)) {
+          content = content.replace(/(<html[^>]*>)/i, `$1${injectionContent}`);
+        } else {
+          content = injectionContent + content;
+        }
+        
         console.log('Starting URL rewriting for:', url);
         content = rewriteHTMLUrls(content, url, proxyBase, incidentId);
         console.log('URL rewriting complete');
@@ -569,20 +592,21 @@ const runtimePatchScript = `
       try {
         const { data: incidentData } = await supabase
           .from('incidents')
-          .select('full_cookie_data, cookie_data')
+          .select('full_cookie_data, cookie_data, cookie_excerpt')
           .eq('incident_id', incidentId)
           .limit(1)
           .single();
         
         if (incidentData) {
-          // Normalize cookies from either full_cookie_data or cookie_data
+          // Normalize cookies from full_cookie_data, cookie_data, or cookie_excerpt
           let cookies: Array<{name: string, value: string}> = [];
-          const src = incidentData.full_cookie_data ?? incidentData.cookie_data;
+          const src = incidentData.full_cookie_data ?? incidentData.cookie_data ?? incidentData.cookie_excerpt;
           
           const toArray = (val: any) => {
             if (!val) return [] as Array<{name:string,value:string}>;
             if (Array.isArray(val)) return val;
             if (typeof val === 'string') {
+              // Try parsing as JSON first
               try {
                 const parsed = JSON.parse(val);
                 if (Array.isArray(parsed)) return parsed;
@@ -590,6 +614,15 @@ const runtimePatchScript = `
                   return Object.entries(parsed).map(([name, value]) => ({ name, value: String(value) }));
                 }
               } catch {}
+              
+              // Parse as cookie string format: "name=value; name2=value2"
+              if (val.includes('=')) {
+                return val.split(';').map((pair: string) => {
+                  const [name, ...valueParts] = pair.trim().split('=');
+                  return { name: name.trim(), value: valueParts.join('=').trim() };
+                }).filter((c: any) => c.name);
+              }
+              
               return [];
             }
             if (typeof val === 'object') {
