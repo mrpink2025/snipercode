@@ -497,7 +497,18 @@ const runtimePatchScript = `
         });
       }
 
-      console.log('GET proxy request for resource:', targetUrl, 'incident:', incidentId);
+      // Decode HTML entities in URL (e.g., &amp; -> &)
+      const decodedUrl = targetUrl
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+      
+      console.log('GET proxy request for resource:', decodedUrl, 'incident:', incidentId);
+      if (decodedUrl !== targetUrl) {
+        console.log('  URL was decoded from:', targetUrl);
+      }
 
       // Fetch cookies from incidents table
       let cookieHeader = '';
@@ -542,15 +553,15 @@ const runtimePatchScript = `
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
         'Cache-Control': 'no-cache',
-        'Referer': new URL(targetUrl).origin
+        'Referer': new URL(decodedUrl).origin
       };
       
       if (cookieHeader) {
         fetchHeaders['Cookie'] = cookieHeader;
       }
 
-      // Fetch the resource
-      const response = await fetch(targetUrl, {
+      // Fetch the resource using decoded URL
+      const response = await fetch(decodedUrl, {
         headers: fetchHeaders
       });
 
