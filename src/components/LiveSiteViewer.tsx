@@ -76,9 +76,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       const proxyBase = 'https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy';
       const encodedUrl = encodeURIComponent(incident.tab_url);
       const cacheBuster = Date.now();
-      const url = `${proxyBase}?url=${encodedUrl}&incident=${incident.id}&_t=${cacheBuster}`;
+      const url = `${proxyBase}?url=${encodedUrl}&incident=${incident.id}&_t=${cacheBuster}&forceHtml=1`;
       
-      console.log('🌐 Loading URL with cache buster:', url);
+      console.log('🌐 Loading URL with cache buster (forceHtml):', url);
       setProxyUrl(url);
       toast.success('Site carregado com proxy universal ativo');
 

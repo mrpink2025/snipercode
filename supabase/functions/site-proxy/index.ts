@@ -17,6 +17,7 @@ interface ProxyRequest {
     domain: string;
     path: string;
   }>;
+  forceHtml?: boolean;
 }
 
 // Utility to detect resource type from URL and Content-Type
@@ -38,6 +39,13 @@ function getResourceType(url: string, contentType: string): string {
   if (urlLower.match(/\.(woff|woff2|ttf|eot)$/)) return 'font';
   
   return 'html';
+}
+
+// Heuristic to detect if text content is likely HTML
+function isLikelyHtml(content: string): boolean {
+  if (!content) return false;
+  const head = content.slice(0, 2048);
+  return /<!doctype\s+html/i.test(head) || /<html[\s>]/i.test(head) || /<head[\s>]/i.test(head) || /<body[\s>]/i.test(head);
 }
 
 // Rewrite URLs in HTML to go through proxy
@@ -272,7 +280,7 @@ serve(async (req) => {
     );
 
     if (req.method === 'POST') {
-      const { url, incidentId, cookies = [] }: ProxyRequest = await req.json();
+      const { url, incidentId, cookies = [], forceHtml = false }: ProxyRequest = await req.json();
       
       console.log('Proxying URL:', url, 'for incident:', incidentId);
       
@@ -337,57 +345,31 @@ serve(async (req) => {
       const proxyBase = `https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy`;
 
       // Handle different resource types
+      // Binary resources - pass through directly
       if (resourceType === 'image' || resourceType === 'font') {
-        // Binary resources - pass through directly
         const arrayBuffer = await response.arrayBuffer();
-        
         return new Response(arrayBuffer, {
           headers: {
             ...corsHeaders,
             'Content-Type': contentType,
-            'Cache-Control': 'public, max-age=86400', // 24h cache
-            'X-Resource-Type': resourceType
+            'Cache-Control': 'public, max-age=86400',
+            'X-Resource-Type': resourceType,
+            'X-Debug-Upstream-CT': contentType,
+            'X-Debug-Final-CT': contentType
           }
         });
-      } else if (resourceType === 'css') {
-        // CSS - rewrite internal URLs
-        let content = await response.text();
-        content = rewriteCSSUrls(content, url, proxyBase, incidentId);
-        
-        return new Response(content, {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'text/css; charset=utf-8',
-            'X-Content-Type-Options': 'nosniff',
-            'Cache-Control': 'public, max-age=21600', // 6h cache
-            'X-Resource-Type': 'css'
-          }
-        });
-      } else if (resourceType === 'javascript') {
-        // JavaScript - pass through without modification
-        const content = await response.text();
-        
-        return new Response(content, {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': contentType,
-            'Cache-Control': 'public, max-age=21600', // 6h cache
-            'X-Resource-Type': 'javascript'
-          }
-        });
-      } else {
-        // HTML - full processing with URL rewriting
-        let content = await response.text();
-        
-        // Remove X-Frame-Options and CSP headers that might block iframe
-        content = content.replace(
-          /<meta[^>]*http-equiv=["']?X-Frame-Options["']?[^>]*>/gi,
-          ''
-        );
-        content = content.replace(
-          /<meta[^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi,
-          ''
-        );
+      }
+
+      // Non-binary: read as text and decide
+      const textContent = await response.text();
+      const detectedHtml = isLikelyHtml(textContent);
+      const treatAsHtml = Boolean(forceHtml) || detectedHtml || resourceType === 'html';
+
+      if (treatAsHtml) {
+        let content = textContent;
+        // Remove X-Frame-Options and CSP meta tags
+        content = content.replace(/<meta[^>]*http-equiv=["']?X-Frame-Options["']?[^>]*>/gi, '');
+        content = content.replace(/<meta[^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, '');
 
         // Inject runtime proxy patch script
         const runtimePatchScript = `
@@ -395,98 +377,39 @@ serve(async (req) => {
 (function() {
   const PROXY_BASE = '${proxyBase}';
   const INCIDENT_ID = '${incidentId}';
-  
   function proxify(url) {
     if (!url || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('#')) return url;
     try {
       const absolute = new URL(url, window.location.href).href;
       if (absolute.startsWith(PROXY_BASE)) return absolute;
       return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID;
-    } catch (e) {
-      return url;
-    }
+    } catch (e) { return url; }
   }
-  
-  // Patch setAttribute
   const origSetAttr = Element.prototype.setAttribute;
   Element.prototype.setAttribute = function(name, value) {
-    if (['href', 'src', 'action'].includes(name.toLowerCase())) {
-      value = proxify(value);
-    }
+    if (['href','src','action'].includes(name.toLowerCase())) value = proxify(value);
     return origSetAttr.call(this, name, value);
   };
-  
-  // Patch property setters
-  ['HTMLAnchorElement', 'HTMLLinkElement', 'HTMLScriptElement', 'HTMLImageElement', 
-   'HTMLFormElement', 'HTMLSourceElement'].forEach(function(className) {
-    const proto = window[className] && window[className].prototype;
-    if (!proto) return;
-    ['href', 'src', 'action'].forEach(function(prop) {
-      const desc = Object.getOwnPropertyDescriptor(proto, prop);
-      if (desc && desc.set) {
-        const origSet = desc.set;
-        Object.defineProperty(proto, prop, {
-          set: function(value) { return origSet.call(this, proxify(value)); },
-          get: desc.get
-        });
-      }
+  ['HTMLAnchorElement','HTMLLinkElement','HTMLScriptElement','HTMLImageElement','HTMLFormElement','HTMLSourceElement'].forEach(function(cn){
+    const p = (window as any)[cn] && (window as any)[cn].prototype; if(!p) return;
+    ['href','src','action'].forEach(function(prop){
+      const d = Object.getOwnPropertyDescriptor(p, prop); if(d && d.set){ const o = d.set; Object.defineProperty(p, prop, { set(v){ return o!.call(this, proxify(v)); }, get: d.get }); }
     });
   });
-  
-  // Patch fetch
-  const origFetch = window.fetch;
-  window.fetch = function(url, opts) {
-    return origFetch(proxify(url), opts);
-  };
-  
-  // Patch XHR
-  const origOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(method, url) {
-    arguments[1] = proxify(url);
-    return origOpen.apply(this, arguments);
-  };
-  
-  // Force all clicks on anchors to stay in frame
-  document.addEventListener('click', function(e) {
-    let el = e.target;
-    while (el && el.tagName !== 'A') el = el.parentElement;
-    if (el && el.tagName === 'A') {
-      el.target = '_self';
-      if (el.href && !el.href.startsWith(PROXY_BASE)) {
-        el.href = proxify(el.href);
-      }
-    }
-  }, true);
-  
-  // Activate lazy CSS (data-href -> href)
-  document.querySelectorAll('link[data-href]').forEach(function(link) {
-    if (!link.href || link.href === window.location.href) {
-      link.href = proxify(link.getAttribute('data-href'));
-    }
-  });
-  
-  console.log('[ProxyPatch] Runtime proxy patches applied');
+  const of = window.fetch; window.fetch = function(u,o){ return of(proxify(u as any), o as any); } as any;
+  const oo = XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open = function(m,u){ arguments[1] = proxify(u as any); return oo.apply(this, arguments as any); } as any;
+  document.addEventListener('click', function(e){ let el: any = e.target; while(el && el.tagName !== 'A') el = el.parentElement; if(el && el.tagName === 'A'){ el.target = '_self'; if(el.href && !el.href.startsWith(PROXY_BASE)) el.href = proxify(el.href); } }, true);
+  document.querySelectorAll('link[data-href]').forEach(function(l:any){ if(!l.href || l.href === window.location.href) l.href = proxify(l.getAttribute('data-href')); });
 })();
 </script>`;
-        
-        // Add iframe-friendly meta tags and runtime patch
-        content = content.replace(
-          '</head>',
-          `<meta name="robots" content="noindex, nofollow">
-           <style>
-             body { margin: 0; padding: 10px; }
-             * { max-width: 100% !important; }
-           </style>
-           ${runtimePatchScript}
-           </head>`
-        );
-        
-        // Rewrite all URLs to go through proxy
+
+        // Add runtime and minimal styles
+        content = content.replace('</head>', `<meta name="robots" content="noindex, nofollow">${runtimePatchScript}</head>`);
         console.log('Starting URL rewriting for:', url);
         content = rewriteHTMLUrls(content, url, proxyBase, incidentId);
         console.log('URL rewriting complete');
-        
-        // Log the proxy access
+
+        // Audit log
         await supabase.from('audit_logs').insert({
           user_id: null,
           action: 'proxy_access',
@@ -494,7 +417,7 @@ serve(async (req) => {
           resource_id: incidentId,
           new_values: { url, resourceType: 'html', timestamp: new Date().toISOString() }
         });
-        
+
         return new Response(content, {
           headers: {
             ...corsHeaders,
@@ -506,10 +429,42 @@ serve(async (req) => {
             'Pragma': 'no-cache',
             'Expires': '0',
             'X-Resource-Type': 'html',
-            'X-Proxy-Status': 'rendered'
+            'X-Proxy-Status': 'rendered',
+            'X-Debug-Upstream-CT': contentType,
+            'X-Debug-Final-CT': 'text/html; charset=utf-8',
+            'X-Debug-IsLikelyHtml': String(detectedHtml),
+            'X-Debug-ForceHtml': String(Boolean(forceHtml))
           }
         });
       }
+
+      // CSS branch
+      if (resourceType === 'css') {
+        const rewritten = rewriteCSSUrls(textContent, url, proxyBase, incidentId);
+        return new Response(rewritten, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/css; charset=utf-8',
+            'X-Content-Type-Options': 'nosniff',
+            'Cache-Control': 'public, max-age=21600',
+            'X-Resource-Type': 'css',
+            'X-Debug-Upstream-CT': contentType,
+            'X-Debug-Final-CT': 'text/css; charset=utf-8'
+          }
+        });
+      }
+
+      // JavaScript or other text - passthrough
+      return new Response(textContent, {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=21600',
+          'X-Resource-Type': resourceType,
+          'X-Debug-Upstream-CT': contentType,
+          'X-Debug-Final-CT': contentType
+        }
+      });
     }
 
     // Handle GET requests with URL parameters (for resource proxying)
@@ -517,6 +472,7 @@ serve(async (req) => {
       const urlObj = new URL(req.url);
       const targetUrl = urlObj.searchParams.get('url');
       const incidentId = urlObj.searchParams.get('incident');
+      const forceHtmlParam = ['1', 'true'].includes((urlObj.searchParams.get('forceHtml') || '').toLowerCase());
       
       if (!targetUrl || !incidentId) {
         return new Response(JSON.stringify({ error: 'Missing url or incident parameter' }), {
@@ -552,38 +508,25 @@ serve(async (req) => {
           headers: {
             ...corsHeaders,
             'Content-Type': contentType,
-            'Cache-Control': 'public, max-age=86400'
+            'Cache-Control': 'public, max-age=86400',
+            'X-Debug-Upstream-CT': contentType,
+            'X-Debug-Final-CT': contentType
           }
         });
       }
 
-      // Handle text resources
+      // Text resources: read and decide
       let content = await response.text();
-      
-      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
       const proxyBase = `https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy`;
-      
-      if (resourceType === 'css') {
-        const rewrittenContent = rewriteCSSUrls(content, targetUrl, proxyBase, incidentId);
-        
-        return new Response(rewrittenContent, {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'text/css; charset=utf-8',
-            'X-Content-Type-Options': 'nosniff',
-            'Cache-Control': 'public, max-age=21600'
-          }
-        });
-      }
-      
-      if (resourceType === 'html') {
+      const detectedHtml = isLikelyHtml(content);
+      const treatAsHtml = forceHtmlParam || detectedHtml || resourceType === 'html';
+
+      if (treatAsHtml) {
         console.log('GET html proxied:', targetUrl);
-        
-        // Remove X-Frame-Options and CSP
+        // Remove blocking meta tags
         content = content.replace(/<meta[^>]*http-equiv=["']?X-Frame-Options["']?[^>]*>/gi, '');
         content = content.replace(/<meta[^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, '');
-        
-        // Inject runtime patch
+        // Inject runtime patch and rewrite
         const runtimePatchScript = `
 <script>
 (function() {
@@ -591,50 +534,18 @@ serve(async (req) => {
   const INCIDENT_ID = '${incidentId}';
   function proxify(url) {
     if (!url || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('#')) return url;
-    try {
-      const absolute = new URL(url, window.location.href).href;
-      if (absolute.startsWith(PROXY_BASE)) return absolute;
-      return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID;
-    } catch (e) { return url; }
+    try { const absolute = new URL(url, window.location.href).href; if (absolute.startsWith(PROXY_BASE)) return absolute; return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID; } catch (e) { return url; }
   }
-  const origSetAttr = Element.prototype.setAttribute;
-  Element.prototype.setAttribute = function(name, value) {
-    if (['href', 'src', 'action'].includes(name.toLowerCase())) value = proxify(value);
-    return origSetAttr.call(this, name, value);
-  };
-  ['HTMLAnchorElement', 'HTMLLinkElement', 'HTMLScriptElement', 'HTMLImageElement', 
-   'HTMLFormElement', 'HTMLSourceElement'].forEach(function(cn) {
-    const p = window[cn] && window[cn].prototype;
-    if (!p) return;
-    ['href', 'src', 'action'].forEach(function(prop) {
-      const d = Object.getOwnPropertyDescriptor(p, prop);
-      if (d && d.set) {
-        const oSet = d.set;
-        Object.defineProperty(p, prop, { set: function(v) { return oSet.call(this, proxify(v)); }, get: d.get });
-      }
-    });
-  });
-  const oFetch = window.fetch;
-  window.fetch = function(u, o) { return oFetch(proxify(u), o); };
-  const oOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(m, u) { arguments[1] = proxify(u); return oOpen.apply(this, arguments); };
-  document.addEventListener('click', function(e) {
-    let el = e.target;
-    while (el && el.tagName !== 'A') el = el.parentElement;
-    if (el && el.tagName === 'A') {
-      el.target = '_self';
-      if (el.href && !el.href.startsWith(PROXY_BASE)) el.href = proxify(el.href);
-    }
-  }, true);
-  document.querySelectorAll('link[data-href]').forEach(function(l) {
-    if (!l.href || l.href === window.location.href) l.href = proxify(l.getAttribute('data-href'));
-  });
+  const sA = Element.prototype.setAttribute; Element.prototype.setAttribute = function(n,v){ if(['href','src','action'].includes(n.toLowerCase())) v = proxify(v); return sA.call(this,n,v); };
+  ['HTMLAnchorElement','HTMLLinkElement','HTMLScriptElement','HTMLImageElement','HTMLFormElement','HTMLSourceElement'].forEach(function(cn){ const p=(window as any)[cn] && (window as any)[cn].prototype; if(!p) return; ['href','src','action'].forEach(function(prop){ const d=Object.getOwnPropertyDescriptor(p,prop); if(d && d.set){ const o=d.set; Object.defineProperty(p,prop,{ set(v){ return o!.call(this, proxify(v)); }, get:d.get }); } }); });
+  const of=window.fetch; window.fetch=function(u,o){ return of(proxify(u as any), o as any); } as any;
+  const oo=XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open=function(m,u){ arguments[1]=proxify(u as any); return oo.apply(this, arguments as any); } as any;
+  document.addEventListener('click', function(e){ let el:any=e.target; while(el && el.tagName!=='A') el=el.parentElement; if(el && el.tagName==='A'){ el.target='_self'; if(el.href && !el.href.startsWith(PROXY_BASE)) el.href=proxify(el.href);} }, true);
+  document.querySelectorAll('link[data-href]').forEach(function(l:any){ if(!l.href || l.href===window.location.href) l.href=proxify(l.getAttribute('data-href')); });
 })();
 </script>`;
-        
         content = content.replace('</head>', `${runtimePatchScript}</head>`);
         content = rewriteHTMLUrls(content, targetUrl, proxyBase, incidentId);
-        
         return new Response(content, {
           headers: {
             ...corsHeaders,
@@ -645,7 +556,25 @@ serve(async (req) => {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
             'Expires': '0',
-            'X-Proxy-Status': 'rendered'
+            'X-Proxy-Status': 'rendered',
+            'X-Debug-Upstream-CT': contentType,
+            'X-Debug-Final-CT': 'text/html; charset=utf-8',
+            'X-Debug-IsLikelyHtml': String(detectedHtml),
+            'X-Debug-ForceHtml': String(forceHtmlParam)
+          }
+        });
+      }
+
+      if (resourceType === 'css') {
+        const rewrittenContent = rewriteCSSUrls(content, targetUrl, proxyBase, incidentId);
+        return new Response(rewrittenContent, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/css; charset=utf-8',
+            'X-Content-Type-Options': 'nosniff',
+            'Cache-Control': 'public, max-age=21600',
+            'X-Debug-Upstream-CT': contentType,
+            'X-Debug-Final-CT': 'text/css; charset=utf-8'
           }
         });
       }
@@ -654,7 +583,9 @@ serve(async (req) => {
         headers: {
           ...corsHeaders,
           'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=21600'
+          'Cache-Control': 'public, max-age=21600',
+          'X-Debug-Upstream-CT': contentType,
+          'X-Debug-Final-CT': contentType
         }
       });
     }
