@@ -49,6 +49,54 @@ function isLikelyHtml(content: string): boolean {
   return /<!doctype\s+html/i.test(head) || /<html[\s>]/i.test(head) || /<head[\s>]/i.test(head) || /<body[\s>]/i.test(head);
 }
 
+// Detect and return the correct Content-Type for browser interpretation
+function getCorrectContentType(url: string, originalContentType: string, resourceType: string): string {
+  const urlLower = url.toLowerCase();
+  
+  // CSS
+  if (resourceType === 'css' || urlLower.endsWith('.css') || originalContentType.includes('text/css')) {
+    return 'text/css; charset=utf-8';
+  }
+  
+  // JavaScript
+  if (resourceType === 'javascript' || urlLower.endsWith('.js') || originalContentType.includes('javascript')) {
+    return 'application/javascript; charset=utf-8';
+  }
+  
+  // JSON
+  if (urlLower.endsWith('.json') || originalContentType.includes('json')) {
+    return 'application/json; charset=utf-8';
+  }
+  
+  // Images - return the correct type based on extension or original content type
+  if (resourceType === 'image' || originalContentType.includes('image')) {
+    if (urlLower.endsWith('.png')) return 'image/png';
+    if (urlLower.endsWith('.jpg') || urlLower.endsWith('.jpeg')) return 'image/jpeg';
+    if (urlLower.endsWith('.gif')) return 'image/gif';
+    if (urlLower.endsWith('.svg')) return 'image/svg+xml';
+    if (urlLower.endsWith('.webp')) return 'image/webp';
+    if (urlLower.endsWith('.ico')) return 'image/x-icon';
+    return originalContentType || 'application/octet-stream';
+  }
+  
+  // Fonts
+  if (resourceType === 'font') {
+    if (urlLower.endsWith('.woff2')) return 'font/woff2';
+    if (urlLower.endsWith('.woff')) return 'font/woff';
+    if (urlLower.endsWith('.ttf')) return 'font/ttf';
+    if (urlLower.endsWith('.eot')) return 'application/vnd.ms-fontobject';
+    return originalContentType || 'application/octet-stream';
+  }
+  
+  // HTML
+  if (resourceType === 'html' || originalContentType.includes('text/html')) {
+    return 'text/html; charset=utf-8';
+  }
+  
+  // Default: return the original type or octet-stream
+  return originalContentType || 'application/octet-stream';
+}
+
 // Rewrite URLs in HTML to go through proxy
 function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incidentId: string): string {
   const base = new URL(baseUrl);
@@ -383,14 +431,29 @@ serve(async (req) => {
       
       console.log(`Resource type detected: ${resourceType} for ${url}`);
 
-      // RAW CONTENT MODE: Return raw content without any processing
+      // RAW CONTENT MODE: Return raw content with correct content type for browser interpretation
       if (rawContent) {
-        console.log('POST rawContent=true → returning raw text/plain');
+        const correctContentType = getCorrectContentType(url, contentType, resourceType);
+        console.log(`POST rawContent=true → returning ${correctContentType}`);
+        
+        // For binary resources, return as buffer
+        if (resourceType === 'image' || resourceType === 'font') {
+          const arrayBuffer = await response.arrayBuffer();
+          return new Response(arrayBuffer, {
+            headers: {
+              ...corsHeaders,
+              'Content-Type': correctContentType,
+              'X-Raw-Content': 'true'
+            }
+          });
+        }
+        
+        // For text resources, return as text
         const rawText = await response.text();
         return new Response(rawText, {
           headers: {
             ...corsHeaders,
-            'Content-Type': 'text/plain; charset=utf-8',
+            'Content-Type': correctContentType,
             'X-Raw-Content': 'true'
           }
         });
@@ -1104,14 +1167,29 @@ const runtimePatchScript = `
       const contentType = response.headers.get('content-type') || '';
       const resourceType = getResourceType(targetUrl, contentType);
 
-      // RAW CONTENT MODE: Return raw content without any processing
+      // RAW CONTENT MODE: Return raw content with correct content type for browser interpretation
       if (rawContentParam) {
-        console.log('GET rawContent=true → returning raw text/plain');
+        const correctContentType = getCorrectContentType(targetUrl, contentType, resourceType);
+        console.log(`GET rawContent=true → returning ${correctContentType}`);
+        
+        // For binary resources, return as buffer
+        if (resourceType === 'image' || resourceType === 'font') {
+          const arrayBuffer = await response.arrayBuffer();
+          return new Response(arrayBuffer, {
+            headers: {
+              ...corsHeaders,
+              'Content-Type': correctContentType,
+              'X-Raw-Content': 'true'
+            }
+          });
+        }
+        
+        // For text resources, return as text
         const rawText = await response.text();
         return new Response(rawText, {
           headers: {
             ...corsHeaders,
-            'Content-Type': 'text/plain; charset=utf-8',
+            'Content-Type': correctContentType,
             'X-Raw-Content': 'true'
           }
         });
