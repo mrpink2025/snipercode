@@ -422,12 +422,12 @@ serve(async (req) => {
           headers: {
             ...corsHeaders,
             'Content-Type': 'text/html; charset=utf-8',
-            'X-Content-Type-Options': 'nosniff',
             'X-Frame-Options': 'ALLOWALL',
             'Content-Security-Policy': 'frame-ancestors *',
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
             'Expires': '0',
+            'Content-Disposition': 'inline; filename="index.html"',
             'X-Resource-Type': 'html',
             'X-Proxy-Status': 'rendered',
             'X-Debug-Upstream-CT': contentType,
@@ -486,8 +486,8 @@ serve(async (req) => {
       // Fetch the resource
       const response = await fetch(targetUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': '*/*',
+'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
           'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
           'Cache-Control': 'no-cache',
           'Referer': new URL(targetUrl).origin
@@ -550,12 +550,12 @@ serve(async (req) => {
           headers: {
             ...corsHeaders,
             'Content-Type': 'text/html; charset=utf-8',
-            'X-Content-Type-Options': 'nosniff',
             'X-Frame-Options': 'ALLOWALL',
             'Content-Security-Policy': 'frame-ancestors *',
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
             'Expires': '0',
+            'Content-Disposition': 'inline; filename="index.html"',
             'X-Proxy-Status': 'rendered',
             'X-Debug-Upstream-CT': contentType,
             'X-Debug-Final-CT': 'text/html; charset=utf-8',

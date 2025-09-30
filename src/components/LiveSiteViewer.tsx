@@ -20,6 +20,7 @@ interface LiveSiteViewerProps {
 
 export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [proxyUrl, setProxyUrl] = useState<string | null>(null);
+  const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cookies, setCookies] = useState<any[]>([]);
 
@@ -61,7 +62,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     }
   }, [incident.full_cookie_data, incident.cookie_data, incident.host]);
 
-  const loadSiteWithCookies = () => {
+  const loadSiteWithCookies = async () => {
     if (!incident.tab_url) {
       setError('URL do site não disponível');
       return;
@@ -72,13 +73,32 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     try {
       console.log('Loading site with cookies:', incident.tab_url, cookies);
 
-      // Build direct proxy URL with cache busting timestamp
       const proxyBase = 'https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy';
+      setSrcDoc(null);
+
+      // 1) Tenta via POST e injeta no srcDoc (mais robusto)
+      const postResp = await fetch(proxyBase, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: incident.tab_url, incidentId: incident.id, cookies, forceHtml: true })
+      });
+
+      if (postResp.ok) {
+        const text = await postResp.text();
+        console.log('✅ POST renderizado como HTML (srcDoc).');
+        setSrcDoc(text);
+        setProxyUrl(null);
+        toast.success('Site renderizado via proxy');
+        return;
+      } else {
+        console.warn('⚠️ POST falhou, fallback para GET.', postResp.status);
+      }
+
+      // 2) Fallback via GET com forceHtml
       const encodedUrl = encodeURIComponent(incident.tab_url);
       const cacheBuster = Date.now();
       const url = `${proxyBase}?url=${encodedUrl}&incident=${incident.id}&_t=${cacheBuster}&forceHtml=1`;
-      
-      console.log('🌐 Loading URL with cache buster (forceHtml):', url);
+      console.log('🌐 Loading URL com cache buster (forceHtml):', url);
       setProxyUrl(url);
       toast.success('Site carregado com proxy universal ativo');
 
@@ -91,6 +111,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 
   const refreshSite = () => {
     setProxyUrl(null);
+    setSrcDoc(null);
     setTimeout(() => loadSiteWithCookies(), 100);
   };
 
@@ -171,7 +192,19 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           </Alert>
         )}
 
-        {proxyUrl && (
+        {srcDoc && (
+          <iframe
+            key="srcdoc"
+            srcDoc={srcDoc}
+            className="w-full h-full border-0"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation-by-user-activation"
+            title={`Site: ${incident.host}`}
+            onLoad={() => console.log('✅ Iframe srcDoc loaded successfully')}
+            onError={(e) => console.error('❌ Iframe srcDoc load error:', e)}
+          />
+        )}
+
+        {!srcDoc && proxyUrl && (
           <iframe
             key={proxyUrl}
             src={proxyUrl}
