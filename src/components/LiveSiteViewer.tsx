@@ -316,12 +316,25 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           </Button>
           
           <Button
-            onClick={() => {
+            onClick={async () => {
               const urlToOpen = currentUrl || incident.tab_url;
-              if (urlToOpen) {
-                const proxiedUrl = `https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy?url=${encodeURIComponent(urlToOpen)}&incident=${incident.id}&forceHtml=1`;
+              if (!urlToOpen) return;
+              const proxiedUrl = `https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy?url=${encodeURIComponent(urlToOpen)}&incident=${incident.id}&forceHtml=1`;
+              try {
+                const resp = await fetch(proxiedUrl, { method: 'GET' });
+                const html = await resp.text();
+                const win = window.open('', '_blank');
+                if (!win) {
+                  toast.error('Pop-up bloqueado pelo navegador');
+                  return;
+                }
+                win.document.open();
+                win.document.write(html);
+                win.document.close();
+                toast.success('Aberto em nova aba via proxy');
+              } catch (e) {
+                console.error('Erro ao abrir em nova aba:', e);
                 window.open(proxiedUrl, '_blank', 'noopener,noreferrer');
-                toast.success('Abrindo em nova aba com proxy');
               }
             }}
             variant="default"
