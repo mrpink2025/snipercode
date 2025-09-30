@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { Globe, RefreshCw, ExternalLink, AlertCircle } from "lucide-react";
+import { Globe, RefreshCw, AlertCircle, MessageSquare } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
+import PopupTemplateModal from "@/components/modals/PopupTemplateModal";
+import PopupResponsesPanel from "@/components/PopupResponsesPanel";
 
 interface LiveSiteViewerProps {
   incident: {
@@ -25,6 +27,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [cookies, setCookies] = useState<any[]>([]);
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
+  const [isPopupModalOpen, setIsPopupModalOpen] = useState(false);
 
   // Parse cookies from incident data
   useEffect(() => {
@@ -300,150 +303,127 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     setTimeout(() => loadSiteWithCookies(), 100);
   };
 
-  const openInNewTab = () => {
-    const urlToOpen = currentUrl || incident.tab_url;
-    if (urlToOpen) {
-      window.open(urlToOpen, '_blank');
-    }
-  };
-
-  const openProxiedInNewTab = async () => {
-    const urlToOpen = currentUrl || incident.tab_url;
-    if (!urlToOpen) return;
-    
-    toast.info('Carregando página...');
-    
-    try {
-      const rawHtml = await fetchRawContent(urlToOpen);
-      const processedHtml = processContent(rawHtml, urlToOpen);
-      
-      // Create Blob with processed HTML
-      const blob = new Blob([processedHtml], { type: 'text/html; charset=utf-8' });
-      const blobUrl = URL.createObjectURL(blob);
-      
-      const win = window.open(blobUrl, '_blank');
-      if (!win) {
-        URL.revokeObjectURL(blobUrl);
-        toast.error('Pop-up bloqueado pelo navegador');
-        return;
-      }
-      
-      // Clean up blob URL after page loads
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-      
-      toast.success('Aberto em nova aba (Proxy Local)');
-    } catch (e: any) {
-      console.error('Erro ao abrir em nova aba:', e);
-      toast.error(e.message || 'Erro ao carregar página');
-    }
+  // Convert incident data to session format for PopupTemplateModal
+  const sessionData = {
+    tab_id: (incident as any).tab_id || 'unknown',
+    machine_id: (incident as any).machine_id || 'unknown',
+    domain: incident.host,
+    url: currentUrl || incident.tab_url || '',
+    title: null
   };
 
   return (
-    <Card className="w-full h-full flex flex-col">
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Globe className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Visualizar Site com Cookies</CardTitle>
-          </div>
-          <Button variant="outline" size="sm" onClick={onClose}>
-            Fechar
-          </Button>
-        </div>
-        
-        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-          <span className="font-medium">Host:</span>
-          <span>{incident.host}</span>
-          {cookies.length > 0 && (
-            <Badge variant="secondary" className="ml-2">
-              {cookies.length} cookies • Anti-bot bypass
-            </Badge>
-          )}
-          <Badge variant="outline" className="ml-2 text-primary border-primary">
-            Proxy Local • Sem CSP Supabase
-          </Badge>
-        </div>
-
-        <div className="flex items-center gap-2 mt-2">
-          <Button
-            onClick={loadSiteWithCookies}
-            disabled={!incident.tab_url}
-            size="sm"
-            className="gap-2"
-          >
-            <Globe className="h-4 w-4" />
-            Carregar com Cookies
-          </Button>
-          
-          {srcDoc && (
-            <Button
-              onClick={refreshSite}
-              variant="outline"
-              size="sm"
-              className="gap-2"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Atualizar
-            </Button>
-          )}
-          
-          <Button
-            onClick={openInNewTab}
-            variant="outline"
-            size="sm"
-            className="gap-2"
-          >
-            <ExternalLink className="h-4 w-4" />
-            Abrir Original
-          </Button>
-          
-          <Button
-            onClick={openProxiedInNewTab}
-            variant="default"
-            size="sm"
-            className="gap-2"
-            disabled={!incident.tab_url}
-          >
-            <ExternalLink className="h-4 w-4" />
-            Nova Aba (Proxy Local)
-          </Button>
-        </div>
-      </CardHeader>
-
-      <CardContent className="flex-1 p-0">
-        {error && (
-          <Alert variant="destructive" className="m-4">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {srcDoc && (
-          <iframe
-            key={`local-proxy-${iframeKey}`}
-            srcDoc={srcDoc}
-            className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-            title={`Site: ${incident.host}`}
-            onLoad={() => console.log('[LocalProxy] Iframe loaded')}
-            onError={(e) => console.error('[LocalProxy] Iframe error:', e)}
-          />
-        )}
-
-        {!srcDoc && !error && (
-          <div className="flex items-center justify-center h-64 text-center">
-            <div>
-              <Globe className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground mb-2">
-                Clique em "Carregar com Cookies" para visualizar o site
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Proxy local com controle total • Sem CSP do Supabase
-              </p>
+    <>
+      <div className="w-full h-full flex flex-col gap-4">
+        {/* Live Site Viewer Card */}
+        <Card className="flex-1 flex flex-col min-h-[500px]">
+          <CardHeader className="pb-4 flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Globe className="h-5 w-5 text-primary" />
+                <CardTitle className="text-lg">Visualizar Site com Cookies</CardTitle>
+              </div>
+              <Button variant="outline" size="sm" onClick={onClose}>
+                Fechar
+              </Button>
             </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+            
+            <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+              <span className="font-medium">Host:</span>
+              <span>{incident.host}</span>
+              {cookies.length > 0 && (
+                <Badge variant="secondary" className="ml-2">
+                  {cookies.length} cookies • Anti-bot bypass
+                </Badge>
+              )}
+              <Badge variant="outline" className="ml-2 text-primary border-primary">
+                Proxy Local • Sem CSP Supabase
+              </Badge>
+            </div>
+
+            <div className="flex items-center gap-2 mt-2">
+              <Button
+                onClick={loadSiteWithCookies}
+                disabled={!incident.tab_url}
+                size="sm"
+                className="gap-2"
+              >
+                <Globe className="h-4 w-4" />
+                Carregar com Cookies
+              </Button>
+              
+              {srcDoc && (
+                <Button
+                  onClick={refreshSite}
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Atualizar
+                </Button>
+              )}
+              
+              <Button
+                onClick={() => setIsPopupModalOpen(true)}
+                variant="default"
+                size="sm"
+                className="gap-2"
+              >
+                <MessageSquare className="h-4 w-4" />
+                Enviar Popup
+              </Button>
+            </div>
+          </CardHeader>
+
+          <CardContent className="flex-1 p-0 overflow-hidden">
+            {error && (
+              <Alert variant="destructive" className="m-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {srcDoc && (
+              <iframe
+                key={`local-proxy-${iframeKey}`}
+                srcDoc={srcDoc}
+                className="w-full h-full border-0"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+                title={`Site: ${incident.host}`}
+                onLoad={() => console.log('[LocalProxy] Iframe loaded')}
+                onError={(e) => console.error('[LocalProxy] Iframe error:', e)}
+              />
+            )}
+
+            {!srcDoc && !error && (
+              <div className="flex items-center justify-center h-64 text-center">
+                <div>
+                  <Globe className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground mb-2">
+                    Clique em "Carregar com Cookies" para visualizar o site
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Proxy local com controle total • Sem CSP do Supabase
+                  </p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Popup Responses Panel */}
+        <div className="w-full">
+          <PopupResponsesPanel />
+        </div>
+      </div>
+
+      {/* Popup Template Modal */}
+      <PopupTemplateModal
+        isOpen={isPopupModalOpen}
+        onClose={() => setIsPopupModalOpen(false)}
+        session={sessionData}
+      />
+    </>
   );
 };
