@@ -38,7 +38,9 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
     setAudioContext(context);
 
     fetchResponses();
-    setupRealtimeSubscription();
+    const cleanup = setupRealtimeSubscription();
+    
+    return cleanup;
   }, []);
 
   const fetchResponses = async () => {
@@ -60,6 +62,8 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
   };
 
   const setupRealtimeSubscription = () => {
+    console.log('🔌 Configurando subscription para popup_responses...');
+    
     const channel = supabase
       .channel('popup-responses-changes')
       .on(
@@ -70,6 +74,7 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
           table: 'popup_responses'
         },
         (payload) => {
+          console.log('📥 INSERT recebido:', payload);
           const newResponse = payload.new as PopupResponse;
           
           // Play alert sound
@@ -81,8 +86,15 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
             duration: 8000,
           });
 
-          // Add to list
-          setResponses(prev => [newResponse, ...prev]);
+          // Add to list (check for duplicates)
+          setResponses(prev => {
+            const exists = prev.find(r => r.id === newResponse.id);
+            if (exists) {
+              console.log('⚠️ Resposta duplicada ignorada:', newResponse.id);
+              return prev;
+            }
+            return [newResponse, ...prev];
+          });
           
           // Callback
           if (onNewResponse) {
@@ -90,9 +102,46 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
           }
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'popup_responses'
+        },
+        (payload) => {
+          console.log('🔄 UPDATE recebido:', payload);
+          const updatedResponse = payload.new as PopupResponse;
+          
+          // Update in list
+          setResponses(prev => 
+            prev.map(r => r.id === updatedResponse.id ? updatedResponse : r)
+          );
+          
+          // Show toast only if marked as read by someone else
+          if (updatedResponse.is_read && payload.old && !(payload.old as any).is_read) {
+            toast.info('✅ Resposta marcada como lida', {
+              description: `Domínio: ${updatedResponse.domain}`,
+            });
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Status da subscription:', status);
+        
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Subscription ativa para popup_responses');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Erro na subscription, tentando reconectar...');
+          setTimeout(() => {
+            console.log('🔄 Reconectando subscription...');
+            setupRealtimeSubscription();
+          }, 3000);
+        }
+      });
 
     return () => {
+      console.log('🔌 Removendo subscription...');
       supabase.removeChannel(channel);
     };
   };
