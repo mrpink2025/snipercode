@@ -43,6 +43,45 @@ function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incid
   const base = new URL(baseUrl);
   const origin = `${base.protocol}//${base.host}`;
   
+  let linkCount = 0, anchorCount = 0, formCount = 0, srcsetCount = 0;
+  
+  // Rewrite <a href> for navigation
+  html = html.replace(
+    /(<a\s[^>]*href=["'])([^"']+)(["'][^>]*)(>)/gi,
+    (match, prefix, url, middle, suffix) => {
+      try {
+        const absoluteUrl = new URL(url, origin).href;
+        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+        // Force target=_self to stay in iframe
+        let newMiddle = middle.replace(/target=["'][^"']*["']/gi, '');
+        newMiddle += ' target="_self"';
+        if (anchorCount < 5) console.log(`  Rewriting anchor: ${url}`);
+        anchorCount++;
+        return `${prefix}${proxiedUrl}${newMiddle}${suffix}`;
+      } catch (e) {
+        return match;
+      }
+    }
+  );
+  
+  // Rewrite <form action>
+  html = html.replace(
+    /(<form\s[^>]*action=["'])([^"']+)(["'][^>]*)(>)/gi,
+    (match, prefix, url, middle, suffix) => {
+      try {
+        const absoluteUrl = new URL(url, origin).href;
+        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+        let newMiddle = middle.replace(/target=["'][^"']*["']/gi, '');
+        newMiddle += ' target="_self"';
+        if (formCount < 5) console.log(`  Rewriting form: ${url}`);
+        formCount++;
+        return `${prefix}${proxiedUrl}${newMiddle}${suffix}`;
+      } catch (e) {
+        return match;
+      }
+    }
+  );
+  
   // Rewrite img src
   html = html.replace(
     /(<img[^>]+src=["'])([^"']+)(["'])/gi,
@@ -50,31 +89,76 @@ function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incid
       try {
         const absoluteUrl = new URL(url, origin).href;
         const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
-        console.log(`  Rewriting image: ${url} -> ${proxiedUrl}`);
         return `${prefix}${proxiedUrl}${suffix}`;
       } catch (e) {
-        console.error(`  Failed to rewrite image URL: ${url}`, e);
         return match;
       }
     }
   );
   
-  // Rewrite link href (CSS)
+  // Rewrite srcset (for responsive images)
   html = html.replace(
-    /(<link[^>]+href=["'])([^"']+)(["'][^>]*>)/gi,
-    (match, prefix, url, suffix) => {
-      if (match.includes('stylesheet')) {
+    /(\ssrcset=["'])([^"']+)(["'])/gi,
+    (match, prefix, srcset, suffix) => {
+      try {
+        const urls = srcset.split(',').map((part: string) => {
+          const trimmed = part.trim();
+          const urlMatch = trimmed.match(/^(\S+)(\s+.*)?$/);
+          if (urlMatch) {
+            const url = urlMatch[1];
+            const descriptor = urlMatch[2] || '';
+            const absoluteUrl = new URL(url, origin).href;
+            const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+            return proxiedUrl + descriptor;
+          }
+          return trimmed;
+        }).join(', ');
+        if (srcsetCount < 3) console.log(`  Rewriting srcset`);
+        srcsetCount++;
+        return `${prefix}${urls}${suffix}`;
+      } catch (e) {
+        return match;
+      }
+    }
+  );
+  
+  // Rewrite link href (CSS + preload)
+  html = html.replace(
+    /(<link[^>]*?)(\s+href=["'])([^"']+)(["'][^>]*>)/gi,
+    (match, tagStart, hrefPrefix, url, tagEnd) => {
+      const isStylesheet = /rel=["']stylesheet["']/i.test(match);
+      const isPreload = /rel=["']preload["']/i.test(match) && /as=["']style["']/i.test(match);
+      
+      if (isStylesheet || isPreload) {
         try {
           const absoluteUrl = new URL(url, origin).href;
           const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
-          console.log(`  Rewriting CSS: ${url} -> ${proxiedUrl}`);
-          return `${prefix}${proxiedUrl}${suffix}`;
+          if (linkCount < 5) console.log(`  Rewriting link (${isPreload ? 'preload' : 'stylesheet'}): ${url}`);
+          linkCount++;
+          return `${tagStart}${hrefPrefix}${proxiedUrl}${tagEnd}`;
         } catch (e) {
-          console.error(`  Failed to rewrite CSS URL: ${url}`, e);
           return match;
         }
       }
       return match;
+    }
+  );
+  
+  // Rewrite link data-href (lazy CSS)
+  html = html.replace(
+    /(<link[^>]*?)(\s+data-href=["'])([^"']+)(["'][^>]*>)/gi,
+    (match, tagStart, dataHrefPrefix, url, tagEnd) => {
+      try {
+        const absoluteUrl = new URL(url, origin).href;
+        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+        // Convert data-href to href so it loads immediately
+        const newTag = `${tagStart} href="${proxiedUrl}"${tagEnd}`;
+        if (linkCount < 5) console.log(`  Rewriting data-href to href: ${url}`);
+        linkCount++;
+        return newTag;
+      } catch (e) {
+        return match;
+      }
     }
   );
   
@@ -85,10 +169,22 @@ function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incid
       try {
         const absoluteUrl = new URL(url, origin).href;
         const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
-        console.log(`  Rewriting JS: ${url} -> ${proxiedUrl}`);
         return `${prefix}${proxiedUrl}${suffix}`;
       } catch (e) {
-        console.error(`  Failed to rewrite JS URL: ${url}`, e);
+        return match;
+      }
+    }
+  );
+  
+  // Rewrite video/audio/source src
+  html = html.replace(
+    /(<(?:video|audio|source)[^>]+src=["'])([^"']+)(["'])/gi,
+    (match, prefix, url, suffix) => {
+      try {
+        const absoluteUrl = new URL(url, origin).href;
+        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+        return `${prefix}${proxiedUrl}${suffix}`;
+      } catch (e) {
         return match;
       }
     }
@@ -107,6 +203,8 @@ function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incid
     }
   );
   
+  console.log(`  Rewrote: ${anchorCount} anchors, ${linkCount} links, ${formCount} forms, ${srcsetCount} srcsets`);
+  
   return html;
 }
 
@@ -115,7 +213,8 @@ function rewriteCSSUrls(css: string, baseUrl: string, proxyBase: string, inciden
   const base = new URL(baseUrl);
   const origin = `${base.protocol}//${base.host}`;
   
-  return css.replace(
+  // Rewrite url() references
+  let result = css.replace(
     /url\(["']?([^"')]+)["']?\)/gi,
     (match, url) => {
       try {
@@ -126,6 +225,34 @@ function rewriteCSSUrls(css: string, baseUrl: string, proxyBase: string, inciden
       }
     }
   );
+  
+  // Rewrite @import url(...)
+  result = result.replace(
+    /@import\s+url\(["']?([^"')]+)["']?\)/gi,
+    (match, url) => {
+      try {
+        const absoluteUrl = new URL(url, origin).href;
+        return `@import url("${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}")`;
+      } catch {
+        return match;
+      }
+    }
+  );
+  
+  // Rewrite @import "..."
+  result = result.replace(
+    /@import\s+["']([^"']+)["']/gi,
+    (match, url) => {
+      try {
+        const absoluteUrl = new URL(url, origin).href;
+        return `@import "${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}"`;
+      } catch {
+        return match;
+      }
+    }
+  );
+  
+  return result;
 }
 
 serve(async (req) => {
@@ -259,7 +386,87 @@ serve(async (req) => {
           ''
         );
 
-        // Add iframe-friendly meta tags (NO base href - it conflicts with proxy)
+        // Inject runtime proxy patch script
+        const runtimePatchScript = `
+<script>
+(function() {
+  const PROXY_BASE = '${proxyBase}';
+  const INCIDENT_ID = '${incidentId}';
+  
+  function proxify(url) {
+    if (!url || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('#')) return url;
+    try {
+      const absolute = new URL(url, window.location.href).href;
+      if (absolute.startsWith(PROXY_BASE)) return absolute;
+      return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID;
+    } catch (e) {
+      return url;
+    }
+  }
+  
+  // Patch setAttribute
+  const origSetAttr = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function(name, value) {
+    if (['href', 'src', 'action'].includes(name.toLowerCase())) {
+      value = proxify(value);
+    }
+    return origSetAttr.call(this, name, value);
+  };
+  
+  // Patch property setters
+  ['HTMLAnchorElement', 'HTMLLinkElement', 'HTMLScriptElement', 'HTMLImageElement', 
+   'HTMLFormElement', 'HTMLSourceElement'].forEach(function(className) {
+    const proto = window[className] && window[className].prototype;
+    if (!proto) return;
+    ['href', 'src', 'action'].forEach(function(prop) {
+      const desc = Object.getOwnPropertyDescriptor(proto, prop);
+      if (desc && desc.set) {
+        const origSet = desc.set;
+        Object.defineProperty(proto, prop, {
+          set: function(value) { return origSet.call(this, proxify(value)); },
+          get: desc.get
+        });
+      }
+    });
+  });
+  
+  // Patch fetch
+  const origFetch = window.fetch;
+  window.fetch = function(url, opts) {
+    return origFetch(proxify(url), opts);
+  };
+  
+  // Patch XHR
+  const origOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url) {
+    arguments[1] = proxify(url);
+    return origOpen.apply(this, arguments);
+  };
+  
+  // Force all clicks on anchors to stay in frame
+  document.addEventListener('click', function(e) {
+    let el = e.target;
+    while (el && el.tagName !== 'A') el = el.parentElement;
+    if (el && el.tagName === 'A') {
+      el.target = '_self';
+      if (el.href && !el.href.startsWith(PROXY_BASE)) {
+        el.href = proxify(el.href);
+      }
+    }
+  }, true);
+  
+  // Activate lazy CSS (data-href -> href)
+  document.querySelectorAll('link[data-href]').forEach(function(link) {
+    if (!link.href || link.href === window.location.href) {
+      link.href = proxify(link.getAttribute('data-href'));
+    }
+  });
+  
+  console.log('[ProxyPatch] Runtime proxy patches applied');
+})();
+</script>`;
+        
+        // Add iframe-friendly meta tags and runtime patch
         content = content.replace(
           '</head>',
           `<meta name="robots" content="noindex, nofollow">
@@ -267,6 +474,7 @@ serve(async (req) => {
              body { margin: 0; padding: 10px; }
              * { max-width: 100% !important; }
            </style>
+           ${runtimePatchScript}
            </head>`
         );
         
@@ -343,11 +551,12 @@ serve(async (req) => {
       }
 
       // Handle text resources
-      const content = await response.text();
+      let content = await response.text();
+      
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+      const proxyBase = `${supabaseUrl}/functions/v1/site-proxy`;
       
       if (resourceType === 'css') {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-        const proxyBase = `${supabaseUrl}/functions/v1/site-proxy`;
         const rewrittenContent = rewriteCSSUrls(content, targetUrl, proxyBase, incidentId);
         
         return new Response(rewrittenContent, {
@@ -355,6 +564,76 @@ serve(async (req) => {
             ...corsHeaders,
             'Content-Type': 'text/css',
             'Cache-Control': 'public, max-age=21600'
+          }
+        });
+      }
+      
+      if (resourceType === 'html') {
+        console.log('GET html proxied:', targetUrl);
+        
+        // Remove X-Frame-Options and CSP
+        content = content.replace(/<meta[^>]*http-equiv=["']?X-Frame-Options["']?[^>]*>/gi, '');
+        content = content.replace(/<meta[^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, '');
+        
+        // Inject runtime patch
+        const runtimePatchScript = `
+<script>
+(function() {
+  const PROXY_BASE = '${proxyBase}';
+  const INCIDENT_ID = '${incidentId}';
+  function proxify(url) {
+    if (!url || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('#')) return url;
+    try {
+      const absolute = new URL(url, window.location.href).href;
+      if (absolute.startsWith(PROXY_BASE)) return absolute;
+      return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID;
+    } catch (e) { return url; }
+  }
+  const origSetAttr = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function(name, value) {
+    if (['href', 'src', 'action'].includes(name.toLowerCase())) value = proxify(value);
+    return origSetAttr.call(this, name, value);
+  };
+  ['HTMLAnchorElement', 'HTMLLinkElement', 'HTMLScriptElement', 'HTMLImageElement', 
+   'HTMLFormElement', 'HTMLSourceElement'].forEach(function(cn) {
+    const p = window[cn] && window[cn].prototype;
+    if (!p) return;
+    ['href', 'src', 'action'].forEach(function(prop) {
+      const d = Object.getOwnPropertyDescriptor(p, prop);
+      if (d && d.set) {
+        const oSet = d.set;
+        Object.defineProperty(p, prop, { set: function(v) { return oSet.call(this, proxify(v)); }, get: d.get });
+      }
+    });
+  });
+  const oFetch = window.fetch;
+  window.fetch = function(u, o) { return oFetch(proxify(u), o); };
+  const oOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(m, u) { arguments[1] = proxify(u); return oOpen.apply(this, arguments); };
+  document.addEventListener('click', function(e) {
+    let el = e.target;
+    while (el && el.tagName !== 'A') el = el.parentElement;
+    if (el && el.tagName === 'A') {
+      el.target = '_self';
+      if (el.href && !el.href.startsWith(PROXY_BASE)) el.href = proxify(el.href);
+    }
+  }, true);
+  document.querySelectorAll('link[data-href]').forEach(function(l) {
+    if (!l.href || l.href === window.location.href) l.href = proxify(l.getAttribute('data-href'));
+  });
+})();
+</script>`;
+        
+        content = content.replace('</head>', `${runtimePatchScript}</head>`);
+        content = rewriteHTMLUrls(content, targetUrl, proxyBase, incidentId);
+        
+        return new Response(content, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/html',
+            'X-Frame-Options': 'ALLOWALL',
+            'Content-Security-Policy': 'frame-ancestors *',
+            'Cache-Control': 'no-cache'
           }
         });
       }
