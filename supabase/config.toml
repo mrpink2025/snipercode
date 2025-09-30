@@ -7,7 +7,7 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.site-proxy]
-verify_jwt = true
+verify_jwt = false
 
 [functions.extension-config]
 verify_jwt = true

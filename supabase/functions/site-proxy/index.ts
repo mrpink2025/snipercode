@@ -3,7 +3,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, range, if-modified-since, cache-control',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 };
 
 interface ProxyRequest {
@@ -332,7 +334,7 @@ serve(async (req) => {
 
       // Get proxy base URL for rewriting
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-      const proxyBase = `${supabaseUrl}/functions/v1/site-proxy`;
+      const proxyBase = `https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy`;
 
       // Handle different resource types
       if (resourceType === 'image' || resourceType === 'font') {
@@ -554,7 +556,7 @@ serve(async (req) => {
       let content = await response.text();
       
       const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-      const proxyBase = `${supabaseUrl}/functions/v1/site-proxy`;
+      const proxyBase = `https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy`;
       
       if (resourceType === 'css') {
         const rewrittenContent = rewriteCSSUrls(content, targetUrl, proxyBase, incidentId);
