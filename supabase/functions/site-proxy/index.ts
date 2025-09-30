@@ -940,6 +940,9 @@ const runtimePatchScript = `
   const of=window.fetch; window.fetch=function(u,o){ return of(proxify(u as any), o as any); } as any;
   const oo=XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open=function(m,u){ arguments[1]=proxify(u as any); return oo.apply(this, arguments as any); } as any;
   document.querySelectorAll('link[data-href]').forEach(function(l){ if(!l.getAttribute('href') || l.getAttribute('href')===window.location.href) l.setAttribute('href', proxify(l.getAttribute('data-href') as any) as any); });
+  
+  // Signal ready to parent
+  window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
 })();
 </script>`;
         content = content.replace('</head>', `${runtimePatchScript}</head>`);
