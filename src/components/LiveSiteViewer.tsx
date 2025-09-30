@@ -159,17 +159,11 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             setSrcDoc(html);
             setProxyUrl(null);
             
-            // Setup ready timeout with Blob URL fallback
+            // Setup ready timeout - just log, keep srcDoc
             console.log('[LiveSiteViewer] srcDoc set → aguardando proxy:ready…');
             readyTimeoutRef.current = window.setTimeout(() => {
-              console.warn('[LiveSiteViewer] ⚠️ timeout (4500ms) → usando Blob URL fallback');
-              const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-              const blobUrl = URL.createObjectURL(blob);
-              console.log('[LiveSiteViewer] Blob URL criado:', blobUrl);
-              setSrcDoc(null);
-              setProxyUrl(blobUrl);
-              setIframeKey(k => k + 1);
-            }, 4500);
+              console.warn('[LiveSiteViewer] ⚠️ proxy:ready timeout (6000ms) — mantendo srcDoc');
+            }, 6000);
             
             toast.success('Página carregada');
           } else {
@@ -228,29 +222,16 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         setProxyUrl(null);
         setCurrentUrl(incident.tab_url);
         
-        // Setup ready timeout with Blob URL fallback
+        // Setup ready timeout - just log, keep srcDoc
         console.log('[LiveSiteViewer] srcDoc set → aguardando proxy:ready…');
         readyTimeoutRef.current = window.setTimeout(() => {
-          console.warn('[LiveSiteViewer] ⚠️ timeout (4500ms) → usando Blob URL fallback');
-          const blob = new Blob([text], { type: 'text/html;charset=utf-8' });
-          const blobUrl = URL.createObjectURL(blob);
-          console.log('[LiveSiteViewer] Blob URL criado:', blobUrl);
-          setSrcDoc(null);
-          setProxyUrl(blobUrl);
-          setIframeKey(k => k + 1);
-        }, 4500);
+          console.warn('[LiveSiteViewer] ⚠️ proxy:ready timeout (6000ms) — mantendo srcDoc');
+        }, 6000);
         
         toast.success('Site renderizado via proxy');
         return;
       } else {
-        console.warn('⚠️ POST falhou, fallback para Blob URL:', postResp.status);
-        const fallbackHtml = await postResp.text();
-        const blob = new Blob([fallbackHtml], { type: 'text/html;charset=utf-8' });
-        const blobUrl = URL.createObjectURL(blob);
-        console.log('[LiveSiteViewer] POST fallback → Blob URL criado');
-        setProxyUrl(blobUrl);
-        setIframeKey(k => k + 1);
-        toast.success('Site carregado (fallback via Blob URL)');
+        throw new Error(`POST failed: ${postResp.status}`);
       }
 
     } catch (err: any) {
@@ -349,7 +330,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             key={`srcdoc-${iframeKey}`}
             srcDoc={srcDoc}
             className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
             title={`Site: ${incident.host}`}
             onLoad={() => console.log('[LiveSiteViewer] Iframe srcDoc carregado')}
             onError={(e) => console.error('[LiveSiteViewer] Iframe srcDoc erro:', e)}
@@ -361,7 +342,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             key={`proxy-${iframeKey}`}
             src={proxyUrl}
             className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
             title={`Site: ${incident.host}`}
             onLoad={() => console.log('[LiveSiteViewer] Iframe carregado via URL')}
             onError={(e) => console.error('[LiveSiteViewer] Iframe URL erro:', e)}

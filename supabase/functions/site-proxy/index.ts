@@ -442,11 +442,39 @@ const runtimePatchScript = `
     const baseEl = document.createElement('base'); 
     baseEl.href = BASE_PAGE_URL; 
     document.head && document.head.prepend(baseEl);
-    console.log('[ProxyPatch] Base tag injected, sending proxy:ready');
+    console.log('[ProxyPatch] Base tag injected, sending proxy:ready (early)');
     window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
   } catch(e) {
     console.error('[ProxyPatch] Failed to inject base:', e);
   }
+  
+  // Send proxy:ready on DOMContentLoaded
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('[ProxyPatch] proxy:ready (DOMContentLoaded)');
+      window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
+    });
+  }
+  
+  // Send proxy:ready on window.load
+  window.addEventListener('load', function() {
+    console.log('[ProxyPatch] proxy:ready (load)');
+    window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
+  });
+  
+  // Retry signals at intervals
+  setTimeout(function() {
+    console.log('[ProxyPatch] proxy:ready (retry-0ms)');
+    window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
+  }, 0);
+  setTimeout(function() {
+    console.log('[ProxyPatch] proxy:ready (retry-500ms)');
+    window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
+  }, 500);
+  setTimeout(function() {
+    console.log('[ProxyPatch] proxy:ready (retry-1500ms)');
+    window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
+  }, 1500);
 
   function handleAnchorEvent(e) {
     let el = e.target;
@@ -522,9 +550,6 @@ const runtimePatchScript = `
   const of = window.fetch; window.fetch = function(u,o){ return of(proxify(u as any), o as any); } as any;
   const oo = XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open = function(m,u){ arguments[1] = proxify(u as any); return oo.apply(this, arguments as any); } as any;
   document.querySelectorAll('link[data-href]').forEach(function(l){ if(!l.getAttribute('href') || l.getAttribute('href')===window.location.href) l.setAttribute('href', proxify(l.getAttribute('data-href') as any) as any); });
-  
-  // Send proxy:ready again (redundancy)
-  window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
 })();
 </script>`;
 
@@ -957,7 +982,12 @@ const runtimePatchScript = `
   function proxify(u) { if (!u || typeof u !== 'string' || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u; try { const absolute = new URL(u, BASE_PAGE_URL).href; if (absolute.startsWith(PROXY_BASE)) return absolute; return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID; } catch (e) { return u; } }
   function normalizeUrl(u) { try { const url = new URL(u); return url.origin + url.pathname + url.search; } catch { return u; } }
   function sendNavigate(u){ try { const dep=deproxify(u); const absoluteUrl = new URL(dep, BASE_PAGE_URL).href; const normalized = normalizeUrl(absoluteUrl); if (normalized === normalizeUrl(BASE_PAGE_URL)) { console.log('[ProxyPatch] Navigate (ignored - same as base):', absoluteUrl); return; } const now = Date.now(); if (normalized === lastNavigateUrl && (now - lastNavigateTime) < 800) { console.log('[ProxyPatch] Navigate (debounced):', absoluteUrl); return; } lastNavigateUrl = normalized; lastNavigateTime = now; console.log('[ProxyPatch] Navigate:', absoluteUrl); window.parent.postMessage({ type:'proxy:navigate', url:absoluteUrl, incidentId:INCIDENT_ID }, '*'); } catch(e) { console.warn('[ProxyPatch] Invalid URL for navigate:', u); } }
-  try { const baseEl = document.createElement('base'); baseEl.href = BASE_PAGE_URL; document.head && document.head.prepend(baseEl); console.log('[ProxyPatch] Base tag injected, sending proxy:ready'); window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*'); } catch(e) { console.error('[ProxyPatch] Failed to inject base:', e); }
+  try { const baseEl = document.createElement('base'); baseEl.href = BASE_PAGE_URL; document.head && document.head.prepend(baseEl); console.log('[ProxyPatch] Base tag injected, sending proxy:ready (early)'); window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*'); } catch(e) { console.error('[ProxyPatch] Failed to inject base:', e); }
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',function(){ console.log('[ProxyPatch] proxy:ready (DOMContentLoaded)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); }); }
+  window.addEventListener('load',function(){ console.log('[ProxyPatch] proxy:ready (load)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); });
+  setTimeout(function(){ console.log('[ProxyPatch] proxy:ready (retry-0ms)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); },0);
+  setTimeout(function(){ console.log('[ProxyPatch] proxy:ready (retry-500ms)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); },500);
+  setTimeout(function(){ console.log('[ProxyPatch] proxy:ready (retry-1500ms)'); window.parent.postMessage({type:'proxy:ready',url:BASE_PAGE_URL},'*'); },1500);
   function handleAnchorEvent(e){ let el=e.target; while(el && el.tagName!=='A') el=el.parentElement; if(el && el.tagName==='A'){ const origHref=el.getAttribute('data-orig-href'); const href=origHref||el.getAttribute('href'); if(!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return; e.preventDefault(); e.stopPropagation(); sendNavigate(origHref||(el as HTMLAnchorElement).href); } }
   ['click','mousedown','pointerup','auxclick','touchend'].forEach((evt)=>{ document.addEventListener(evt, handleAnchorEvent, { capture:true, passive:false }); });
   const _open=window.open; window.open=function(u){ sendNavigate(deproxify(u as any)); return null; } as any;
@@ -967,7 +997,6 @@ const runtimePatchScript = `
   const of=window.fetch; window.fetch=function(u,o){ return of(proxify(u as any), o as any); } as any;
   const oo=XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open=function(m,u){ arguments[1]=proxify(u as any); return oo.apply(this, arguments as any); } as any;
   document.querySelectorAll('link[data-href]').forEach(function(l){ if(!l.getAttribute('href') || l.getAttribute('href')===window.location.href) l.setAttribute('href', proxify(l.getAttribute('data-href') as any) as any); });
-  window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
 })();
 </script>`;
         // Robust injection: try </head>, </body>, after <html>, or prepend
