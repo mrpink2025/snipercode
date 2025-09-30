@@ -547,26 +547,229 @@ const runtimePatchScript = `
         console.error('Failed to fetch cookies for GET request:', err);
       }
 
-      // Build headers
-      const fetchHeaders: Record<string, string> = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Cache-Control': 'no-cache',
-        'Referer': new URL(decodedUrl).origin
-      };
+      // Retry logic: try up to 3 times with different strategies
+      let response: Response | null = null;
+      let lastError: Error | null = null;
+      let lastStatus = 0;
+      let attemptVariant = 'original';
       
-      if (cookieHeader) {
-        fetchHeaders['Cookie'] = cookieHeader;
+      const baseUrl = new URL(decodedUrl);
+      const referrerUrl = `${baseUrl.protocol}//${baseUrl.host}`;
+
+      // Build comprehensive headers (matching POST)
+      const buildHeaders = (includeCookie: boolean) => {
+        const headers: Record<string, string> = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'max-age=0',
+          'Connection': 'keep-alive',
+          'DNT': '1',
+          'Referer': referrerUrl,
+          'Sec-CH-UA': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+          'Sec-CH-UA-Mobile': '?0',
+          'Sec-CH-UA-Platform': '"Windows"',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'same-origin',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1'
+        };
+        
+        if (includeCookie && cookieHeader) {
+          headers['Cookie'] = cookieHeader;
+        }
+        
+        return headers;
+      };
+
+      // Attempt 1: Original URL with cookies
+      try {
+        console.log(`  Attempt 1: Fetching ${decodedUrl} with ${cookieCount} cookies`);
+        response = await fetch(decodedUrl, {
+          headers: buildHeaders(true),
+          redirect: 'follow'
+        });
+        lastStatus = response.status;
+        
+        if (!response.ok) {
+          console.log(`  Attempt 1 failed with status ${response.status}`);
+          throw new Error(`HTTP ${response.status}`);
+        }
+        attemptVariant = 'original-with-cookies';
+      } catch (error) {
+        lastError = error as Error;
+        response = null;
       }
 
-      // Fetch the resource using decoded URL
-      const response = await fetch(decodedUrl, {
-        headers: fetchHeaders
-      });
+      // Attempt 2: Original URL without cookies (if first attempt failed)
+      if (!response || !response.ok) {
+        try {
+          console.log(`  Attempt 2: Fetching ${decodedUrl} WITHOUT cookies`);
+          response = await fetch(decodedUrl, {
+            headers: buildHeaders(false),
+            redirect: 'follow'
+          });
+          lastStatus = response.status;
+          
+          if (!response.ok) {
+            console.log(`  Attempt 2 failed with status ${response.status}`);
+            throw new Error(`HTTP ${response.status}`);
+          }
+          attemptVariant = 'original-no-cookies';
+        } catch (error) {
+          lastError = error as Error;
+          response = null;
+        }
+      }
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch resource: ${response.status}`);
+      // Attempt 3: Toggle www subdomain (if previous attempts failed)
+      if (!response || !response.ok) {
+        try {
+          const urlToTry = new URL(decodedUrl);
+          const originalHost = urlToTry.host;
+          
+          if (originalHost.startsWith('www.')) {
+            urlToTry.host = originalHost.substring(4);
+          } else {
+            urlToTry.host = 'www.' + originalHost;
+          }
+          
+          const altUrl = urlToTry.href;
+          console.log(`  Attempt 3: Trying alternate host ${altUrl} with cookies`);
+          
+          response = await fetch(altUrl, {
+            headers: buildHeaders(true),
+            redirect: 'follow'
+          });
+          lastStatus = response.status;
+          
+          if (!response.ok) {
+            console.log(`  Attempt 3 failed with status ${response.status}`);
+            throw new Error(`HTTP ${response.status}`);
+          }
+          attemptVariant = 'alternate-host';
+        } catch (error) {
+          lastError = error as Error;
+          response = null;
+        }
+      }
+
+      // If all attempts failed, return friendly error HTML
+      if (!response || !response.ok) {
+        const errorHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Erro ao Carregar Página</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+    .error-container {
+      background: rgba(255, 255, 255, 0.95);
+      color: #333;
+      border-radius: 12px;
+      padding: 40px;
+      max-width: 600px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+    h1 { color: #e74c3c; margin: 0 0 20px; }
+    p { margin: 15px 0; line-height: 1.6; }
+    .buttons {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      margin-top: 30px;
+      flex-wrap: wrap;
+    }
+    button, a.button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.3s ease;
+    }
+    .btn-back {
+      background: #3498db;
+      color: white;
+    }
+    .btn-back:hover {
+      background: #2980b9;
+    }
+    .btn-original {
+      background: #2ecc71;
+      color: white;
+    }
+    .btn-original:hover {
+      background: #27ae60;
+    }
+    .error-code {
+      font-family: monospace;
+      background: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      margin: 20px 0;
+      font-size: 14px;
+      color: #666;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <div class="error-container">
+    <h1>⚠️ Não foi possível carregar a página</h1>
+    <p>O servidor não conseguiu acessar o conteúdo solicitado após múltiplas tentativas.</p>
+    <div class="error-code">
+      <strong>URL:</strong> ${decodedUrl}<br>
+      <strong>Status:</strong> ${lastStatus || 'Erro de rede'}<br>
+      <strong>Tentativas:</strong> 3<br>
+      <strong>Erro:</strong> ${lastError?.message || 'Desconhecido'}
+    </div>
+    <p>Possíveis causas: bloqueio de bot, proteção DDoS, requisição inválida ou site fora do ar.</p>
+    <div class="buttons">
+      <button class="btn-back" onclick="window.history.back()">← Voltar</button>
+      <a href="${decodedUrl}" target="_blank" class="button btn-original">Abrir Original ↗</a>
+    </div>
+  </div>
+  <!-- Debug info:
+    Incident ID: ${incidentId}
+    Cookies attached: ${cookieCount}
+    Last attempt variant: ${attemptVariant}
+    Last status: ${lastStatus}
+    Error: ${lastError?.toString()}
+  -->
+</body>
+</html>`;
+
+        return new Response(errorHtml, {
+          status: lastStatus || 500,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/html; charset=utf-8',
+            'X-Frame-Options': 'ALLOWALL',
+            'Content-Security-Policy': 'frame-ancestors *',
+            'X-Proxy-Status': 'error',
+            'X-Debug-Attempts': '3',
+            'X-Debug-Last-Status': String(lastStatus),
+            'X-Debug-Variant': attemptVariant,
+            'X-Debug-Error': lastError?.message || 'Unknown'
+          }
+        });
       }
 
       const contentType = response.headers.get('content-type') || '';
@@ -581,7 +784,9 @@ const runtimePatchScript = `
             'Content-Type': contentType,
             'Cache-Control': 'public, max-age=86400',
             'X-Debug-Upstream-CT': contentType,
-            'X-Debug-Final-CT': contentType
+            'X-Debug-Final-CT': contentType,
+            'X-Debug-Attempts': attemptVariant === 'original-with-cookies' ? '1' : (attemptVariant === 'original-no-cookies' ? '2' : '3'),
+            'X-Debug-Variant': attemptVariant
           }
         });
       }
@@ -593,17 +798,17 @@ const runtimePatchScript = `
       const treatAsHtml = forceHtmlParam || detectedHtml || resourceType === 'html';
 
       if (treatAsHtml) {
-        console.log('GET html proxied:', targetUrl);
+        console.log('GET html proxied:', decodedUrl);
         // Remove blocking meta tags
         content = content.replace(/<meta[^>]*http-equiv=["']?X-Frame-Options["']?[^>]*>/gi, '');
         content = content.replace(/<meta[^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, '');
-        // Inject runtime patch and rewrite
+        // Inject runtime patch and rewrite (use decodedUrl for BASE_PAGE_URL)
 const runtimePatchScript = `
 <script>
 (function() {
   const PROXY_BASE = '${proxyBase}';
   const INCIDENT_ID = '${incidentId}';
-  const BASE_PAGE_URL = '${targetUrl}';
+  const BASE_PAGE_URL = '${decodedUrl}';
   function proxify(u) {
     if (!u || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u;
     try { const absolute = new URL(u, BASE_PAGE_URL).href; if (absolute.startsWith(PROXY_BASE)) return absolute; return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID + '&forceHtml=1'; } catch (e) { return u; }
@@ -626,7 +831,7 @@ const runtimePatchScript = `
 })();
 </script>`;
         content = content.replace('</head>', `${runtimePatchScript}</head>`);
-        content = rewriteHTMLUrls(content, targetUrl, proxyBase, incidentId);
+        content = rewriteHTMLUrls(content, decodedUrl, proxyBase, incidentId);
         return new Response(content, {
           headers: {
             ...corsHeaders,
@@ -642,13 +847,15 @@ const runtimePatchScript = `
             'X-Debug-Final-CT': 'text/html; charset=utf-8',
             'X-Debug-IsLikelyHtml': String(detectedHtml),
             'X-Debug-ForceHtml': String(forceHtmlParam),
-            'X-Debug-Cookies-Attached': String(cookieCount)
+            'X-Debug-Cookies-Attached': String(cookieCount),
+            'X-Debug-Attempts': attemptVariant === 'original-with-cookies' ? '1' : (attemptVariant === 'original-no-cookies' ? '2' : '3'),
+            'X-Debug-Variant': attemptVariant
           }
         });
       }
 
       if (resourceType === 'css') {
-        const rewrittenContent = rewriteCSSUrls(content, targetUrl, proxyBase, incidentId);
+        const rewrittenContent = rewriteCSSUrls(content, decodedUrl, proxyBase, incidentId);
         return new Response(rewrittenContent, {
           headers: {
             ...corsHeaders,
@@ -656,7 +863,9 @@ const runtimePatchScript = `
             'X-Content-Type-Options': 'nosniff',
             'Cache-Control': 'public, max-age=21600',
             'X-Debug-Upstream-CT': contentType,
-            'X-Debug-Final-CT': 'text/css; charset=utf-8'
+            'X-Debug-Final-CT': 'text/css; charset=utf-8',
+            'X-Debug-Attempts': attemptVariant === 'original-with-cookies' ? '1' : (attemptVariant === 'original-no-cookies' ? '2' : '3'),
+            'X-Debug-Variant': attemptVariant
           }
         });
       }
@@ -667,7 +876,9 @@ const runtimePatchScript = `
           'Content-Type': contentType,
           'Cache-Control': 'public, max-age=21600',
           'X-Debug-Upstream-CT': contentType,
-          'X-Debug-Final-CT': contentType
+          'X-Debug-Final-CT': contentType,
+          'X-Debug-Attempts': attemptVariant === 'original-with-cookies' ? '1' : (attemptVariant === 'original-no-cookies' ? '2' : '3'),
+          'X-Debug-Variant': attemptVariant
         }
       });
     }
