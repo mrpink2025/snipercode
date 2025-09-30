@@ -123,7 +123,7 @@ log_success "Repositório clonado com sucesso"
 # 7. INSTALAR DEPENDÊNCIAS DO PROJETO
 ################################################################################
 log_info "Instalando dependências do projeto..."
-npm install
+npm install --legacy-peer-deps
 log_success "Dependências instaladas"
 
 ################################################################################
