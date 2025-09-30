@@ -72,11 +72,13 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     try {
       console.log('Loading site with cookies:', incident.tab_url, cookies);
 
-      // Build direct proxy URL
+      // Build direct proxy URL with cache busting timestamp
       const proxyBase = 'https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy';
       const encodedUrl = encodeURIComponent(incident.tab_url);
-      const url = `${proxyBase}?url=${encodedUrl}&incident=${incident.id}`;
+      const cacheBuster = Date.now();
+      const url = `${proxyBase}?url=${encodedUrl}&incident=${incident.id}&_t=${cacheBuster}`;
       
+      console.log('🌐 Loading URL with cache buster:', url);
       setProxyUrl(url);
       toast.success('Site carregado com proxy universal ativo');
 
@@ -176,6 +178,8 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             className="w-full h-full border-0"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation-by-user-activation"
             title={`Site: ${incident.host}`}
+            onLoad={() => console.log('✅ Iframe loaded successfully')}
+            onError={(e) => console.error('❌ Iframe load error:', e)}
           />
         )}
 

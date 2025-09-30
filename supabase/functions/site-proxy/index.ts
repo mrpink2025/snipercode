@@ -357,7 +357,8 @@ serve(async (req) => {
         return new Response(content, {
           headers: {
             ...corsHeaders,
-            'Content-Type': 'text/css',
+            'Content-Type': 'text/css; charset=utf-8',
+            'X-Content-Type-Options': 'nosniff',
             'Cache-Control': 'public, max-age=21600', // 6h cache
             'X-Resource-Type': 'css'
           }
@@ -497,11 +498,15 @@ serve(async (req) => {
         return new Response(content, {
           headers: {
             ...corsHeaders,
-            'Content-Type': 'text/html',
+            'Content-Type': 'text/html; charset=utf-8',
+            'X-Content-Type-Options': 'nosniff',
             'X-Frame-Options': 'ALLOWALL',
             'Content-Security-Policy': 'frame-ancestors *',
-            'Cache-Control': 'no-cache',
-            'X-Resource-Type': 'html'
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'X-Resource-Type': 'html',
+            'X-Proxy-Status': 'rendered'
           }
         });
       }
@@ -564,7 +569,8 @@ serve(async (req) => {
         return new Response(rewrittenContent, {
           headers: {
             ...corsHeaders,
-            'Content-Type': 'text/css',
+            'Content-Type': 'text/css; charset=utf-8',
+            'X-Content-Type-Options': 'nosniff',
             'Cache-Control': 'public, max-age=21600'
           }
         });
@@ -632,10 +638,14 @@ serve(async (req) => {
         return new Response(content, {
           headers: {
             ...corsHeaders,
-            'Content-Type': 'text/html',
+            'Content-Type': 'text/html; charset=utf-8',
+            'X-Content-Type-Options': 'nosniff',
             'X-Frame-Options': 'ALLOWALL',
             'Content-Security-Policy': 'frame-ancestors *',
-            'Cache-Control': 'no-cache'
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'X-Proxy-Status': 'rendered'
           }
         });
       }
