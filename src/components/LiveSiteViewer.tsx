@@ -23,6 +23,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [proxyUrl, setProxyUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cookies, setCookies] = useState<any[]>([]);
+  const [resourcesLoaded, setResourcesLoaded] = useState(0);
 
   useEffect(() => {
     // Try to get cookies from full_cookie_data first, then fallback to cookie_data
@@ -90,8 +91,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       const blob = new Blob([data], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       setProxyUrl(url);
+      setResourcesLoaded(0);
 
-      toast.success('Site carregado com cookies do usuário');
+      toast.success('Site carregado com proxy universal ativo');
 
     } catch (err: any) {
       console.error('Error loading site:', err);
@@ -129,12 +131,17 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           </Button>
         </div>
         
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
           <span className="font-medium">Host:</span>
           <span>{incident.host}</span>
           {cookies.length > 0 && (
             <Badge variant="secondary" className="ml-2">
               {cookies.length} cookies • Anti-bot bypass
+            </Badge>
+          )}
+          {proxyUrl && (
+            <Badge variant="outline" className="ml-2 text-primary border-primary">
+              Proxy Universal • Imagens + CSS + JS
             </Badge>
           )}
         </div>
