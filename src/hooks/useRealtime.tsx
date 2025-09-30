@@ -64,16 +64,6 @@ export const useRealtime = (options: UseRealtimeOptions = {}) => {
                 }
               });
             }
-            
-            if (payload.table === 'raw_cookie_requests') {
-              toast.info('📝 Nova solicitação de cookies!', {
-                description: 'Uma nova solicitação foi criada',
-                action: {
-                  label: 'Ver',
-                  onClick: () => window.location.reload()
-                }
-              });
-            }
           }
 
           if (payload.eventType === 'UPDATE') {

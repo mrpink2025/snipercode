@@ -64,35 +64,6 @@ export const useNotifications = (): UseNotificationsReturn => {
     }
   });
 
-  useRealtime({
-    table: 'raw_cookie_requests',
-    onEvent: (event) => {
-      if (event.eventType === 'INSERT' && event.new) {
-        addNotification({
-          title: '📝 Nova Solicitação de Cookies',
-          message: 'Uma nova solicitação de dados foi criada',
-          type: 'info',
-          action_url: '/requests',
-          metadata: { request_id: event.new.id }
-        });
-      }
-    }
-  });
-
-  useRealtime({
-    table: 'approvals',
-    onEvent: (event) => {
-      if (event.eventType === 'UPDATE' && event.old?.approval_status !== event.new?.approval_status) {
-        const isApproved = event.new.approval_status === 'approved';
-        addNotification({
-          title: isApproved ? '✅ Solicitação Aprovada' : '❌ Solicitação Rejeitada',
-          message: `Sua solicitação foi ${isApproved ? 'aprovada' : 'rejeitada'}`,
-          type: isApproved ? 'success' : 'error',
-          metadata: { approval_id: event.new.id }
-        });
-      }
-    }
-  });
 
   const generateMockNotifications = (): Notification[] => {
     const now = new Date();
@@ -106,16 +77,6 @@ export const useNotifications = (): UseNotificationsReturn => {
         created_at: new Date(now.getTime() - 5 * 60000).toISOString(), // 5 min ago
         action_url: '/incidents/1',
         metadata: { severity: 'high' }
-      },
-      {
-        id: '2',
-        title: '📝 Nova Solicitação de Aprovação',
-        message: 'Solicitação de acesso aos cookies do Instagram',
-        type: 'warning',
-        read: false,
-        created_at: new Date(now.getTime() - 15 * 60000).toISOString(), // 15 min ago
-        action_url: '/approvals',
-        metadata: { requires_approval: true }
       },
       {
         id: '3',

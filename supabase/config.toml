@@ -6,9 +6,6 @@ verify_jwt = false
 [functions.block-domain]
 verify_jwt = true
 
-[functions.approve-request]
-verify_jwt = true
-
 [functions.site-proxy]
 verify_jwt = true
 

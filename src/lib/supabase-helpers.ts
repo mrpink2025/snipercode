@@ -5,7 +5,7 @@ export interface KPIData {
   totalIncidents: number;
   activeIncidents: number;
   blockedDomains: number;
-  pendingApprovals: number;
+  
   severityBreakdown: {
     low: number;
     medium: number;
@@ -46,15 +46,6 @@ export const getKPIData = async (): Promise<KPIData> => {
       throw domainsError;
     }
 
-    // Get pending approvals count
-    const { count: pendingApprovalsCount, error: approvalsError } = await supabase
-      .from('approvals')
-      .select('*', { count: 'exact', head: true })
-      .eq('approval_status', 'pending');
-
-    if (approvalsError) {
-      throw approvalsError;
-    }
 
     const incidents = incidentCounts || [];
     const totalIncidents = incidents.length;
@@ -99,7 +90,6 @@ export const getKPIData = async (): Promise<KPIData> => {
       totalIncidents,
       activeIncidents,
       blockedDomains: blockedDomainsCount || 0,
-      pendingApprovals: pendingApprovalsCount || 0,
       severityBreakdown,
       statusBreakdown,
       recentActivity
@@ -112,7 +102,6 @@ export const getKPIData = async (): Promise<KPIData> => {
       totalIncidents: 0,
       activeIncidents: 0,
       blockedDomains: 0,
-      pendingApprovals: 0,
       severityBreakdown: {
         low: 0,
         medium: 0,
@@ -141,36 +130,6 @@ export const blockDomain = async (domain: string, reason: string): Promise<void>
   }
 };
 
-export const createRawCookieRequest = async (
-  incidentId: string, 
-  justification: string
-): Promise<void> => {
-  const { error } = await supabase
-    .from('raw_cookie_requests')
-    .insert({
-      incident_id: incidentId,
-      justification,
-      requested_by: (await supabase.auth.getUser()).data.user?.id,
-    });
-
-  if (error) {
-    throw new Error(`Erro ao criar solicitação: ${error.message}`);
-  }
-};
-
-export const approveRequest = async (
-  requestId: string,
-  approved: boolean,
-  comments?: string
-): Promise<void> => {
-  const { error } = await supabase.functions.invoke('approve-request', {
-    body: { requestId, approved, comments }
-  });
-
-  if (error) {
-    throw new Error(`Erro ao processar aprovação: ${error.message}`);
-  }
-};
 
 export const getAuditTrail = async (resourceId?: string, limit = 50) => {
   let query = supabase

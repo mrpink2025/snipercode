@@ -22,7 +22,6 @@ interface IncidentCardProps {
     isRedList?: boolean;
   };
   onBlock: (incidentId: string) => void;
-  onRequestRaw: (incidentId: string) => void;
   onIsolate: (incidentId: string) => void;
   onViewDetails: (incidentId: string) => void;
   onViewSite?: (incident: any) => void;
@@ -31,7 +30,6 @@ interface IncidentCardProps {
 const IncidentCard = ({ 
   incident, 
   onBlock, 
-  onRequestRaw, 
   onIsolate, 
   onViewDetails,
   onViewSite 
@@ -157,15 +155,6 @@ const IncidentCard = ({
             >
               <Ban className="w-4 h-4 mr-1" />
               Bloquear domínio
-            </Button>
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={() => onRequestRaw(incident.id)}
-              className="text-warning hover:bg-warning/10 hover:border-warning/20"
-            >
-              <FileText className="w-4 h-4 mr-1" />
-              Solicitar cookie (raw)
             </Button>
             <Button 
               size="sm" 

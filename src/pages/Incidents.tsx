@@ -185,7 +185,6 @@ const Incidents = () => {
                           tabUrl: incident.tab_url
                         }}
                         onBlock={() => {}}
-                        onRequestRaw={() => {}}
                         onIsolate={() => {}}
                         onViewDetails={() => {}}
                       />

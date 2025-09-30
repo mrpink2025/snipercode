@@ -86,17 +86,6 @@ const Dashboard = () => {
     }
   };
 
-  const handleRequestRaw = async (incidentId: string) => {
-    try {
-      const incident = incidents.find(i => i.incident_id === incidentId);
-      if (!incident) return;
-
-      await updateIncident(incident.id, { status: 'in-progress' as any });
-      toast.info(`Solicitação de cookies enviada para ${incidentId}`);
-    } catch (error) {
-      toast.error('Erro ao processar solicitação');
-    }
-  };
 
   const handleIsolate = async (incidentId: string) => {
     try {
@@ -307,7 +296,6 @@ const Dashboard = () => {
                       isRedList: incident.is_red_list
                     }}
                     onBlock={handleBlock}
-                    onRequestRaw={handleRequestRaw}
                     onIsolate={handleIsolate}
                     onViewDetails={handleViewDetails}
                     onViewSite={handleViewSite}

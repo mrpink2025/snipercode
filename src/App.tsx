@@ -10,7 +10,7 @@ import Auth from "./pages/Auth";
 import ExtensionDemo from "./pages/ExtensionDemo";
 import InstallExtension from "./pages/InstallExtension";
 import AgentInstaller from "./pages/AgentInstaller";
-import Approvals from "./pages/Approvals";
+
 import Incidents from "./pages/Incidents";
 import Hosts from "./pages/Hosts";
 import Audit from "./pages/Audit";
@@ -55,14 +55,6 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <Index />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/approvals" 
-                element={
-                  <ProtectedRoute requiredRole="approver">
-                    <Approvals />
                   </ProtectedRoute>
                 } 
               />

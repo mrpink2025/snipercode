@@ -89,63 +89,6 @@ export type Database = {
         }
         Relationships: []
       }
-      approvals: {
-        Row: {
-          approval_status: Database["public"]["Enums"]["approval_status"]
-          approved_at: string | null
-          approver_id: string | null
-          comments: string | null
-          created_at: string
-          expires_at: string
-          id: string
-          requested_by: string
-          resource_id: string
-          resource_type: string
-          updated_at: string
-        }
-        Insert: {
-          approval_status?: Database["public"]["Enums"]["approval_status"]
-          approved_at?: string | null
-          approver_id?: string | null
-          comments?: string | null
-          created_at?: string
-          expires_at?: string
-          id?: string
-          requested_by: string
-          resource_id: string
-          resource_type: string
-          updated_at?: string
-        }
-        Update: {
-          approval_status?: Database["public"]["Enums"]["approval_status"]
-          approved_at?: string | null
-          approver_id?: string | null
-          comments?: string | null
-          created_at?: string
-          expires_at?: string
-          id?: string
-          requested_by?: string
-          resource_id?: string
-          resource_type?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "approvals_approver_id_fkey"
-            columns: ["approver_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "approvals_requested_by_fkey"
-            columns: ["requested_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       audit_logs: {
         Row: {
           action: Database["public"]["Enums"]["audit_action"]
@@ -453,67 +396,6 @@ export type Database = {
         }
         Relationships: []
       }
-      raw_cookie_requests: {
-        Row: {
-          approval_status: Database["public"]["Enums"]["approval_status"]
-          approved_at: string | null
-          approved_by: string | null
-          created_at: string
-          expires_at: string | null
-          id: string
-          incident_id: string
-          justification: string
-          requested_by: string
-          updated_at: string
-        }
-        Insert: {
-          approval_status?: Database["public"]["Enums"]["approval_status"]
-          approved_at?: string | null
-          approved_by?: string | null
-          created_at?: string
-          expires_at?: string | null
-          id?: string
-          incident_id: string
-          justification: string
-          requested_by: string
-          updated_at?: string
-        }
-        Update: {
-          approval_status?: Database["public"]["Enums"]["approval_status"]
-          approved_at?: string | null
-          approved_by?: string | null
-          created_at?: string
-          expires_at?: string | null
-          id?: string
-          incident_id?: string
-          justification?: string
-          requested_by?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "raw_cookie_requests_approved_by_fkey"
-            columns: ["approved_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "raw_cookie_requests_incident_id_fkey"
-            columns: ["incident_id"]
-            isOneToOne: false
-            referencedRelation: "incidents"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "raw_cookie_requests_requested_by_fkey"
-            columns: ["requested_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       remote_commands: {
         Row: {
           command_type: string
@@ -627,7 +509,6 @@ export type Database = {
       }
     }
     Enums: {
-      approval_status: "pending" | "approved" | "rejected" | "expired"
       audit_action:
         | "create"
         | "update"
@@ -772,7 +653,6 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      approval_status: ["pending", "approved", "rejected", "expired"],
       audit_action: [
         "create",
         "update",

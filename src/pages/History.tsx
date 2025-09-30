@@ -14,7 +14,7 @@ import Sidebar from "@/components/Sidebar";
 
 interface HistoryItem {
   id: string;
-  type: 'cookie_request' | 'approval' | 'domain_block';
+  type: 'domain_block';
   description: string;
   status: string;
   user_name: string;
@@ -36,29 +36,6 @@ const History = () => {
   const fetchHistory = async () => {
     try {
       setLoading(true);
-      
-      // Fetch cookie requests
-      const { data: cookieRequests, error: cookieError } = await supabase
-        .from('raw_cookie_requests')
-        .select(`
-          *,
-          profiles!raw_cookie_requests_requested_by_fkey(full_name, email),
-          incidents!raw_cookie_requests_incident_id_fkey(incident_id, host)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (cookieError) throw cookieError;
-
-      // Fetch approvals
-      const { data: approvals, error: approvalsError } = await supabase
-        .from('approvals')
-        .select(`
-          *,
-          profiles!approvals_requested_by_fkey(full_name, email)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (approvalsError) throw approvalsError;
 
       // Fetch blocked domains
       const { data: blockedDomains, error: domainsError } = await supabase
@@ -71,39 +48,8 @@ const History = () => {
 
       if (domainsError) throw domainsError;
 
-      // Combine and format all data
+      // Format data
       const formattedHistory: HistoryItem[] = [
-        ...(cookieRequests || []).map(item => ({
-          id: item.id,
-          type: 'cookie_request' as const,
-          description: `Solicitação de cookie raw para incidente ${item.incidents?.incident_id}`,
-          status: item.approval_status,
-          user_name: item.profiles?.full_name || 'Usuário',
-          user_email: item.profiles?.email || '',
-          created_at: item.created_at,
-          updated_at: item.updated_at,
-          details: {
-            justification: item.justification,
-            incident_host: item.incidents?.host,
-            expires_at: item.expires_at
-          }
-        })),
-        ...(approvals || []).map(item => ({
-          id: item.id,
-          type: 'approval' as const,
-          description: `Aprovação para ${item.resource_type}`,
-          status: item.approval_status,
-          user_name: item.profiles?.full_name || 'Usuário',
-          user_email: item.profiles?.email || '',
-          created_at: item.created_at,
-          updated_at: item.updated_at,
-          details: {
-            resource_type: item.resource_type,
-            resource_id: item.resource_id,
-            comments: item.comments,
-            expires_at: item.expires_at
-          }
-        })),
         ...(blockedDomains || []).map(item => ({
           id: item.id,
           type: 'domain_block' as const,
@@ -150,8 +96,6 @@ const History = () => {
 
   const getTypeLabel = (type: string) => {
     switch (type) {
-      case 'cookie_request': return 'Solicitação Cookie';
-      case 'approval': return 'Aprovação';
       case 'domain_block': return 'Bloqueio Domínio';
       default: return type;
     }
@@ -159,8 +103,6 @@ const History = () => {
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'cookie_request': return 'bg-blue-100 text-blue-800';
-      case 'approval': return 'bg-purple-100 text-purple-800';
       case 'domain_block': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -200,8 +142,6 @@ const History = () => {
   });
 
   const totalItems = historyItems.length;
-  const cookieRequests = historyItems.filter(i => i.type === 'cookie_request').length;
-  const approvals = historyItems.filter(i => i.type === 'approval').length;
   const domainBlocks = historyItems.filter(i => i.type === 'domain_block').length;
 
   return (
@@ -226,7 +166,7 @@ const History = () => {
             </div>
 
             {/* Estatísticas */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center space-x-2">
@@ -241,24 +181,8 @@ const History = () => {
               <Card>
                 <CardContent className="p-6">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">{cookieRequests}</div>
-                    <div className="text-sm text-muted-foreground">Solicitações Cookie</div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-6">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-600">{approvals}</div>
-                    <div className="text-sm text-muted-foreground">Aprovações</div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-6">
-                  <div className="text-center">
                     <div className="text-2xl font-bold text-red-600">{domainBlocks}</div>
-                    <div className="text-sm text-muted-foreground">Bloqueios</div>
+                    <div className="text-sm text-muted-foreground">Bloqueios de Domínio</div>
                   </div>
                 </CardContent>
               </Card>
@@ -289,8 +213,6 @@ const History = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos os tipos</SelectItem>
-                      <SelectItem value="cookie_request">Solicitação Cookie</SelectItem>
-                      <SelectItem value="approval">Aprovação</SelectItem>
                       <SelectItem value="domain_block">Bloqueio Domínio</SelectItem>
                     </SelectContent>
                   </Select>

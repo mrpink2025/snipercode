@@ -4,27 +4,12 @@ import Sidebar from "@/components/Sidebar";
 import Dashboard from "@/components/Dashboard";
 import ExtensionPopup from "@/components/ExtensionPopup";
 import BlockDomainModal from "@/components/modals/BlockDomainModal";
-import RawCookieRequestModal from "@/components/modals/RawCookieRequestModal";
-import ApprovalModal from "@/components/modals/ApprovalModal";
 import { Button } from "@/components/ui/button";
 import { Chrome } from "lucide-react";
 
 const Index = () => {
   const [showExtensionDemo, setShowExtensionDemo] = useState(false);
   const [blockModal, setBlockModal] = useState<{isOpen: boolean, domain: string, incidentId: string}>({isOpen: false, domain: '', incidentId: ''});
-  const [rawCookieModal, setRawCookieModal] = useState<{isOpen: boolean, incidentId: string, host: string}>({isOpen: false, incidentId: '', host: ''});
-  const [approvalModal, setApprovalModal] = useState<{isOpen: boolean, request: any}>({isOpen: false, request: null});
-
-  // Mock request for approval demo
-  const mockRequest = {
-    id: "REQ-169001",
-    incidentId: "INC-169001",
-    host: "facebook.com",
-    category: "Investigação de Fraude",
-    justification: "Necessário analisar os cookies de autenticação para investigar possível vazamento de credenciais corporativas. Os metadados indicam acesso não autorizado durante horário comercial, e precisamos do cookie raw para rastrear a origem da sessão e determinar se houve comprometimento da conta corporativa.",
-    requester: "João Silva",
-    timestamp: new Date().toISOString(),
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -66,22 +51,6 @@ const Index = () => {
               >
                 Demo: Bloquear Domínio
               </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setRawCookieModal({isOpen: true, incidentId: 'INC-169001', host: 'facebook.com'})}
-                className="text-warning hover:bg-warning/10 hover:border-warning/20"
-              >
-                Demo: Solicitar Cookie Raw
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setApprovalModal({isOpen: true, request: mockRequest})}
-                className="text-success hover:bg-success/10 hover:border-success/20"
-              >
-                Demo: Modal de Aprovação
-              </Button>
             </div>
           </div>
 
@@ -105,19 +74,6 @@ const Index = () => {
         onClose={() => setBlockModal({isOpen: false, domain: '', incidentId: ''})}
         domain={blockModal.domain}
         incidentId={blockModal.incidentId}
-      />
-
-      <RawCookieRequestModal 
-        isOpen={rawCookieModal.isOpen}
-        onClose={() => setRawCookieModal({isOpen: false, incidentId: '', host: ''})}
-        incidentId={rawCookieModal.incidentId}
-        host={rawCookieModal.host}
-      />
-
-      <ApprovalModal 
-        isOpen={approvalModal.isOpen}
-        onClose={() => setApprovalModal({isOpen: false, request: null})}
-        request={approvalModal.request || mockRequest}
       />
     </div>
   );
