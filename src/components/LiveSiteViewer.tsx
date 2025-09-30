@@ -114,6 +114,19 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         
         if (incidentId !== incident.id) return;
         
+        // Viewer-side debounce: ignore if same URL (normalized)
+        const normalizeUrl = (u: string) => {
+          try {
+            const parsed = new URL(u);
+            return parsed.origin + parsed.pathname + parsed.search;
+          } catch { return u; }
+        };
+        
+        if (currentUrl && normalizeUrl(url) === normalizeUrl(currentUrl)) {
+          console.log('[LiveSiteViewer] proxy:navigate (ignored - same URL):', url);
+          return;
+        }
+        
         console.log('[LiveSiteViewer] proxy:navigate →', url);
         setError(null);
         setCurrentUrl(url);
@@ -149,13 +162,14 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             // Setup ready timeout with Blob URL fallback
             console.log('[LiveSiteViewer] srcDoc set → aguardando proxy:ready…');
             readyTimeoutRef.current = window.setTimeout(() => {
-              console.warn('[LiveSiteViewer] ⚠️ timeout → usando Blob URL fallback');
+              console.warn('[LiveSiteViewer] ⚠️ timeout (4500ms) → usando Blob URL fallback');
               const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
               const blobUrl = URL.createObjectURL(blob);
+              console.log('[LiveSiteViewer] Blob URL criado:', blobUrl);
               setSrcDoc(null);
               setProxyUrl(blobUrl);
               setIframeKey(k => k + 1);
-            }, 3000);
+            }, 4500);
             
             toast.success('Página carregada');
           } else {
@@ -217,27 +231,27 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         // Setup ready timeout with Blob URL fallback
         console.log('[LiveSiteViewer] srcDoc set → aguardando proxy:ready…');
         readyTimeoutRef.current = window.setTimeout(() => {
-          console.warn('[LiveSiteViewer] ⚠️ timeout → usando Blob URL fallback');
+          console.warn('[LiveSiteViewer] ⚠️ timeout (4500ms) → usando Blob URL fallback');
           const blob = new Blob([text], { type: 'text/html;charset=utf-8' });
           const blobUrl = URL.createObjectURL(blob);
+          console.log('[LiveSiteViewer] Blob URL criado:', blobUrl);
           setSrcDoc(null);
           setProxyUrl(blobUrl);
           setIframeKey(k => k + 1);
-        }, 3000);
+        }, 4500);
         
         toast.success('Site renderizado via proxy');
         return;
       } else {
-        console.warn('⚠️ POST falhou, fallback para GET.', postResp.status);
+        console.warn('⚠️ POST falhou, fallback para Blob URL:', postResp.status);
+        const fallbackHtml = await postResp.text();
+        const blob = new Blob([fallbackHtml], { type: 'text/html;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        console.log('[LiveSiteViewer] POST fallback → Blob URL criado');
+        setProxyUrl(blobUrl);
+        setIframeKey(k => k + 1);
+        toast.success('Site carregado (fallback via Blob URL)');
       }
-
-      // 2) Fallback via GET com forceHtml
-      const encodedUrl = encodeURIComponent(incident.tab_url);
-      const cacheBuster = Date.now();
-      const url = `${proxyBase}?url=${encodedUrl}&incident=${incident.id}&_t=${cacheBuster}&forceHtml=1`;
-      console.log('🌐 Loading URL com cache buster (forceHtml):', url);
-      setProxyUrl(url);
-      toast.success('Site carregado com proxy universal ativo');
 
     } catch (err: any) {
       console.error('Error loading site:', err);
