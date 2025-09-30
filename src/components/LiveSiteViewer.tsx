@@ -155,29 +155,29 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       }
     );
     
-    // Rewrite anchors (for navigation)
+    // Rewrite anchors (for navigation) - keep original URLs without data attributes
     processed = processed.replace(
       /(<a\s[^>]*href=["'])([^"']+)(["'][^>]*>)/gi,
       (match, prefix, url, suffix) => {
         try {
           const absolute = new URL(url, origin).href;
-          return `${prefix}${absolute}${suffix} data-orig-href="${absolute}"`;
+          return `${prefix}${absolute}${suffix}`;
         } catch { return match; }
       }
     );
     
-    // Rewrite forms
+    // Rewrite forms - keep original URLs without data attributes
     processed = processed.replace(
       /(<form\s[^>]*action=["'])([^"']+)(["'][^>]*>)/gi,
       (match, prefix, url, suffix) => {
         try {
           const absolute = new URL(url, origin).href;
-          return `${prefix}${absolute}${suffix} data-orig-action="${absolute}"`;
+          return `${prefix}${absolute}${suffix}`;
         } catch { return match; }
       }
     );
     
-    // Inject custom interception script
+    // Inject custom interception script without data attributes
     const interceptionScript = `
 <script>
 (function() {
@@ -186,17 +186,22 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   
   console.log('[LocalProxy] Interception active for:', BASE_URL);
   
-  // Intercept all link clicks
+  // Intercept all link clicks - use href directly (already absolute URLs)
   document.addEventListener('click', function(e) {
     const target = e.target.closest('a');
     if (!target || !target.href) return;
     
+    // Skip special protocols
+    const href = target.href;
+    if (href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) {
+      return;
+    }
+    
     e.preventDefault();
     e.stopPropagation();
     
-    const destination = target.getAttribute('data-orig-href') || target.href;
-    console.log('[LocalProxy] Navigate to:', destination);
-    window.parent.postMessage({ type: 'local-proxy:navigate', url: destination, incidentId: INCIDENT_ID }, '*');
+    console.log('[LocalProxy] Navigate to:', href);
+    window.parent.postMessage({ type: 'local-proxy:navigate', url: href, incidentId: INCIDENT_ID }, '*');
   }, true);
   
   // Intercept form submissions
@@ -206,7 +211,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       e.preventDefault();
       const formData = new FormData(form);
       const params = new URLSearchParams(formData);
-      const action = form.getAttribute('data-orig-action') || form.action;
+      const action = form.action;
       const destination = action + '?' + params.toString();
       console.log('[LocalProxy] Form navigate to:', destination);
       window.parent.postMessage({ type: 'local-proxy:navigate', url: destination, incidentId: INCIDENT_ID }, '*');
