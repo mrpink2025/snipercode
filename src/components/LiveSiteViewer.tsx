@@ -320,21 +320,35 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
               const urlToOpen = currentUrl || incident.tab_url;
               if (!urlToOpen) return;
               const proxiedUrl = `https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy?url=${encodeURIComponent(urlToOpen)}&incident=${incident.id}&forceHtml=1`;
+              
+              toast.info('Carregando página...');
+              
               try {
                 const resp = await fetch(proxiedUrl, { method: 'GET' });
+                if (!resp.ok) {
+                  throw new Error(`HTTP ${resp.status}`);
+                }
+                
                 const html = await resp.text();
-                const win = window.open('', '_blank');
+                
+                // Criar Blob com o HTML e abrir como URL de objeto
+                const blob = new Blob([html], { type: 'text/html; charset=utf-8' });
+                const blobUrl = URL.createObjectURL(blob);
+                
+                const win = window.open(blobUrl, '_blank');
                 if (!win) {
+                  URL.revokeObjectURL(blobUrl);
                   toast.error('Pop-up bloqueado pelo navegador');
                   return;
                 }
-                win.document.open();
-                win.document.write(html);
-                win.document.close();
+                
+                // Limpar blob URL após alguns segundos (depois que a página carregar)
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+                
                 toast.success('Aberto em nova aba via proxy');
-              } catch (e) {
+              } catch (e: any) {
                 console.error('Erro ao abrir em nova aba:', e);
-                window.open(proxiedUrl, '_blank', 'noopener,noreferrer');
+                toast.error(e.message || 'Erro ao carregar página');
               }
             }}
             variant="default"
