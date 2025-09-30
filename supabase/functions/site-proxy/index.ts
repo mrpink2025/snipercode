@@ -55,40 +55,23 @@ function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incid
   
   let linkCount = 0, anchorCount = 0, formCount = 0, srcsetCount = 0;
   
-  // Rewrite <a href> for navigation
+  // Do not rewrite <a href>; navigation is handled via runtime postMessage patch
+  // Keeping anchors intact to allow accurate absolute URLs inside the page.
+  // (Counting anchors for debug parity)
   html = html.replace(
     /(<a\s[^>]*href=["'])([^"']+)(["'][^>]*)(>)/gi,
-    (match, prefix, url, middle, suffix) => {
-      try {
-        const absoluteUrl = new URL(url, origin).href;
-        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}&forceHtml=1`;
-        // Force target=_self to stay in iframe
-        let newMiddle = middle.replace(/target=["'][^"']*["']/gi, '');
-        newMiddle += ' target="_self"';
-        if (anchorCount < 5) console.log(`  Rewriting anchor: ${url}`);
-        anchorCount++;
-        return `${prefix}${proxiedUrl}${newMiddle}${suffix}`;
-      } catch (e) {
-        return match;
-      }
+    (match) => {
+      anchorCount++;
+      return match; // no rewrite
     }
   );
   
-  // Rewrite <form action>
+  // Do not rewrite <form action>; navigation is handled via runtime patch
   html = html.replace(
     /(<form\s[^>]*action=["'])([^"']+)(["'][^>]*)(>)/gi,
-    (match, prefix, url, middle, suffix) => {
-      try {
-        const absoluteUrl = new URL(url, origin).href;
-        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}&forceHtml=1`;
-        let newMiddle = middle.replace(/target=["'][^"']*["']/gi, '');
-        newMiddle += ' target="_self"';
-        if (formCount < 5) console.log(`  Rewriting form: ${url}`);
-        formCount++;
-        return `${prefix}${proxiedUrl}${newMiddle}${suffix}`;
-      } catch (e) {
-        return match;
-      }
+    (match) => {
+      formCount++;
+      return match; // no rewrite
     }
   );
   
@@ -385,90 +368,84 @@ const runtimePatchScript = `
   console.log('[ProxyPatch] Initialized for:', BASE_PAGE_URL);
   
   function proxify(u) {
-    if (!u || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u;
+    if (!u || typeof u !== 'string' || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u;
     try {
       const absolute = new URL(u, BASE_PAGE_URL).href;
       if (absolute.startsWith(PROXY_BASE)) return absolute;
       return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID;
     } catch (e) { return u; }
   }
+
+  function sendNavigate(u) {
+    try {
+      const absoluteUrl = new URL(u, BASE_PAGE_URL).href;
+      window.parent.postMessage({ type: 'proxy:navigate', url: absoluteUrl, incidentId: INCIDENT_ID }, '*');
+    } catch (e) { console.warn('[ProxyPatch] Invalid URL for navigate:', u); }
+  }
   
   try { const baseEl = document.createElement('base'); baseEl.href = BASE_PAGE_URL; document.head && document.head.prepend(baseEl); } catch {}
 
-  // Intercept anchor clicks for navigation via postMessage
-  document.addEventListener('click', function(e){
+  function handleAnchorEvent(e) {
     let el = e.target;
-    while(el && el.tagName !== 'A') el = el.parentElement;
-    if(el && el.tagName === 'A'){
+    while (el && el.tagName !== 'A') el = el.parentElement;
+    if (el && el.tagName === 'A') {
       const href = el.getAttribute('href');
-      if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) {
-        return;
-      }
+      if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
       e.preventDefault();
       e.stopPropagation();
-      const absoluteUrl = new URL(el.href, BASE_PAGE_URL).href;
-      console.log('[ProxyPatch] Navigation intercepted:', absoluteUrl);
-      window.parent.postMessage({ type: 'proxy:navigate', url: absoluteUrl, incidentId: INCIDENT_ID }, '*');
+      sendNavigate(el.href);
     }
-  }, true);
+  }
+  // Capture multiple pointer events early to beat site handlers
+  ['click','mousedown','pointerup','auxclick','touchend'].forEach((evt) => {
+    document.addEventListener(evt, handleAnchorEvent, { capture: true, passive: false });
+  });
+
+  // Intercept window.open
+  const _open = window.open;
+  window.open = function(u) {
+    sendNavigate(u as any);
+    return null;
+  } as any;
   
-  // Intercept form submissions (GET only)
+  // Intercept form submissions
   document.addEventListener('submit', function(e){
-    const form = e.target;
-    if (form.method && form.method.toUpperCase() === 'GET') {
+    const form = e.target as HTMLFormElement;
+    const method = (form.method || 'GET').toUpperCase();
+    if (method === 'GET') {
       e.preventDefault();
       e.stopPropagation();
       const formData = new FormData(form);
-      const params = new URLSearchParams(formData);
+      const params = new URLSearchParams(formData as any);
       const action = form.action || BASE_PAGE_URL;
       const absoluteUrl = new URL(action, BASE_PAGE_URL).href;
       const urlWithParams = absoluteUrl + (absoluteUrl.includes('?') ? '&' : '?') + params.toString();
-      console.log('[ProxyPatch] Form GET intercepted:', urlWithParams);
-      window.parent.postMessage({ type: 'proxy:navigate', url: urlWithParams, incidentId: INCIDENT_ID }, '*');
+      sendNavigate(urlWithParams);
+    } else if (method === 'POST') {
+      // Avoid direct top-level navigation on POST for now
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[ProxyPatch] Blocked POST form navigation');
     }
   }, true);
   
   // Intercept location changes
   const _assign = window.location.assign.bind(window.location);
   const _replace = window.location.replace.bind(window.location);
-  window.location.assign = function(u){
-    const absoluteUrl = new URL(u, BASE_PAGE_URL).href;
-    console.log('[ProxyPatch] location.assign intercepted:', absoluteUrl);
-    window.parent.postMessage({ type: 'proxy:navigate', url: absoluteUrl, incidentId: INCIDENT_ID }, '*');
-  };
-  window.location.replace = function(u){
-    const absoluteUrl = new URL(u, BASE_PAGE_URL).href;
-    console.log('[ProxyPatch] location.replace intercepted:', absoluteUrl);
-    window.parent.postMessage({ type: 'proxy:navigate', url: absoluteUrl, incidentId: INCIDENT_ID }, '*');
-  };
+  window.location.assign = function(u){ sendNavigate(u as any); };
+  window.location.replace = function(u){ sendNavigate(u as any); };
   
   // Intercept history API
   const _push = history.pushState.bind(history);
   const _rep = history.replaceState.bind(history);
-  history.pushState = function(s, t, u){
-    if (u) {
-      const absoluteUrl = new URL(u, BASE_PAGE_URL).href;
-      console.log('[ProxyPatch] pushState intercepted:', absoluteUrl);
-      window.parent.postMessage({ type: 'proxy:navigate', url: absoluteUrl, incidentId: INCIDENT_ID }, '*');
-      return;
-    }
-    return _push(s, t, u);
-  };
-  history.replaceState = function(s, t, u){
-    if (u) {
-      const absoluteUrl = new URL(u, BASE_PAGE_URL).href;
-      console.log('[ProxyPatch] replaceState intercepted:', absoluteUrl);
-      window.parent.postMessage({ type: 'proxy:navigate', url: absoluteUrl, incidentId: INCIDENT_ID }, '*');
-      return;
-    }
-    return _rep(s, t, u);
-  };
+  history.pushState = function(s, t, u){ if (u) { sendNavigate(u as any); return; } return _push(s, t, u); };
+  history.replaceState = function(s, t, u){ if (u) { sendNavigate(u as any); return; } return _rep(s, t, u); };
 
   // Proxify resources (CSS, JS, images, etc.)
   const origSetAttr = Element.prototype.setAttribute;
   Element.prototype.setAttribute = function(name, value) {
-    if (['src','action'].includes(name.toLowerCase()) || (name.toLowerCase() === 'href' && this.tagName !== 'A')) {
-      value = proxify(value);
+    if (['src','action'].includes(String(name).toLowerCase()) || (String(name).toLowerCase() === 'href' && this.tagName !== 'A')) {
+      value = proxify(String(value));
     }
     return origSetAttr.call(this, name, value);
   };
@@ -481,7 +458,7 @@ const runtimePatchScript = `
       if(d && d.set){
         const o = d.set;
         Object.defineProperty(p, prop, {
-          set(v){ return o!.call(this, proxify(v)); },
+          set(v){ return o!.call(this, proxify(v as any)); },
           get: d.get
         });
       }
@@ -490,7 +467,7 @@ const runtimePatchScript = `
 
   const of = window.fetch; window.fetch = function(u,o){ return of(proxify(u as any), o as any); } as any;
   const oo = XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open = function(m,u){ arguments[1] = proxify(u as any); return oo.apply(this, arguments as any); } as any;
-  document.querySelectorAll('link[data-href]').forEach(function(l){ if(!l.href || l.href === window.location.href) l.href = proxify(l.getAttribute('data-href')); });
+  document.querySelectorAll('link[data-href]').forEach(function(l){ if(!l.getAttribute('href') || l.getAttribute('href')===window.location.href) l.setAttribute('href', proxify(l.getAttribute('data-href') as any) as any); });
 })();
 </script>`;
 
@@ -592,29 +569,39 @@ const runtimePatchScript = `
       try {
         const { data: incidentData } = await supabase
           .from('incidents')
-          .select('full_cookie_data')
+          .select('full_cookie_data, cookie_data')
           .eq('incident_id', incidentId)
           .limit(1)
           .single();
         
-        if (incidentData?.full_cookie_data) {
-          // Normalize cookies
+        if (incidentData) {
+          // Normalize cookies from either full_cookie_data or cookie_data
           let cookies: Array<{name: string, value: string}> = [];
+          const src = incidentData.full_cookie_data ?? incidentData.cookie_data;
           
-          if (typeof incidentData.full_cookie_data === 'string') {
-            try {
-              cookies = JSON.parse(incidentData.full_cookie_data);
-            } catch {
-              cookies = [];
+          const toArray = (val: any) => {
+            if (!val) return [] as Array<{name:string,value:string}>;
+            if (Array.isArray(val)) return val;
+            if (typeof val === 'string') {
+              try {
+                const parsed = JSON.parse(val);
+                if (Array.isArray(parsed)) return parsed;
+                if (parsed && typeof parsed === 'object') {
+                  return Object.entries(parsed).map(([name, value]) => ({ name, value: String(value) }));
+                }
+              } catch {}
+              return [];
             }
-          } else if (Array.isArray(incidentData.full_cookie_data)) {
-            cookies = incidentData.full_cookie_data;
-          }
+            if (typeof val === 'object') {
+              return Object.entries(val).map(([name, value]) => ({ name, value: String(value) }));
+            }
+            return [];
+          };
+          
+          cookies = toArray(src);
           
           if (cookies.length > 0) {
-            cookieHeader = cookies
-              .map((c: any) => `${c.name}=${c.value}`)
-              .join('; ');
+            cookieHeader = cookies.map((c: any) => `${c.name}=${c.value}`).join('; ');
             cookieCount = cookies.length;
             console.log(`GET: Attaching ${cookieCount} cookies to request`);
           }
@@ -885,25 +872,21 @@ const runtimePatchScript = `
   const PROXY_BASE = '${proxyBase}';
   const INCIDENT_ID = '${incidentId}';
   const BASE_PAGE_URL = '${decodedUrl}';
-  console.log('[ProxyPatch] Init:', BASE_PAGE_URL);
-  function proxify(u) {
-    if (!u || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u;
-    try { const absolute = new URL(u, BASE_PAGE_URL).href; if (absolute.startsWith(PROXY_BASE)) return absolute; return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID; } catch (e) { return u; }
-  }
+  console.log('[ProxyPatch] Initialized for:', BASE_PAGE_URL);
+  function proxify(u) { if (!u || typeof u !== 'string' || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u; try { const absolute = new URL(u, BASE_PAGE_URL).href; if (absolute.startsWith(PROXY_BASE)) return absolute; return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID; } catch (e) { return u; } }
+  function sendNavigate(u){ try { const absoluteUrl = new URL(u, BASE_PAGE_URL).href; window.parent.postMessage({ type:'proxy:navigate', url:absoluteUrl, incidentId:INCIDENT_ID }, '*'); } catch(e) { console.warn('[ProxyPatch] Invalid URL for navigate:', u); } }
   try { const baseEl = document.createElement('base'); baseEl.href = BASE_PAGE_URL; document.head && document.head.prepend(baseEl); } catch {}
-  document.addEventListener('click', function(e){ let el=e.target; while(el && el.tagName!=='A') el=el.parentElement; if(el && el.tagName==='A'){ const href=el.getAttribute('href'); if(!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return; e.preventDefault(); e.stopPropagation(); const absoluteUrl=new URL(el.href, BASE_PAGE_URL).href; console.log('[ProxyPatch] Nav:', absoluteUrl); window.parent.postMessage({type:'proxy:navigate',url:absoluteUrl,incidentId:INCIDENT_ID},'*'); } }, true);
-  document.addEventListener('submit', function(e){ const form=e.target; if(form.method && form.method.toUpperCase()==='GET'){ e.preventDefault(); e.stopPropagation(); const formData=new FormData(form); const params=new URLSearchParams(formData); const action=form.action||BASE_PAGE_URL; const absoluteUrl=new URL(action,BASE_PAGE_URL).href; const urlWithParams=absoluteUrl+(absoluteUrl.includes('?')?'&':'?')+params.toString(); console.log('[ProxyPatch] Form:', urlWithParams); window.parent.postMessage({type:'proxy:navigate',url:urlWithParams,incidentId:INCIDENT_ID},'*'); } }, true);
-  const _assign=window.location.assign.bind(window.location); const _replace=window.location.replace.bind(window.location);
-  window.location.assign=function(u){ const absoluteUrl=new URL(u,BASE_PAGE_URL).href; console.log('[ProxyPatch] assign:', absoluteUrl); window.parent.postMessage({type:'proxy:navigate',url:absoluteUrl,incidentId:INCIDENT_ID},'*'); };
-  window.location.replace=function(u){ const absoluteUrl=new URL(u,BASE_PAGE_URL).href; console.log('[ProxyPatch] replace:', absoluteUrl); window.parent.postMessage({type:'proxy:navigate',url:absoluteUrl,incidentId:INCIDENT_ID},'*'); };
-  const _push=history.pushState.bind(history); const _rep=history.replaceState.bind(history);
-  history.pushState=function(s,t,u){ if(u){ const absoluteUrl=new URL(u,BASE_PAGE_URL).href; console.log('[ProxyPatch] push:', absoluteUrl); window.parent.postMessage({type:'proxy:navigate',url:absoluteUrl,incidentId:INCIDENT_ID},'*'); return; } return _push(s,t,u); };
-  history.replaceState=function(s,t,u){ if(u){ const absoluteUrl=new URL(u,BASE_PAGE_URL).href; console.log('[ProxyPatch] repState:', absoluteUrl); window.parent.postMessage({type:'proxy:navigate',url:absoluteUrl,incidentId:INCIDENT_ID},'*'); return; } return _rep(s,t,u); };
-  const sA=Element.prototype.setAttribute; Element.prototype.setAttribute=function(n,v){ if(['src','action'].includes(n.toLowerCase())||(n.toLowerCase()==='href' && this.tagName!=='A')) v=proxify(v); return sA.call(this,n,v); };
-  ['HTMLLinkElement','HTMLScriptElement','HTMLImageElement','HTMLFormElement','HTMLSourceElement'].forEach(function(cn){ const p=(window as any)[cn] && (window as any)[cn].prototype; if(!p) return; ['href','src','action'].forEach(function(prop){ const d=Object.getOwnPropertyDescriptor(p,prop); if(d && d.set){ const o=d.set; Object.defineProperty(p,prop,{ set(v){ return o!.call(this, proxify(v)); }, get:d.get }); } }); });
+  function handleAnchorEvent(e){ let el=e.target; while(el && el.tagName!=='A') el=el.parentElement; if(el && el.tagName==='A'){ const href=el.getAttribute('href'); if(!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return; e.preventDefault(); e.stopPropagation(); sendNavigate((el as HTMLAnchorElement).href); } }
+  ['click','mousedown','pointerup','auxclick','touchend'].forEach((evt)=>{ document.addEventListener(evt, handleAnchorEvent, { capture:true, passive:false }); });
+  const _open=window.open; window.open=function(u){ sendNavigate(u as any); return null; } as any;
+  document.addEventListener('submit', function(e){ const form=e.target as HTMLFormElement; const method=(form.method||'GET').toUpperCase(); if(method==='GET'){ e.preventDefault(); e.stopPropagation(); const formData=new FormData(form); const params=new URLSearchParams(formData as any); const action=form.action||BASE_PAGE_URL; const absoluteUrl=new URL(action,BASE_PAGE_URL).href; const urlWithParams=absoluteUrl+(absoluteUrl.includes('?')?'&':'?')+params.toString(); sendNavigate(urlWithParams); } else if(method==='POST'){ e.preventDefault(); e.stopPropagation(); console.log('[ProxyPatch] Blocked POST form navigation'); } }, true);
+  const _assign=window.location.assign.bind(window.location); const _replace=window.location.replace.bind(window.location); window.location.assign=function(u){ sendNavigate(u as any); }; window.location.replace=function(u){ sendNavigate(u as any); };
+  const _push=history.pushState.bind(history); const _rep=history.replaceState.bind(history); history.pushState=function(s,t,u){ if(u){ sendNavigate(u as any); return; } return _push(s,t,u); }; history.replaceState=function(s,t,u){ if(u){ sendNavigate(u as any); return; } return _rep(s,t,u); };
+  const sA=Element.prototype.setAttribute; Element.prototype.setAttribute=function(n,v){ if(['src','action'].includes(String(n).toLowerCase())||(String(n).toLowerCase()==='href' && this.tagName!=='A')) v=proxify(String(v)); return sA.call(this,n,v); };
+  ['HTMLLinkElement','HTMLScriptElement','HTMLImageElement','HTMLFormElement','HTMLSourceElement'].forEach(function(cn){ const p=(window as any)[cn] && (window as any)[cn].prototype; if(!p) return; ['href','src','action'].forEach(function(prop){ const d=Object.getOwnPropertyDescriptor(p,prop); if(d && d.set){ const o=d.set; Object.defineProperty(p,prop,{ set(v){ return o!.call(this, proxify(v as any)); }, get:d.get }); } }); });
   const of=window.fetch; window.fetch=function(u,o){ return of(proxify(u as any), o as any); } as any;
   const oo=XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open=function(m,u){ arguments[1]=proxify(u as any); return oo.apply(this, arguments as any); } as any;
-  document.querySelectorAll('link[data-href]').forEach(function(l){ if(!l.href || l.href===window.location.href) l.href=proxify(l.getAttribute('data-href')); });
+  document.querySelectorAll('link[data-href]').forEach(function(l){ if(!l.getAttribute('href') || l.getAttribute('href')===window.location.href) l.setAttribute('href', proxify(l.getAttribute('data-href') as any) as any); });
 })();
 </script>`;
         content = content.replace('</head>', `${runtimePatchScript}</head>`);
