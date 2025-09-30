@@ -47,8 +47,15 @@ function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incid
   html = html.replace(
     /(<img[^>]+src=["'])([^"']+)(["'])/gi,
     (match, prefix, url, suffix) => {
-      const absoluteUrl = new URL(url, origin).href;
-      return `${prefix}${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}${suffix}`;
+      try {
+        const absoluteUrl = new URL(url, origin).href;
+        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+        console.log(`  Rewriting image: ${url} -> ${proxiedUrl}`);
+        return `${prefix}${proxiedUrl}${suffix}`;
+      } catch (e) {
+        console.error(`  Failed to rewrite image URL: ${url}`, e);
+        return match;
+      }
     }
   );
   
@@ -57,8 +64,15 @@ function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incid
     /(<link[^>]+href=["'])([^"']+)(["'][^>]*>)/gi,
     (match, prefix, url, suffix) => {
       if (match.includes('stylesheet')) {
-        const absoluteUrl = new URL(url, origin).href;
-        return `${prefix}${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}${suffix}`;
+        try {
+          const absoluteUrl = new URL(url, origin).href;
+          const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+          console.log(`  Rewriting CSS: ${url} -> ${proxiedUrl}`);
+          return `${prefix}${proxiedUrl}${suffix}`;
+        } catch (e) {
+          console.error(`  Failed to rewrite CSS URL: ${url}`, e);
+          return match;
+        }
       }
       return match;
     }
@@ -68,8 +82,15 @@ function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incid
   html = html.replace(
     /(<script[^>]+src=["'])([^"']+)(["'])/gi,
     (match, prefix, url, suffix) => {
-      const absoluteUrl = new URL(url, origin).href;
-      return `${prefix}${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}${suffix}`;
+      try {
+        const absoluteUrl = new URL(url, origin).href;
+        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+        console.log(`  Rewriting JS: ${url} -> ${proxiedUrl}`);
+        return `${prefix}${proxiedUrl}${suffix}`;
+      } catch (e) {
+        console.error(`  Failed to rewrite JS URL: ${url}`, e);
+        return match;
+      }
     }
   );
   
@@ -238,12 +259,7 @@ serve(async (req) => {
           ''
         );
 
-        // Add iframe-friendly meta tags and rewrite URLs
-        content = content.replace(
-          '<head>',
-          `<head><base href="${new URL(url).origin}">`
-        );
-        
+        // Add iframe-friendly meta tags (NO base href - it conflicts with proxy)
         content = content.replace(
           '</head>',
           `<meta name="robots" content="noindex, nofollow">
@@ -255,7 +271,9 @@ serve(async (req) => {
         );
         
         // Rewrite all URLs to go through proxy
+        console.log('Starting URL rewriting for:', url);
         content = rewriteHTMLUrls(content, url, proxyBase, incidentId);
+        console.log('URL rewriting complete');
         
         // Log the proxy access
         await supabase.from('audit_logs').insert({
@@ -292,7 +310,7 @@ serve(async (req) => {
         });
       }
 
-      console.log('GET proxy request for:', targetUrl);
+      console.log('GET proxy request for resource:', targetUrl, 'incident:', incidentId);
 
       // Fetch the resource
       const response = await fetch(targetUrl, {
