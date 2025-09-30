@@ -62,7 +62,7 @@ function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incid
       anchorCount++;
       try {
         const absoluteUrl = new URL(url, origin).href;
-        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}&forceHtml=1`;
         return `${prefix}${proxiedUrl}${middle} data-orig-href="${absoluteUrl}"${end}`;
       } catch (e) {
         return match;
@@ -77,7 +77,7 @@ function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incid
       formCount++;
       try {
         const absoluteUrl = new URL(url, origin).href;
-        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}&forceHtml=1`;
         return `${prefix}${proxiedUrl}${middle} data-orig-action="${absoluteUrl}"${end}`;
       } catch (e) {
         return match;
@@ -443,12 +443,13 @@ const runtimePatchScript = `
     } catch (e) { return u; }
   }
   
-  function proxify(u) {
+  function proxify(u, forceHtml = false) {
     if (!u || typeof u !== 'string' || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u;
     try {
       const absolute = new URL(u, BASE_PAGE_URL).href;
       if (absolute.startsWith(PROXY_BASE)) return absolute;
-      return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID;
+      const suffix = forceHtml ? '&forceHtml=1' : '';
+      return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID + suffix;
     } catch (e) { return u; }
   }
   
@@ -593,16 +594,45 @@ const runtimePatchScript = `
   // Proxify resources (CSS, JS, images, etc.)
   const origSetAttr = Element.prototype.setAttribute;
   Element.prototype.setAttribute = function(name, value) {
-    if (['src','action'].includes(String(name).toLowerCase()) || (String(name).toLowerCase() === 'href' && this.tagName !== 'A')) {
+    const lowerName = String(name).toLowerCase();
+    const isAnchor = this.tagName === 'A';
+    const isForm = this.tagName === 'FORM';
+    
+    if (lowerName === 'href' && isAnchor) {
+      value = proxify(String(value), true); // forceHtml for anchors
+    } else if (lowerName === 'action' && isForm) {
+      value = proxify(String(value), true); // forceHtml for forms
+    } else if (['src','action'].includes(lowerName) || (lowerName === 'href' && !isAnchor)) {
       value = proxify(String(value));
     }
     return origSetAttr.call(this, name, value);
   };
   
-  ['HTMLLinkElement','HTMLScriptElement','HTMLImageElement','HTMLFormElement','HTMLSourceElement'].forEach(function(cn){
+  // Hook into property setters for dynamic changes
+  const anchorProto = HTMLAnchorElement.prototype;
+  const anchorHrefDesc = Object.getOwnPropertyDescriptor(anchorProto, 'href');
+  if (anchorHrefDesc && anchorHrefDesc.set) {
+    const originalAnchorSet = anchorHrefDesc.set;
+    Object.defineProperty(anchorProto, 'href', {
+      set(v) { return originalAnchorSet.call(this, proxify(v as any, true)); },
+      get: anchorHrefDesc.get
+    });
+  }
+  
+  const formProto = HTMLFormElement.prototype;
+  const formActionDesc = Object.getOwnPropertyDescriptor(formProto, 'action');
+  if (formActionDesc && formActionDesc.set) {
+    const originalFormSet = formActionDesc.set;
+    Object.defineProperty(formProto, 'action', {
+      set(v) { return originalFormSet.call(this, proxify(v as any, true)); },
+      get: formActionDesc.get
+    });
+  }
+  
+  ['HTMLLinkElement','HTMLScriptElement','HTMLImageElement','HTMLSourceElement'].forEach(function(cn){
     const p = (window as any)[cn] && (window as any)[cn].prototype;
     if(!p) return;
-    ['href','src','action'].forEach(function(prop){
+    ['href','src'].forEach(function(prop){
       const d = Object.getOwnPropertyDescriptor(p, prop);
       if(d && d.set){
         const o = d.set;
@@ -650,7 +680,7 @@ const runtimePatchScript = `
             ...corsHeaders,
             'Content-Type': 'text/html; charset=utf-8',
             'X-Frame-Options': 'ALLOWALL',
-            'Content-Security-Policy': 'frame-ancestors *',
+            'Content-Security-Policy': "default-src * data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline' data: blob:; img-src * data: blob:; connect-src * data: blob:; font-src * data: blob:; frame-src * data: blob:; media-src * data: blob:; object-src * data: blob:; base-uri 'self'; frame-ancestors *;",
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'X-Resource-Type': 'html',
             'X-Proxy-Status': 'rendered',
@@ -1044,7 +1074,7 @@ const runtimePatchScript = `
   let lastNavigateTime = 0;
   
   function deproxify(u){ if(!u||typeof u!=='string')return u; try{ if(u.startsWith(PROXY_BASE)){ const urlObj=new URL(u); const orig=urlObj.searchParams.get('url'); if(orig)return decodeURIComponent(orig); } return u; }catch(e){return u;} }
-  function proxify(u) { if (!u || typeof u !== 'string' || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u; try { const absolute = new URL(u, BASE_PAGE_URL).href; if (absolute.startsWith(PROXY_BASE)) return absolute; return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID; } catch (e) { return u; } }
+  function proxify(u,forceHtml=false) { if (!u || typeof u !== 'string' || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u; try { const absolute = new URL(u, BASE_PAGE_URL).href; if (absolute.startsWith(PROXY_BASE)) return absolute; const suffix = forceHtml ? '&forceHtml=1' : ''; return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID + suffix; } catch (e) { return u; } }
   function normalizeUrl(u) { try { const url = new URL(u); return url.origin + url.pathname + url.search; } catch { return u; } }
   function sendNavigate(u){ if(IS_STANDALONE)return; try { const dep=deproxify(u); const absoluteUrl = new URL(dep, BASE_PAGE_URL).href; const normalized = normalizeUrl(absoluteUrl); if (normalized === normalizeUrl(BASE_PAGE_URL)) { console.log('[ProxyPatch] Navigate (ignored - same as base):', absoluteUrl); return; } const now = Date.now(); if (normalized === lastNavigateUrl && (now - lastNavigateTime) < 800) { console.log('[ProxyPatch] Navigate (debounced):', absoluteUrl); return; } lastNavigateUrl = normalized; lastNavigateTime = now; console.log('[ProxyPatch] Navigate:', absoluteUrl); window.parent.postMessage({ type:'proxy:navigate', url:absoluteUrl, incidentId:INCIDENT_ID }, '*'); } catch(e) { console.warn('[ProxyPatch] Invalid URL for navigate:', u); } }
   try { const baseEl = document.createElement('base'); baseEl.href = BASE_PAGE_URL; document.head && document.head.prepend(baseEl); if(!IS_STANDALONE){ console.log('[ProxyPatch] Base tag injected, sending proxy:ready (early)'); window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*'); } } catch(e) { console.error('[ProxyPatch] Failed to inject base:', e); }
@@ -1061,8 +1091,10 @@ const runtimePatchScript = `
     const _open=window.open; window.open=function(u){ sendNavigate(deproxify(u as any)); return null; } as any;
   }
   document.addEventListener('submit', function(e){ const form=e.target as HTMLFormElement; const method=(form.method||'GET').toUpperCase(); if(method==='POST'){ e.preventDefault(); e.stopPropagation(); console.log('[ProxyPatch] Blocked POST form navigation'); } else if(!IS_STANDALONE && method==='GET'){ e.preventDefault(); e.stopPropagation(); const formData=new FormData(form); const params=new URLSearchParams(formData as any); const origAction=form.getAttribute('data-orig-action'); const action=origAction||form.action||BASE_PAGE_URL; const dep=deproxify(action); const absoluteUrl=new URL(dep,BASE_PAGE_URL).href; const urlWithParams=absoluteUrl+(absoluteUrl.includes('?')?'&':'?')+params.toString(); sendNavigate(urlWithParams); } }, true);
-  const sA=Element.prototype.setAttribute; Element.prototype.setAttribute=function(n,v){ if(['src','action'].includes(String(n).toLowerCase())||(String(n).toLowerCase()==='href' && this.tagName!=='A')) v=proxify(String(v)); return sA.call(this,n,v); };
-  ['HTMLLinkElement','HTMLScriptElement','HTMLImageElement','HTMLFormElement','HTMLSourceElement'].forEach(function(cn){ const p=(window as any)[cn] && (window as any)[cn].prototype; if(!p) return; ['href','src','action'].forEach(function(prop){ const d=Object.getOwnPropertyDescriptor(p,prop); if(d && d.set){ const o=d.set; Object.defineProperty(p,prop,{ set(v){ return o!.call(this, proxify(v as any)); }, get:d.get }); } }); });
+  const sA=Element.prototype.setAttribute; Element.prototype.setAttribute=function(n,v){ const ln=String(n).toLowerCase(); const isA=this.tagName==='A'; const isF=this.tagName==='FORM'; if(ln==='href' && isA){ v=proxify(String(v),true); }else if(ln==='action' && isF){ v=proxify(String(v),true); }else if(['src','action'].includes(ln)||(ln==='href' && !isA)){ v=proxify(String(v)); } return sA.call(this,n,v); };
+  const aP=HTMLAnchorElement.prototype; const aHD=Object.getOwnPropertyDescriptor(aP,'href'); if(aHD && aHD.set){ const oAS=aHD.set; Object.defineProperty(aP,'href',{ set(v){ return oAS.call(this, proxify(v as any, true)); }, get:aHD.get }); }
+  const fP=HTMLFormElement.prototype; const fAD=Object.getOwnPropertyDescriptor(fP,'action'); if(fAD && fAD.set){ const oFS=fAD.set; Object.defineProperty(fP,'action',{ set(v){ return oFS.call(this, proxify(v as any, true)); }, get:fAD.get }); }
+  ['HTMLLinkElement','HTMLScriptElement','HTMLImageElement','HTMLSourceElement'].forEach(function(cn){ const p=(window as any)[cn] && (window as any)[cn].prototype; if(!p) return; ['href','src'].forEach(function(prop){ const d=Object.getOwnPropertyDescriptor(p,prop); if(d && d.set){ const o=d.set; Object.defineProperty(p,prop,{ set(v){ return o!.call(this, proxify(v as any)); }, get:d.get }); } }); });
   const of=window.fetch; window.fetch=function(u,o){ return of(proxify(u as any), o as any); } as any;
   const oo=XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open=function(m,u){ arguments[1]=proxify(u as any); return oo.apply(this, arguments as any); } as any;
   document.querySelectorAll('link[data-href]').forEach(function(l){ if(!l.getAttribute('href') || l.getAttribute('href')===window.location.href) l.setAttribute('href', proxify(l.getAttribute('data-href') as any) as any); });
@@ -1098,7 +1130,7 @@ const runtimePatchScript = `
             ...corsHeaders,
             'Content-Type': 'text/html; charset=utf-8',
             'X-Frame-Options': 'ALLOWALL',
-            'Content-Security-Policy': 'frame-ancestors *',
+            'Content-Security-Policy': "default-src * data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline' data: blob:; img-src * data: blob:; connect-src * data: blob:; font-src * data: blob:; frame-src * data: blob:; media-src * data: blob:; object-src * data: blob:; base-uri 'self'; frame-ancestors *;",
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'X-Proxy-Status': 'rendered',
             'X-Debug-Upstream-CT': contentType,
