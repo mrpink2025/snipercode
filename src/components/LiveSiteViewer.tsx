@@ -19,11 +19,9 @@ interface LiveSiteViewerProps {
 }
 
 export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
-  const [loading, setLoading] = useState(false);
   const [proxyUrl, setProxyUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cookies, setCookies] = useState<any[]>([]);
-  const [resourcesLoaded, setResourcesLoaded] = useState(0);
 
   useEffect(() => {
     // Try to get cookies from full_cookie_data first, then fallback to cookie_data
@@ -63,53 +61,35 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     }
   }, [incident.full_cookie_data, incident.cookie_data, incident.host]);
 
-  const loadSiteWithCookies = async () => {
+  const loadSiteWithCookies = () => {
     if (!incident.tab_url) {
       setError('URL do site não disponível');
       return;
     }
 
-    setLoading(true);
     setError(null);
 
     try {
       console.log('Loading site with cookies:', incident.tab_url, cookies);
 
-      const { data, error: functionError } = await supabase.functions.invoke('site-proxy', {
-        body: {
-          url: incident.tab_url,
-          incidentId: incident.id,
-          cookies: cookies
-        }
-      });
-
-      if (functionError) {
-        throw new Error(functionError.message);
-      }
-
-      // Create blob URL for the response
-      const blob = new Blob([data], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
+      // Build direct proxy URL
+      const proxyBase = 'https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy';
+      const encodedUrl = encodeURIComponent(incident.tab_url);
+      const url = `${proxyBase}?url=${encodedUrl}&incident=${incident.id}`;
+      
       setProxyUrl(url);
-      setResourcesLoaded(0);
-
       toast.success('Site carregado com proxy universal ativo');
 
     } catch (err: any) {
       console.error('Error loading site:', err);
       setError(err.message || 'Erro ao carregar site');
       toast.error('Falha ao carregar site com cookies');
-    } finally {
-      setLoading(false);
     }
   };
 
   const refreshSite = () => {
-    if (proxyUrl) {
-      URL.revokeObjectURL(proxyUrl);
-      setProxyUrl(null);
-    }
-    loadSiteWithCookies();
+    setProxyUrl(null);
+    setTimeout(() => loadSiteWithCookies(), 100);
   };
 
   const openInNewTab = () => {
@@ -149,16 +129,12 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         <div className="flex items-center gap-2 mt-2">
           <Button
             onClick={loadSiteWithCookies}
-            disabled={loading || !incident.tab_url}
+            disabled={!incident.tab_url}
             size="sm"
             className="gap-2"
           >
-            {loading ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <Globe className="h-4 w-4" />
-            )}
-            {loading ? 'Carregando...' : 'Carregar com Cookies'}
+            <Globe className="h-4 w-4" />
+            Carregar com Cookies
           </Button>
           
           {proxyUrl && (
@@ -193,25 +169,17 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           </Alert>
         )}
 
-        {loading && (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2 text-primary" />
-              <p className="text-muted-foreground">Carregando site com cookies...</p>
-            </div>
-          </div>
-        )}
-
-        {proxyUrl && !loading && (
+        {proxyUrl && (
           <iframe
+            key={proxyUrl}
             src={proxyUrl}
             className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation-by-user-activation"
             title={`Site: ${incident.host}`}
           />
         )}
 
-        {!proxyUrl && !loading && !error && (
+        {!proxyUrl && !error && (
           <div className="flex items-center justify-center h-64 text-center">
             <div>
               <Globe className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
