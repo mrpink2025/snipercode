@@ -372,19 +372,22 @@ serve(async (req) => {
         content = content.replace(/<meta[^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, '');
 
         // Inject runtime proxy patch script
-        const runtimePatchScript = `
+const runtimePatchScript = `
 <script>
 (function() {
   const PROXY_BASE = '${proxyBase}';
   const INCIDENT_ID = '${incidentId}';
-  function proxify(url) {
-    if (!url || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('#')) return url;
+  const BASE_PAGE_URL = '${url}';
+  function proxify(u) {
+    if (!u || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u;
     try {
-      const absolute = new URL(url, window.location.href).href;
+      const absolute = new URL(u, BASE_PAGE_URL).href;
       if (absolute.startsWith(PROXY_BASE)) return absolute;
       return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID + '&forceHtml=1';
-    } catch (e) { return url; }
+    } catch (e) { return u; }
   }
+  try { const baseEl = document.createElement('base'); baseEl.href = BASE_PAGE_URL; document.head && document.head.prepend(baseEl); } catch {}
+
   const origSetAttr = Element.prototype.setAttribute;
   Element.prototype.setAttribute = function(name, value) {
     if (['href','src','action'].includes(name.toLowerCase())) value = proxify(value);
@@ -396,6 +399,15 @@ serve(async (req) => {
       const d = Object.getOwnPropertyDescriptor(p, prop); if(d && d.set){ const o = d.set; Object.defineProperty(p, prop, { set(v){ return o!.call(this, proxify(v)); }, get: d.get }); }
     });
   });
+  const _assign = window.location.assign.bind(window.location);
+  const _replace = window.location.replace.bind(window.location);
+  window.location.assign = (u) => _assign(proxify(u));
+  window.location.replace = (u) => _replace(proxify(u));
+  const _push = history.pushState.bind(history);
+  const _rep = history.replaceState.bind(history);
+  history.pushState = function(s, t, u){ return _push(s, t, u ? proxify(String(u)) : u); };
+  history.replaceState = function(s, t, u){ return _rep(s, t, u ? proxify(String(u)) : u); };
+
   const of = window.fetch; window.fetch = function(u,o){ return of(proxify(u as any), o as any); } as any;
   const oo = XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open = function(m,u){ arguments[1] = proxify(u as any); return oo.apply(this, arguments as any); } as any;
   document.addEventListener('click', function(e){ let el: any = e.target; while(el && el.tagName !== 'A') el = el.parentElement; if(el && el.tagName === 'A'){ el.target = '_self'; if(el.href && !el.href.startsWith(PROXY_BASE)) el.href = proxify(el.href); } }, true);
@@ -527,17 +539,27 @@ serve(async (req) => {
         content = content.replace(/<meta[^>]*http-equiv=["']?X-Frame-Options["']?[^>]*>/gi, '');
         content = content.replace(/<meta[^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, '');
         // Inject runtime patch and rewrite
-        const runtimePatchScript = `
+const runtimePatchScript = `
 <script>
 (function() {
   const PROXY_BASE = '${proxyBase}';
   const INCIDENT_ID = '${incidentId}';
-  function proxify(url) {
-    if (!url || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('#')) return url;
-    try { const absolute = new URL(url, window.location.href).href; if (absolute.startsWith(PROXY_BASE)) return absolute; return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID + '&forceHtml=1'; } catch (e) { return url; }
+  const BASE_PAGE_URL = '${targetUrl}';
+  function proxify(u) {
+    if (!u || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#')) return u;
+    try { const absolute = new URL(u, BASE_PAGE_URL).href; if (absolute.startsWith(PROXY_BASE)) return absolute; return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID + '&forceHtml=1'; } catch (e) { return u; }
   }
+  try { const baseEl = document.createElement('base'); baseEl.href = BASE_PAGE_URL; document.head && document.head.prepend(baseEl); } catch {}
   const sA = Element.prototype.setAttribute; Element.prototype.setAttribute = function(n,v){ if(['href','src','action'].includes(n.toLowerCase())) v = proxify(v); return sA.call(this,n,v); };
   ['HTMLAnchorElement','HTMLLinkElement','HTMLScriptElement','HTMLImageElement','HTMLFormElement','HTMLSourceElement'].forEach(function(cn){ const p=(window as any)[cn] && (window as any)[cn].prototype; if(!p) return; ['href','src','action'].forEach(function(prop){ const d=Object.getOwnPropertyDescriptor(p,prop); if(d && d.set){ const o=d.set; Object.defineProperty(p,prop,{ set(v){ return o!.call(this, proxify(v)); }, get:d.get }); } }); });
+  const _assign = window.location.assign.bind(window.location);
+  const _replace = window.location.replace.bind(window.location);
+  window.location.assign = (u) => _assign(proxify(u));
+  window.location.replace = (u) => _replace(proxify(u));
+  const _push = history.pushState.bind(history);
+  const _rep = history.replaceState.bind(history);
+  history.pushState = function(s, t, u){ return _push(s, t, u ? proxify(String(u)) : u); };
+  history.replaceState = function(s, t, u){ return _rep(s, t, u ? proxify(String(u)) : u); };
   const of=window.fetch; window.fetch=function(u,o){ return of(proxify(u as any), o as any); } as any;
   const oo=XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open=function(m,u){ arguments[1]=proxify(u as any); return oo.apply(this, arguments as any); } as any;
   document.addEventListener('click', function(e){ let el:any=e.target; while(el && el.tagName!=='A') el=el.parentElement; if(el && el.tagName==='A'){ el.target='_self'; if(el.href && !el.href.startsWith(PROXY_BASE)) el.href=proxify(el.href);} }, true);
