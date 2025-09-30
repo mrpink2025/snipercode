@@ -293,6 +293,9 @@ serve(async (req) => {
       const cookieHeader = cookies
         .map(cookie => `${cookie.name}=${cookie.value}`)
         .join('; ');
+      
+      const cookieCount = cookies.length;
+      console.log(`POST: Attaching ${cookieCount} cookies to request`);
 
       // Get the base URL for referrer
       const baseUrl = new URL(url);
@@ -445,7 +448,8 @@ const runtimePatchScript = `
             'X-Debug-Upstream-CT': contentType,
             'X-Debug-Final-CT': 'text/html; charset=utf-8',
             'X-Debug-IsLikelyHtml': String(detectedHtml),
-            'X-Debug-ForceHtml': String(Boolean(forceHtml))
+            'X-Debug-ForceHtml': String(Boolean(forceHtml)),
+            'X-Debug-Cookies-Attached': String(cookieCount)
           }
         });
       }
@@ -495,15 +499,59 @@ const runtimePatchScript = `
 
       console.log('GET proxy request for resource:', targetUrl, 'incident:', incidentId);
 
+      // Fetch cookies from incidents table
+      let cookieHeader = '';
+      let cookieCount = 0;
+      try {
+        const { data: incidentData } = await supabase
+          .from('incidents')
+          .select('full_cookie_data')
+          .eq('incident_id', incidentId)
+          .limit(1)
+          .single();
+        
+        if (incidentData?.full_cookie_data) {
+          // Normalize cookies
+          let cookies: Array<{name: string, value: string}> = [];
+          
+          if (typeof incidentData.full_cookie_data === 'string') {
+            try {
+              cookies = JSON.parse(incidentData.full_cookie_data);
+            } catch {
+              cookies = [];
+            }
+          } else if (Array.isArray(incidentData.full_cookie_data)) {
+            cookies = incidentData.full_cookie_data;
+          }
+          
+          if (cookies.length > 0) {
+            cookieHeader = cookies
+              .map((c: any) => `${c.name}=${c.value}`)
+              .join('; ');
+            cookieCount = cookies.length;
+            console.log(`GET: Attaching ${cookieCount} cookies to request`);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch cookies for GET request:', err);
+      }
+
+      // Build headers
+      const fetchHeaders: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Cache-Control': 'no-cache',
+        'Referer': new URL(targetUrl).origin
+      };
+      
+      if (cookieHeader) {
+        fetchHeaders['Cookie'] = cookieHeader;
+      }
+
       // Fetch the resource
       const response = await fetch(targetUrl, {
-        headers: {
-'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-          'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-          'Cache-Control': 'no-cache',
-          'Referer': new URL(targetUrl).origin
-        }
+        headers: fetchHeaders
       });
 
       if (!response.ok) {
@@ -582,7 +630,8 @@ const runtimePatchScript = `
             'X-Debug-Upstream-CT': contentType,
             'X-Debug-Final-CT': 'text/html; charset=utf-8',
             'X-Debug-IsLikelyHtml': String(detectedHtml),
-            'X-Debug-ForceHtml': String(forceHtmlParam)
+            'X-Debug-ForceHtml': String(forceHtmlParam),
+            'X-Debug-Cookies-Attached': String(cookieCount)
           }
         });
       }
