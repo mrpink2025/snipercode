@@ -4,6 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import Dashboard from "@/components/Dashboard";
 import ExtensionPopup from "@/components/ExtensionPopup";
 import BlockDomainModal from "@/components/modals/BlockDomainModal";
+import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { Button } from "@/components/ui/button";
 import { Chrome } from "lucide-react";
 
@@ -19,6 +20,10 @@ const Index = () => {
         <Sidebar />
         
         <main className="flex-1 p-6">
+          {/* Connection Status Indicator */}
+          <div className="mb-4">
+            <ConnectionStatus />
+          </div>
           {/* Demo Extension Button */}
           <div className="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-lg">
             <div className="flex items-center justify-between">

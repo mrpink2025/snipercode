@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -21,17 +21,36 @@ export const useRealtime = (options: UseRealtimeOptions = {}) => {
   const { table = '*', filter, onEvent } = options;
   const [isConnected, setIsConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState<RealtimeEvent | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const channelRef = useRef<any>(null);
+  const onEventRef = useRef(onEvent);
+  const reconnectTimeoutRef = useRef<any>(null);
   const { user } = useAuth();
 
+  // Update onEvent ref without causing re-subscription
   useEffect(() => {
-    if (!user) return;
+    onEventRef.current = onEvent;
+  }, [onEvent]);
 
-    console.log('🔄 Setting up realtime connection...');
+  useEffect(() => {
+    if (!user) {
+      console.log('⚠️ Realtime: No user, skipping connection');
+      return;
+    }
 
+    // Prevent rapid reconnections
+    if (channelRef.current) {
+      console.log('⚠️ Realtime: Channel already exists, skipping');
+      return;
+    }
+
+    console.log('🔄 Setting up realtime connection... (attempt', retryCount + 1, ')');
+
+    const channelName = `db-changes-${Date.now()}`;
+    
     // Create a channel for database changes
     const channel = supabase
-      .channel('db-changes')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -82,26 +101,47 @@ export const useRealtime = (options: UseRealtimeOptions = {}) => {
           }
 
           // Call custom event handler
-          if (onEvent) {
-            onEvent(event);
+          if (onEventRef.current) {
+            onEventRef.current(event);
           }
         }
       )
       .subscribe((status) => {
         console.log('📡 Realtime status:', status);
         setIsConnected(status === 'SUBSCRIBED');
+        
+        if (status === 'SUBSCRIBED') {
+          setRetryCount(0); // Reset retry count on successful connection
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('❌ Realtime connection error:', status);
+          
+          // Implement exponential backoff
+          const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 30000);
+          console.log(`🔄 Retrying in ${backoffTime}ms...`);
+          
+          reconnectTimeoutRef.current = setTimeout(() => {
+            setRetryCount(prev => prev + 1);
+            channelRef.current = null;
+          }, backoffTime);
+        }
       });
 
     channelRef.current = channel;
 
     return () => {
       console.log('🔌 Disconnecting realtime...');
+      
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
       }
       setIsConnected(false);
     };
-  }, [user, table, filter, onEvent]);
+  }, [user, table, filter, retryCount]);
 
   const sendRealtimeMessage = async (eventType: string, payload: any) => {
     if (channelRef.current) {

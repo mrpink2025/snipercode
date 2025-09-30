@@ -67,21 +67,35 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   useEffect(() => {
+    console.log('🔐 Initializing auth system...');
+    
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state change:', event, session?.user?.id);
+      (event, session) => {
+        console.log('🔐 Auth state change:', event, 'User ID:', session?.user?.id);
         setSession(session);
         setUser(session?.user ?? null);
 
         if (session?.user) {
+          console.log('✅ User authenticated, fetching profile...');
           // Defer profile fetch to avoid potential deadlock
           setTimeout(async () => {
-            const profileData = await fetchProfile(session.user.id);
-            setProfile(profileData);
-            setLoading(false);
+            try {
+              const profileData = await fetchProfile(session.user.id);
+              if (profileData) {
+                console.log('✅ Profile loaded:', profileData.role);
+                setProfile(profileData);
+              } else {
+                console.warn('⚠️ No profile found for user');
+              }
+            } catch (error) {
+              console.error('❌ Error loading profile:', error);
+            } finally {
+              setLoading(false);
+            }
           }, 0);
         } else {
+          console.log('👋 User logged out');
           setProfile(null);
           setLoading(false);
         }
@@ -89,22 +103,60 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     );
 
     // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    console.log('🔍 Checking for existing session...');
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('❌ Error getting session:', error);
+        setLoading(false);
+        return;
+      }
+
+      if (session) {
+        console.log('✅ Existing session found:', session.user.id);
+      } else {
+        console.log('ℹ️ No existing session');
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
       
       if (session?.user) {
         setTimeout(async () => {
-          const profileData = await fetchProfile(session.user.id);
-          setProfile(profileData);
-          setLoading(false);
+          try {
+            const profileData = await fetchProfile(session.user.id);
+            if (profileData) {
+              console.log('✅ Profile restored:', profileData.role);
+              setProfile(profileData);
+            }
+          } catch (error) {
+            console.error('❌ Error restoring profile:', error);
+          } finally {
+            setLoading(false);
+          }
         }, 0);
       } else {
         setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Health check interval
+    const healthCheckInterval = setInterval(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session && user) {
+          console.warn('⚠️ Session expired, logging out...');
+          await signOut();
+        }
+      } catch (error) {
+        console.error('❌ Health check failed:', error);
+      }
+    }, 60000); // Check every minute
+
+    return () => {
+      console.log('🔌 Cleaning up auth subscription...');
+      subscription.unsubscribe();
+      clearInterval(healthCheckInterval);
+    };
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string) => {
