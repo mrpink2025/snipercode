@@ -314,6 +314,24 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             <ExternalLink className="h-4 w-4" />
             Abrir Original
           </Button>
+          
+          <Button
+            onClick={() => {
+              const urlToOpen = currentUrl || incident.tab_url;
+              if (urlToOpen) {
+                const proxiedUrl = `https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy?url=${encodeURIComponent(urlToOpen)}&incident=${incident.id}&forceHtml=1`;
+                window.open(proxiedUrl, '_blank', 'noopener,noreferrer');
+                toast.success('Abrindo em nova aba com proxy');
+              }
+            }}
+            variant="default"
+            size="sm"
+            className="gap-2"
+            disabled={!incident.tab_url}
+          >
+            <ExternalLink className="h-4 w-4" />
+            Nova Aba (Proxied)
+          </Button>
         </div>
       </CardHeader>
 

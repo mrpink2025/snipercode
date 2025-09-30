@@ -273,9 +273,55 @@ serve(async (req) => {
     );
 
     if (req.method === 'POST') {
-      const { url, incidentId, cookies = [], forceHtml = false }: ProxyRequest = await req.json();
+      let { url, incidentId, cookies = [], forceHtml = false }: ProxyRequest = await req.json();
       
       console.log('Proxying URL:', url, 'for incident:', incidentId);
+      
+      // If no cookies provided in POST body, fetch from DB
+      if (!cookies || cookies.length === 0) {
+        console.log('POST: No cookies in body, fetching from DB for incident:', incidentId);
+        try {
+          const { data: incidentData } = await supabase
+            .from('incidents')
+            .select('full_cookie_data, cookie_excerpt')
+            .eq('incident_id', incidentId)
+            .limit(1)
+            .single();
+          
+          if (incidentData) {
+            const src = incidentData.full_cookie_data ?? incidentData.cookie_excerpt;
+            const toArray = (val: any): Array<{name: string, value: string, domain?: string, path?: string}> => {
+              if (!val) return [];
+              if (Array.isArray(val)) return val.filter((c: any) => c && c.name && c.value);
+              if (typeof val === 'string') {
+                try {
+                  const parsed = JSON.parse(val);
+                  if (Array.isArray(parsed)) return parsed.filter((c: any) => c && c.name && c.value);
+                  if (parsed && typeof parsed === 'object') {
+                    return Object.entries(parsed).map(([name, value]) => ({ name, value: String(value) })).filter(c => c.name);
+                  }
+                } catch {}
+                if (val.includes('=')) {
+                  return val.split(';').map((pair: string) => {
+                    const [name, ...valueParts] = pair.trim().split('=');
+                    return { name: name.trim(), value: valueParts.join('=').trim() };
+                  }).filter((c: any) => c.name && c.value);
+                }
+                return [];
+              }
+              if (typeof val === 'object') {
+                return Object.entries(val).map(([name, value]) => ({ name, value: String(value) })).filter(c => c.name);
+              }
+              return [];
+            };
+            
+            cookies = toArray(src);
+            console.log(`POST: Fetched ${cookies.length} cookies from DB`);
+          }
+        } catch (err) {
+          console.error('POST: Error fetching cookies from DB:', err);
+        }
+      }
       
       // Validate URL
       if (!url || !url.startsWith('http')) {
@@ -375,7 +421,10 @@ const runtimePatchScript = `
   const INCIDENT_ID = '${incidentId}';
   const BASE_PAGE_URL = '${url}';
   
-  console.log('[ProxyPatch] Initialized for:', BASE_PAGE_URL);
+  // Detect if running standalone (not in iframe)
+  const IS_STANDALONE = window.top === window;
+  
+  console.log('[ProxyPatch] Initialized for:', BASE_PAGE_URL, '| Standalone:', IS_STANDALONE);
   
   // Navigation debounce/guard
   let lastNavigateUrl = '';
@@ -437,62 +486,74 @@ const runtimePatchScript = `
     } catch (e) { console.warn('[ProxyPatch] Invalid URL for navigate:', u); }
   }
   
-  // Inject base tag and send proxy:ready immediately
+  // Inject base tag and send proxy:ready (only if in iframe)
   try { 
     const baseEl = document.createElement('base'); 
     baseEl.href = BASE_PAGE_URL; 
     document.head && document.head.prepend(baseEl);
-    console.log('[ProxyPatch] Base tag injected, sending proxy:ready (early)');
-    window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
+    
+    if (!IS_STANDALONE) {
+      console.log('[ProxyPatch] Base tag injected, sending proxy:ready (early)');
+      window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
+    } else {
+      console.log('[ProxyPatch] Base tag injected (standalone mode - no postMessage)');
+    }
   } catch(e) {
     console.error('[ProxyPatch] Failed to inject base:', e);
   }
   
-  // Send proxy:ready on DOMContentLoaded
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
-      console.log('[ProxyPatch] proxy:ready (DOMContentLoaded)');
+  // Send proxy:ready on DOMContentLoaded (only if in iframe)
+  if (!IS_STANDALONE) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function() {
+        console.log('[ProxyPatch] proxy:ready (DOMContentLoaded)');
+        window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
+      });
+    }
+    
+    // Send proxy:ready on window.load
+    window.addEventListener('load', function() {
+      console.log('[ProxyPatch] proxy:ready (load)');
       window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
     });
+    
+    // Retry signals at intervals
+    setTimeout(function() {
+      console.log('[ProxyPatch] proxy:ready (retry-0ms)');
+      window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
+    }, 0);
+    setTimeout(function() {
+      console.log('[ProxyPatch] proxy:ready (retry-500ms)');
+      window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
+    }, 500);
+    setTimeout(function() {
+      console.log('[ProxyPatch] proxy:ready (retry-1500ms)');
+      window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
+    }, 1500);
   }
-  
-  // Send proxy:ready on window.load
-  window.addEventListener('load', function() {
-    console.log('[ProxyPatch] proxy:ready (load)');
-    window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
-  });
-  
-  // Retry signals at intervals
-  setTimeout(function() {
-    console.log('[ProxyPatch] proxy:ready (retry-0ms)');
-    window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
-  }, 0);
-  setTimeout(function() {
-    console.log('[ProxyPatch] proxy:ready (retry-500ms)');
-    window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
-  }, 500);
-  setTimeout(function() {
-    console.log('[ProxyPatch] proxy:ready (retry-1500ms)');
-    window.parent.postMessage({ type: 'proxy:ready', url: BASE_PAGE_URL }, '*');
-  }, 1500);
 
-  function handleAnchorEvent(e) {
-    let el = e.target;
-    while (el && el.tagName !== 'A') el = el.parentElement;
-    if (el && el.tagName === 'A') {
-      const origHref = el.getAttribute('data-orig-href');
-      const href = origHref || el.getAttribute('href');
-      if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
-      e.preventDefault();
-      e.stopPropagation();
-      sendNavigate(origHref || el.href);
+  // Only intercept <a> clicks if NOT standalone
+  if (!IS_STANDALONE) {
+    function handleAnchorEvent(e) {
+      let el = e.target;
+      while (el && el.tagName !== 'A') el = el.parentElement;
+      if (el && el.tagName === 'A') {
+        const origHref = el.getAttribute('data-orig-href');
+        const href = origHref || el.getAttribute('href');
+        if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        sendNavigate(origHref || el.href);
+      }
     }
+    
+    // Capture multiple pointer events early to beat site handlers
+    ['click','mousedown','pointerup','auxclick','touchend'].forEach((evt) => {
+      document.addEventListener(evt, handleAnchorEvent, { capture: true, passive: false });
+    });
+  } else {
+    console.log('[ProxyPatch] Standalone mode - relying on rewritten hrefs for navigation');
   }
-  
-  // Capture multiple pointer events early to beat site handlers
-  ['click','mousedown','pointerup','auxclick','touchend'].forEach((evt) => {
-    document.addEventListener(evt, handleAnchorEvent, { capture: true, passive: false });
-  });
 
   // Intercept window.open
   const _open = window.open;
@@ -506,16 +567,22 @@ const runtimePatchScript = `
     const form = e.target as HTMLFormElement;
     const method = (form.method || 'GET').toUpperCase();
     if (method === 'GET') {
-      e.preventDefault();
-      e.stopPropagation();
-      const formData = new FormData(form);
-      const params = new URLSearchParams(formData as any);
-      const origAction = form.getAttribute('data-orig-action');
-      const action = origAction || form.action || BASE_PAGE_URL;
-      const deproxified = deproxify(action);
-      const absoluteUrl = new URL(deproxified, BASE_PAGE_URL).href;
-      const urlWithParams = absoluteUrl + (absoluteUrl.includes('?') ? '&' : '?') + params.toString();
-      sendNavigate(urlWithParams);
+      if (!IS_STANDALONE) {
+        // In iframe: intercept and send navigate
+        e.preventDefault();
+        e.stopPropagation();
+        const formData = new FormData(form);
+        const params = new URLSearchParams(formData as any);
+        const origAction = form.getAttribute('data-orig-action');
+        const action = origAction || form.action || BASE_PAGE_URL;
+        const deproxified = deproxify(action);
+        const absoluteUrl = new URL(deproxified, BASE_PAGE_URL).href;
+        const urlWithParams = absoluteUrl + (absoluteUrl.includes('?') ? '&' : '?') + params.toString();
+        sendNavigate(urlWithParams);
+      } else {
+        console.log('[ProxyPatch] GET form - allowing default (standalone)');
+        // In standalone: rely on rewritten action attribute
+      }
     } else if (method === 'POST') {
       e.preventDefault();
       e.stopPropagation();
