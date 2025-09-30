@@ -61,7 +61,7 @@ function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incid
     (match, prefix, url, middle, suffix) => {
       try {
         const absoluteUrl = new URL(url, origin).href;
-        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}&forceHtml=1`;
         // Force target=_self to stay in iframe
         let newMiddle = middle.replace(/target=["'][^"']*["']/gi, '');
         newMiddle += ' target="_self"';
@@ -80,7 +80,7 @@ function rewriteHTMLUrls(html: string, baseUrl: string, proxyBase: string, incid
     (match, prefix, url, middle, suffix) => {
       try {
         const absoluteUrl = new URL(url, origin).href;
-        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}`;
+        const proxiedUrl = `${proxyBase}?url=${encodeURIComponent(absoluteUrl)}&incident=${incidentId}&forceHtml=1`;
         let newMiddle = middle.replace(/target=["'][^"']*["']/gi, '');
         newMiddle += ' target="_self"';
         if (formCount < 5) console.log(`  Rewriting form: ${url}`);
@@ -382,7 +382,7 @@ serve(async (req) => {
     try {
       const absolute = new URL(url, window.location.href).href;
       if (absolute.startsWith(PROXY_BASE)) return absolute;
-      return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID;
+      return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID + '&forceHtml=1';
     } catch (e) { return url; }
   }
   const origSetAttr = Element.prototype.setAttribute;
@@ -534,7 +534,7 @@ serve(async (req) => {
   const INCIDENT_ID = '${incidentId}';
   function proxify(url) {
     if (!url || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('#')) return url;
-    try { const absolute = new URL(url, window.location.href).href; if (absolute.startsWith(PROXY_BASE)) return absolute; return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID; } catch (e) { return url; }
+    try { const absolute = new URL(url, window.location.href).href; if (absolute.startsWith(PROXY_BASE)) return absolute; return PROXY_BASE + '?url=' + encodeURIComponent(absolute) + '&incident=' + INCIDENT_ID + '&forceHtml=1'; } catch (e) { return url; }
   }
   const sA = Element.prototype.setAttribute; Element.prototype.setAttribute = function(n,v){ if(['href','src','action'].includes(n.toLowerCase())) v = proxify(v); return sA.call(this,n,v); };
   ['HTMLAnchorElement','HTMLLinkElement','HTMLScriptElement','HTMLImageElement','HTMLFormElement','HTMLSourceElement'].forEach(function(cn){ const p=(window as any)[cn] && (window as any)[cn].prototype; if(!p) return; ['href','src','action'].forEach(function(prop){ const d=Object.getOwnPropertyDescriptor(p,prop); if(d && d.set){ const o=d.set; Object.defineProperty(p,prop,{ set(v){ return o!.call(this, proxify(v)); }, get:d.get }); } }); });
