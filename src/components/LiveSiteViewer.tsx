@@ -23,6 +23,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cookies, setCookies] = useState<any[]>([]);
+  const [currentUrl, setCurrentUrl] = useState<string | null>(null);
 
   useEffect(() => {
     // Try to get cookies from full_cookie_data first, then fallback to cookie_data
@@ -62,6 +63,53 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     }
   }, [incident.full_cookie_data, incident.cookie_data, incident.host]);
 
+  // Listen for navigation messages from iframe
+  useEffect(() => {
+    const handleMessage = async (event: MessageEvent) => {
+      if (event.data?.type === 'proxy:navigate') {
+        const { url, incidentId } = event.data;
+        
+        if (incidentId !== incident.id) return;
+        
+        console.log('[LiveSiteViewer] Navigation requested:', url);
+        setError(null);
+        setCurrentUrl(url);
+        
+        try {
+          const proxyBase = 'https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy';
+          
+          const response = await fetch(proxyBase, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              url, 
+              incidentId: incident.id, 
+              cookies, 
+              forceHtml: true 
+            })
+          });
+          
+          if (response.ok) {
+            const html = await response.text();
+            console.log('[LiveSiteViewer] Navigation successful, updating srcDoc');
+            setSrcDoc(html);
+            setProxyUrl(null);
+            toast.success('Página carregada');
+          } else {
+            throw new Error(`Failed to load: ${response.status}`);
+          }
+        } catch (err: any) {
+          console.error('[LiveSiteViewer] Navigation error:', err);
+          setError(err.message || 'Erro ao navegar');
+          toast.error('Falha ao carregar página');
+        }
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [incident.id, cookies]);
+
   const loadSiteWithCookies = async () => {
     if (!incident.tab_url) {
       setError('URL do site não disponível');
@@ -88,6 +136,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         console.log('✅ POST renderizado como HTML (srcDoc).');
         setSrcDoc(text);
         setProxyUrl(null);
+        setCurrentUrl(incident.tab_url);
         toast.success('Site renderizado via proxy');
         return;
       } else {
@@ -116,8 +165,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   };
 
   const openInNewTab = () => {
-    if (incident.tab_url) {
-      window.open(incident.tab_url, '_blank');
+    const urlToOpen = currentUrl || incident.tab_url;
+    if (urlToOpen) {
+      window.open(urlToOpen, '_blank');
     }
   };
 
