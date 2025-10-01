@@ -117,18 +117,6 @@ export default function Auth() {
             </form>
           </CardContent>
         </Card>
-
-        {/* Demo Info */}
-        <Card className="bg-muted/50 border-border/50">
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground space-y-2">
-              <div className="font-semibold text-foreground">Contas de demonstração:</div>
-              <div>👤 <strong>Operador:</strong> operador@corp.com | senha123</div>
-              <div>🛡️ <strong>Aprovador:</strong> aprovador@corp.com | senha123</div>
-              <div>⚡ <strong>Admin:</strong> admin@corp.com | senha123</div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
