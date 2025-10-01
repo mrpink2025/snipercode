@@ -18,6 +18,7 @@ import Logs from "./pages/Logs";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
 import RemoteControl from "./pages/RemoteControl";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 import NotFound from "./pages/NotFound";
 import { UserProfile } from "./components/UserProfile";
 import { useAppStore } from './lib/store';
@@ -146,6 +147,7 @@ function App() {
                   </ProtectedRoute>
                 } 
               />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

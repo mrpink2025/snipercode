@@ -90,9 +90,13 @@ const Header = () => {
                   <User className="mr-2 h-4 w-4" />
                   Perfil
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/settings')}>
                   <Settings className="mr-2 h-4 w-4" />
                   Configurações
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/privacy-policy')}>
+                  <Shield className="mr-2 h-4 w-4" />
+                  Política de Privacidade
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={signOut} className="text-red-600">
