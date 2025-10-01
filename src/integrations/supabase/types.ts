@@ -507,6 +507,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      is_superadmin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
     }
     Enums: {
       audit_action:

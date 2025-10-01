@@ -8,7 +8,7 @@ interface Profile {
   email: string;
   full_name: string;
   department?: string;
-  role: 'admin' | 'operator' | 'approver';
+  role: 'admin' | 'operator' | 'approver' | 'superadmin';
   avatar_url?: string;
   is_active: boolean;
 }
@@ -24,6 +24,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isOperator: boolean;
   isApprover: boolean;
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -226,7 +227,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  const isAdmin = profile?.role === 'admin';
+  const isSuperAdmin = profile?.role === 'superadmin';
+  const isAdmin = profile?.role === 'admin' || isSuperAdmin;
   const isOperator = profile?.role === 'operator' || isAdmin;
   const isApprover = profile?.role === 'approver' || isAdmin;
 
@@ -241,6 +243,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     isAdmin,
     isOperator,
     isApprover,
+    isSuperAdmin,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
