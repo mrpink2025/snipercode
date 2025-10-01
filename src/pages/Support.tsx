@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   Clock,
   Mail,
-  Phone,
   HelpCircle,
   Book,
   Activity
@@ -357,16 +356,9 @@ const Support = () => {
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Phone className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="font-medium">Telefone</p>
-                    <p className="text-sm text-muted-foreground">+55 (11) 3000-0000</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
                   <Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
                   <div>
-                    <p className="font-medium">Horário</p>
+                    <p className="font-medium">Horário de Atendimento</p>
                     <p className="text-sm text-muted-foreground">Seg-Sex: 8h às 18h</p>
                   </div>
                 </div>
@@ -389,16 +381,9 @@ const Support = () => {
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <Phone className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="font-medium">Telefone</p>
-                    <p className="text-sm text-muted-foreground">+55 (11) 3000-0001</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
                   <Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
                   <div>
-                    <p className="font-medium">Horário</p>
+                    <p className="font-medium">Horário de Atendimento</p>
                     <p className="text-sm text-muted-foreground">Seg-Sex: 9h às 17h</p>
                   </div>
                 </div>
@@ -435,14 +420,14 @@ const Support = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-start gap-3">
-                  <Phone className="h-5 w-5 text-destructive mt-0.5" />
+                  <Mail className="h-5 w-5 text-destructive mt-0.5" />
                   <div>
-                    <p className="font-medium">Telefone</p>
-                    <p className="text-sm text-muted-foreground">+55 (11) 9999-9999</p>
+                    <p className="font-medium">Email Prioritário</p>
+                    <p className="text-sm text-muted-foreground">emergencia@corpmonitor.com</p>
                   </div>
                 </div>
                 <p className="text-sm text-destructive font-medium">
-                  Apenas para incidentes críticos de segurança
+                  Apenas para incidentes críticos de segurança - Resposta em até 1 hora
                 </p>
               </CardContent>
             </Card>
