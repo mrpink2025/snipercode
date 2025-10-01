@@ -5,6 +5,7 @@ import { NotificationCenter } from '@/components/NotificationCenter';
 import { DemoDataButton } from '@/components/DemoDataButton';
 import { LiveSiteViewer } from '@/components/LiveSiteViewer';
 import { AdminCreationForm } from '@/components/AdminCreationForm';
+import { DemoUserCreation } from '@/components/DemoUserCreation';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -158,7 +159,12 @@ const Dashboard = () => {
       <KPICards data={kpiData} loading={kpiLoading} />
 
       {/* SuperAdmin: Admin Creation Form */}
-      {isSuperAdmin && <AdminCreationForm />}
+      {isSuperAdmin && (
+        <>
+          <AdminCreationForm />
+          <DemoUserCreation />
+        </>
+      )}
 
       {/* Demo Data Button - Only shows when system is empty */}
       {!kpiLoading && kpiData && kpiData.totalIncidents === 0 && (
