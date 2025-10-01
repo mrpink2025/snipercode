@@ -249,6 +249,42 @@ export type Database = {
           },
         ]
       }
+      machine_blocked_domains: {
+        Row: {
+          blocked_by: string
+          created_at: string
+          domain: string
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          machine_id: string
+          reason: string
+          updated_at: string
+        }
+        Insert: {
+          blocked_by: string
+          created_at?: string
+          domain: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          machine_id: string
+          reason: string
+          updated_at?: string
+        }
+        Update: {
+          blocked_by?: string
+          created_at?: string
+          domain?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          machine_id?: string
+          reason?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       monitored_domains: {
         Row: {
           added_by: string

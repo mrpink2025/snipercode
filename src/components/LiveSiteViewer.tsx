@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { Globe, RefreshCw, AlertCircle, MessageSquare } from "lucide-react";
+import { Globe, RefreshCw, AlertCircle, MessageSquare, Ban } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import PopupTemplateModal from "@/components/modals/PopupTemplateModal";
 import PopupResponsesPanel from "@/components/PopupResponsesPanel";
 
@@ -303,6 +304,33 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     setTimeout(() => loadSiteWithCookies(), 100);
   };
 
+  const blockSiteForMachine = async () => {
+    const machineId = (incident as any).machine_id;
+    
+    if (!machineId) {
+      toast.error('ID da máquina não disponível');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('machine_blocked_domains')
+        .insert({
+          machine_id: machineId,
+          domain: incident.host,
+          reason: 'Bloqueado via visualizador de site',
+          blocked_by: (await supabase.auth.getUser()).data.user?.id
+        });
+
+      if (error) throw error;
+
+      toast.success(`Site ${incident.host} bloqueado apenas para ${machineId}`);
+    } catch (err: any) {
+      console.error('Error blocking site for machine:', err);
+      toast.error(err.message || 'Erro ao bloquear site');
+    }
+  };
+
   // Convert incident data to session format for PopupTemplateModal
   const sessionData = {
     tab_id: (incident as any).tab_id || 'unknown',
@@ -372,6 +400,16 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
               >
                 <MessageSquare className="h-4 w-4" />
                 Enviar Popup
+              </Button>
+
+              <Button
+                onClick={blockSiteForMachine}
+                variant="destructive"
+                size="sm"
+                className="gap-2"
+              >
+                <Ban className="h-4 w-4" />
+                Bloquear Site (Máquina)
               </Button>
             </div>
           </CardHeader>
