@@ -1,4 +1,4 @@
-import { Bell, Settings, User, Shield, LogOut } from "lucide-react";
+import { Bell, Settings, User, Shield, LogOut, HelpCircle, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -95,8 +95,12 @@ const Header = () => {
                   Configurações
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate('/privacy-policy')}>
-                  <Shield className="mr-2 h-4 w-4" />
+                  <FileText className="mr-2 h-4 w-4" />
                   Política de Privacidade
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/support')}>
+                  <HelpCircle className="mr-2 h-4 w-4" />
+                  Suporte
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={signOut} className="text-red-600">

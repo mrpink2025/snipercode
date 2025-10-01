@@ -19,6 +19,7 @@ import History from "./pages/History";
 import Settings from "./pages/Settings";
 import RemoteControl from "./pages/RemoteControl";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import Support from "./pages/Support";
 import NotFound from "./pages/NotFound";
 import { UserProfile } from "./components/UserProfile";
 import { useAppStore } from './lib/store';
@@ -148,6 +149,7 @@ function App() {
                 } 
               />
               <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+              <Route path="/support" element={<Support />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
