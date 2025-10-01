@@ -22,7 +22,7 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 const Dashboard = () => {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isDemoAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -304,7 +304,7 @@ const Dashboard = () => {
                     onBlock={handleBlock}
                     onIsolate={handleIsolate}
                     onViewDetails={handleViewDetails}
-                    onViewSite={handleViewSite}
+                    onViewSite={isDemoAdmin ? undefined : handleViewSite}
                   />
                 ))}
                 

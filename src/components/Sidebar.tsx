@@ -26,7 +26,7 @@ const navigation = [
 
 const Sidebar = () => {
   const location = useLocation();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isDemoAdmin } = useAuth();
 
   return (
     <div className="flex flex-col w-sidebar bg-sidebar border-r h-screen sticky top-0">
@@ -37,6 +37,11 @@ const Sidebar = () => {
           
           // Hide admin-only items for non-admin users
           if (item.adminOnly && !isAdmin) {
+            return null;
+          }
+          
+          // Hide Remote Control for demo admin
+          if (item.href === '/remote-control' && isDemoAdmin) {
             return null;
           }
           

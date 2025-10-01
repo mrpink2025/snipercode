@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 interface IncidentCardProps {
   incident: {
@@ -35,6 +36,7 @@ const IncidentCard = ({
   onViewSite 
 }: IncidentCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const { isDemoAdmin } = useAuth();
 
   const getSeverityConfig = (severity: string) => {
     if (severity === 'RED') {
@@ -176,7 +178,7 @@ const IncidentCard = ({
               Ver detalhes
             </Button>
             
-            {(incident.tabUrl || incident.tab_url) && onViewSite && (
+            {(incident.tabUrl || incident.tab_url) && onViewSite && !isDemoAdmin && (
               <Button
                 variant="outline" 
                 size="sm"
