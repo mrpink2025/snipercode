@@ -4,6 +4,8 @@ import IncidentCard from '@/components/IncidentCard';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { DemoDataButton } from '@/components/DemoDataButton';
 import { LiveSiteViewer } from '@/components/LiveSiteViewer';
+import { AdminCreationForm } from '@/components/AdminCreationForm';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,6 +22,7 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
 const Dashboard = () => {
+  const { isSuperAdmin } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -153,6 +156,9 @@ const Dashboard = () => {
 
       {/* KPI Cards */}
       <KPICards data={kpiData} loading={kpiLoading} />
+
+      {/* SuperAdmin: Admin Creation Form */}
+      {isSuperAdmin && <AdminCreationForm />}
 
       {/* Demo Data Button - Only shows when system is empty */}
       {!kpiLoading && kpiData && kpiData.totalIncidents === 0 && (
