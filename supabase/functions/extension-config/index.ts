@@ -76,9 +76,9 @@ Deno.serve(async (req) => {
       throw new Error('Failed to verify user role')
     }
 
-    if (profile?.role !== 'admin') {
+    if (!['admin','superadmin','demo_admin'].includes(profile?.role)) {
       console.error('Access denied for user:', user.email, 'Role:', profile?.role)
-      throw new Error('Access denied - admin role required')
+      throw new Error('Access denied - admin or superadmin role required')
     }
 
     console.log('Admin access verified for:', user.email)

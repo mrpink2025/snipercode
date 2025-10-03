@@ -35,7 +35,7 @@ interface SystemSettings {
 }
 
 const Settings = () => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -218,7 +218,7 @@ const Settings = () => {
                   <Shield className="h-4 w-4" />
                   Segurança
                 </TabsTrigger>
-                {profile?.role === 'admin' && (
+                {isAdmin && (
                   <TabsTrigger value="extension" className="flex items-center gap-2">
                     <SettingsIcon className="h-4 w-4" />
                     Extensão
@@ -557,7 +557,7 @@ const Settings = () => {
                 </Card>
               </TabsContent>
 
-              {profile?.role === 'admin' && (
+              {isAdmin && (
                 <TabsContent value="extension">
                   <ExtensionSettings />
                 </TabsContent>

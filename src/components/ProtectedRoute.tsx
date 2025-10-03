@@ -9,7 +9,7 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, isAdmin, isOperator, isApprover } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -40,11 +40,11 @@ export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) 
     const hasRequiredRole = (() => {
       switch (requiredRole) {
         case 'admin':
-          return profile.role === 'admin';
+          return isAdmin;
         case 'approver':
-          return profile.role === 'approver' || profile.role === 'admin';
+          return isApprover;
         case 'operator':
-          return ['operator', 'approver', 'admin'].includes(profile.role);
+          return isOperator;
         default:
           return false;
       }

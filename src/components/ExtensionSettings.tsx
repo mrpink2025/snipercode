@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, CheckCircle, Globe, Package, Settings, Shield } from 'lucide-react';
+import { AlertCircle, CheckCircle, Globe, Package, Settings, Shield, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -147,6 +147,53 @@ export const ExtensionSettings: React.FC = () => {
                  hash_sha256='[generated-hash]' />
   </app>
 </gupdate>`;
+  };
+
+  const forceUpdateNow = async () => {
+    if (!settings) return;
+    const desiredForce = settings.force_update_version || settings.extension_version;
+    if (!desiredForce) {
+      toast({
+        title: 'Versão alvo necessária',
+        description: 'Informe a versão a ser forçada ou defina a versão atual.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const { data, error } = await supabase.functions.invoke('extension-config', {
+        method: 'POST',
+        body: {
+          extension_update_url: settings.extension_update_url,
+          extension_version: settings.extension_version,
+          auto_update_enabled: true,
+          update_channel: settings.update_channel,
+          force_update_version: desiredForce,
+          rollback_version: settings.rollback_version
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast({
+          title: 'Atualização forçada acionada',
+          description: `Clientes serão direcionados para a versão ${desiredForce}.`
+        });
+        loadSettings();
+      }
+    } catch (error) {
+      console.error('Erro ao forçar atualização:', error);
+      toast({
+        title: 'Erro ao forçar atualização',
+        description: 'Não foi possível acionar a atualização agora.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (isLoading) {
@@ -327,6 +374,14 @@ export const ExtensionSettings: React.FC = () => {
           <div className="flex gap-2">
             <Button onClick={saveSettings} disabled={isSaving}>
               {isSaving ? 'Salvando...' : 'Salvar Configurações'}
+            </Button>
+            <Button 
+              variant="secondary" 
+              onClick={forceUpdateNow}
+              disabled={isSaving || !((settings?.force_update_version || settings?.extension_version))}
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Forçar atualização agora
             </Button>
             <Button variant="outline" onClick={() => {
               const xml = generateManifestXml();

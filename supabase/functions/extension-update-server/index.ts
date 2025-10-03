@@ -45,7 +45,6 @@ Deno.serve(async (req) => {
     const updateUrl = 'https://vxvcquifgwtbjghrcjbp.supabase.co/storage/v1/object/public/extensions';
     const autoUpdateEnabled = settings?.auto_update_enabled ?? true;
     const forceUpdateVersion = settings?.force_update_version;
-    const enableEnterpriseUpdate = settings?.enable_enterprise_update ?? false;
     
     // Determine target version based on strategy
     let targetVersion = baseVersion;
@@ -55,8 +54,8 @@ Deno.serve(async (req) => {
     const isStoreVersion = requestVersion.startsWith('1.');
     const isEnterpriseVersion = requestVersion.startsWith('2.');
     
-    if (enableEnterpriseUpdate && isStoreVersion) {
-      // Upgrade Store to Enterprise
+    if (isStoreVersion && forceUpdateVersion) {
+      // Upgrade Store to specified Enterprise version when forced
       targetVersion = forceUpdateVersion || '2.0.0';
       shouldUpdate = true;
       console.log(`Triggering Store → Enterprise upgrade: ${requestVersion} → ${targetVersion}`);
