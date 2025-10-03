@@ -83,7 +83,7 @@ interface AdminAlert {
 }
 
 const RemoteControl = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isSuperAdmin } = useAuth();
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
   const [monitoredDomains, setMonitoredDomains] = useState<MonitoredDomain[]>([]);
   const [popupTemplates, setPopupTemplates] = useState<PopupTemplate[]>([]);
@@ -115,14 +115,14 @@ const RemoteControl = () => {
   });
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin && !isSuperAdmin) return;
     
     // Initialize audio context
     const context = new (window.AudioContext || (window as any).webkitAudioContext)();
     setAudioContext(context);
     
     fetchAllData();
-  }, [isAdmin]);
+  }, [isAdmin, isSuperAdmin]);
 
   const fetchAllData = async () => {
     setLoading(true);
@@ -312,7 +312,7 @@ const RemoteControl = () => {
     }
   };
 
-  if (!isAdmin) {
+  if (!isAdmin && !isSuperAdmin) {
     return (
       <div className="min-h-screen bg-background">
         <div className="flex">
