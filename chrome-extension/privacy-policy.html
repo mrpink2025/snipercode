@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Política de Privacidade do CorpMonitor - Sistema de Segurança Corporativa">
+  <title>Política de Privacidade - CorpMonitor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: white;
+      padding: 40px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    header {
+      border-bottom: 3px solid #2563eb;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+    
+    h1 {
+      color: #1e40af;
+      font-size: 2em;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .badge {
+      background: #10b981;
+      color: white;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 0.75em;
+      font-weight: 600;
+    }
+    
+    .last-updated {
+      color: #666;
+      font-size: 0.9em;
+    }
+    
+    h2 {
+      color: #1e40af;
+      font-size: 1.5em;
+      margin-top: 30px;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    
+    h3 {
+      color: #374151;
+      font-size: 1.2em;
+      margin-top: 20px;
+      margin-bottom: 10px;
+    }
+    
+    p {
+      margin-bottom: 15px;
+      color: #4b5563;
+    }
+    
+    ul {
+      margin-left: 20px;
+      margin-bottom: 15px;
+    }
+    
+    li {
+      margin-bottom: 8px;
+      color: #4b5563;
+    }
+    
+    .alert {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    
+    .alert strong {
+      display: block;
+      margin-bottom: 5px;
+      color: #92400e;
+    }
+    
+    .info-box {
+      background: #e0f2fe;
+      border-left: 4px solid #0284c7;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 4px;
+    }
+    
+    .success-box {
+      background: #d1fae5;
+      border-left: 4px solid #10b981;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 4px;
+    }
+    
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 15px;
+      margin: 20px 0;
+    }
+    
+    .feature-card {
+      background: #f9fafb;
+      padding: 15px;
+      border-radius: 6px;
+      border: 1px solid #e5e7eb;
+    }
+    
+    .feature-card h4 {
+      color: #1e40af;
+      margin-bottom: 8px;
+      font-size: 1em;
+    }
+    
+    .section-content {
+      background: #fafafa;
+      padding: 20px;
+      border-radius: 6px;
+      margin: 15px 0;
+    }
+    
+    strong {
+      color: #1f2937;
+    }
+    
+    footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 2px solid #e5e7eb;
+      text-align: center;
+      color: #6b7280;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>
+        🛡️ Política de Privacidade
+        <span class="badge">Vigente</span>
+      </h1>
+      <p class="last-updated"><strong>Última atualização:</strong> Janeiro de 2025</p>
+    </header>
+
+    <section>
+      <h2>CorpMonitor - Sistema de Segurança Corporativa</h2>
+      <p>
+        Esta Política de Privacidade descreve como o <strong>CorpMonitor</strong>, sistema de monitoramento 
+        e segurança corporativa, coleta, utiliza, armazena e protege os dados durante o uso de dispositivos 
+        corporativos e acesso a recursos da organização.
+      </p>
+      
+      <div class="alert">
+        <strong>⚠️ Aviso Importante</strong>
+        <p>O uso de dispositivos corporativos e acesso aos sistemas da empresa implica na aceitação 
+        integral desta política. O CorpMonitor é uma ferramenta de segurança corporativa destinada 
+        exclusivamente ao ambiente profissional.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>1. Dados Coletados</h2>
+      
+      <h3>1.1. Metadados de Navegação</h3>
+      <ul>
+        <li>URLs visitadas e títulos de páginas</li>
+        <li>Timestamps (data e hora) de acesso</li>
+        <li>Domínios e subdomínios acessados</li>
+        <li>Referrers e origem de navegação</li>
+      </ul>
+
+      <h3>1.2. Informações de Cookies (Criptografadas)</h3>
+      <p>O sistema coleta <strong>hashes criptográficos</strong> de cookies, <strong>não os valores reais</strong>:</p>
+      <ul>
+        <li>Hash SHA-256 dos valores de cookies</li>
+        <li>Nomes de cookies (sem valores sensíveis)</li>
+        <li>Domínios associados aos cookies</li>
+        <li>Datas de expiração</li>
+      </ul>
+      <div class="success-box">
+        <p><strong>🔒 Nota de Segurança:</strong> Os valores reais dos cookies nunca são armazenados. 
+        Apenas representações criptográficas irreversíveis são mantidas para detecção de anomalias.</p>
+      </div>
+
+      <h3>1.3. Estrutura de Formulários</h3>
+      <ul>
+        <li>Nomes e IDs dos campos de formulário</li>
+        <li>Tipos de input (text, password, email, etc.)</li>
+        <li>Estrutura HTML de formulários</li>
+        <li><strong>Valores de formulários NÃO são coletados</strong></li>
+      </ul>
+
+      <h3>1.4. Informações de Sessão</h3>
+      <ul>
+        <li>ID do usuário corporativo</li>
+        <li>ID da máquina/dispositivo</li>
+        <li>IDs de abas e sessões de navegação</li>
+        <li>Duração e atividade das sessões</li>
+        <li>Status de atividade (ativo/inativo)</li>
+      </ul>
+
+      <h3>1.5. Chaves de Armazenamento Local</h3>
+      <ul>
+        <li>Chaves do localStorage (sem valores)</li>
+        <li>Chaves do sessionStorage (sem valores)</li>
+        <li>Análise de padrões de armazenamento</li>
+      </ul>
+
+      <h3>1.6. Dados Técnicos</h3>
+      <ul>
+        <li>User-Agent e informações do navegador</li>
+        <li>Versão da extensão CorpMonitor</li>
+        <li>Endereço IP (para auditoria)</li>
+        <li>Elementos de tracking detectados</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>2. Finalidades do Tratamento</h2>
+      <p>Os dados coletados são utilizados exclusivamente para as seguintes finalidades legítimas:</p>
+      
+      <div class="feature-grid">
+        <div class="feature-card">
+          <h4>🛡️ Segurança da Informação</h4>
+          <p>Detecção de ameaças, vazamentos de dados e atividades suspeitas em tempo real.</p>
+        </div>
+        
+        <div class="feature-card">
+          <h4>🔒 Prevenção de Fraudes</h4>
+          <p>Identificação de padrões anormais e potenciais tentativas de fraude corporativa.</p>
+        </div>
+        
+        <div class="feature-card">
+          <h4>✅ Compliance e Conformidade</h4>
+          <p>Garantir o cumprimento de políticas corporativas, regulamentações setoriais e normas legais.</p>
+        </div>
+        
+        <div class="feature-card">
+          <h4>⚠️ Investigação de Incidentes</h4>
+          <p>Análise forense e investigação de incidentes de segurança reportados.</p>
+        </div>
+        
+        <div class="feature-card">
+          <h4>📋 Auditoria e Relatórios</h4>
+          <p>Geração de relatórios para auditorias internas, externas e autoridades reguladoras.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. Base Legal (LGPD - Lei Geral de Proteção de Dados)</h2>
+      <p>O tratamento de dados pelo CorpMonitor está fundamentado nas seguintes bases legais 
+      previstas na LGPD (Lei nº 13.709/2018):</p>
+
+      <div class="section-content">
+        <h3>Art. 7º, IX - Legítimo Interesse</h3>
+        <p>A empresa possui legítimo interesse na proteção de seus ativos, informações confidenciais 
+        e prevenção de fraudes, em conformidade com as expectativas razoáveis do titular.</p>
+      </div>
+
+      <div class="section-content">
+        <h3>Art. 7º, II - Cumprimento de Obrigação Legal</h3>
+        <p>Diversas regulamentações setoriais (bancárias, financeiras, saúde) exigem controles 
+        de segurança e rastreabilidade de acessos a dados sensíveis.</p>
+      </div>
+
+      <div class="section-content">
+        <h3>Art. 7º, X - Proteção do Crédito</h3>
+        <p>Para instituições financeiras, o monitoramento é necessário para proteção do crédito 
+        e prevenção de fraudes que possam afetar operações financeiras.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>4. Compartilhamento de Dados</h2>
+      
+      <div class="info-box">
+        <h3>Compartilhamento Interno</h3>
+        <p>Os dados coletados permanecem internos à organização e o acesso é estritamente controlado 
+        por níveis hierárquicos:</p>
+        <ul>
+          <li><strong>Superadmin:</strong> Acesso total a todos os recursos e dados</li>
+          <li><strong>Admin:</strong> Gerenciamento de configurações e incidentes</li>
+          <li><strong>Approver:</strong> Aprovação de exceções e bloqueios</li>
+          <li><strong>Operator:</strong> Visualização de alertas e monitoramento básico</li>
+        </ul>
+      </div>
+
+      <div class="info-box">
+        <h3>Compartilhamento Externo</h3>
+        <p>Os dados <strong>não são compartilhados com terceiros</strong>, exceto nas seguintes situações 
+        legalmente previstas:</p>
+        <ul>
+          <li>Quando exigido por autoridades judiciais ou reguladoras</li>
+          <li>Para cumprimento de obrigações legais e regulatórias</li>
+          <li>Em processos de auditoria externa ou due diligence (com NDA)</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>5. Segurança e Retenção de Dados</h2>
+      
+      <h3>Medidas de Segurança Implementadas</h3>
+      <ul>
+        <li><strong>Criptografia:</strong> Todos os dados em trânsito utilizam TLS 1.3 e dados em repouso 
+        são criptografados com AES-256</li>
+        <li><strong>Row Level Security (RLS):</strong> Políticas de acesso em nível de banco de dados 
+        garantem segregação de dados</li>
+        <li><strong>Autenticação JWT:</strong> Tokens seguros com expiração controlada para acesso 
+        ao sistema</li>
+        <li><strong>Controles de Acesso:</strong> Sistema de permissões baseado em funções (RBAC) 
+        com princípio do menor privilégio</li>
+        <li><strong>Audit Trail:</strong> Registro imutável de todas as ações administrativas e 
+        acessos aos dados</li>
+        <li><strong>Monitoramento 24/7:</strong> Detecção de anomalias e alertas em tempo real</li>
+      </ul>
+
+      <h3>Período de Retenção</h3>
+      <ul>
+        <li><strong>Dados de navegação:</strong> 90 dias (configurável)</li>
+        <li><strong>Logs de segurança:</strong> 1 ano (conformidade legal)</li>
+        <li><strong>Relatórios de incidentes:</strong> 5 anos (investigações)</li>
+        <li><strong>Logs de auditoria:</strong> 7 anos (requisitos regulatórios)</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>6. Direitos dos Titulares (LGPD)</h2>
+      <p>De acordo com a LGPD, os colaboradores possuem os seguintes direitos:</p>
+      
+      <ul>
+        <li><strong>Acesso:</strong> Solicitar cópia dos dados pessoais tratados</li>
+        <li><strong>Correção:</strong> Requerer a atualização de dados incompletos ou incorretos</li>
+        <li><strong>Portabilidade:</strong> Obter dados em formato estruturado</li>
+        <li><strong>Eliminação:</strong> Solicitar exclusão de dados desnecessários (sujeito a obrigações legais)</li>
+        <li><strong>Informação:</strong> Conhecer as práticas de tratamento e compartilhamento</li>
+        <li><strong>Revogação:</strong> Retirar consentimento quando aplicável</li>
+        <li><strong>Oposição:</strong> Opor-se ao tratamento em situações específicas</li>
+      </ul>
+
+      <div class="alert">
+        <strong>⚠️ Limitações</strong>
+        <p>Alguns direitos podem ser limitados por obrigações legais, regulatórias ou contratuais 
+        que a empresa deve cumprir (ex: retenção mínima de logs para auditorias).</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>7. Contato do Encarregado de Dados (DPO)</h2>
+      <p>Para exercer seus direitos ou esclarecer dúvidas sobre esta política, entre em contato:</p>
+      
+      <div class="section-content">
+        <p><strong>Encarregado de Dados (DPO):</strong> Departamento de Proteção de Dados</p>
+        <p><strong>E-mail:</strong> dpo@monitorcorporativo.com</p>
+        <p><strong>Telefone:</strong> +55 (11) 0000-0000</p>
+        <p><strong>Endereço:</strong> Consultar portal corporativo</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>8. Alterações desta Política</h2>
+      <p>Esta Política de Privacidade pode ser atualizada periodicamente para refletir mudanças 
+      nas práticas de tratamento de dados ou requisitos legais. Colaboradores serão notificados 
+      sobre alterações significativas através dos canais corporativos.</p>
+      
+      <p><strong>Versão atual:</strong> 1.0.0 | <strong>Data de vigência:</strong> Janeiro de 2025</p>
+    </section>
+
+    <section>
+      <h2>9. Conformidade e Certificações</h2>
+      <p>O CorpMonitor está em conformidade com:</p>
+      <ul>
+        <li>✅ LGPD (Lei Geral de Proteção de Dados Pessoais - Lei 13.709/2018)</li>
+        <li>✅ ISO 27001 (Segurança da Informação)</li>
+        <li>✅ SOC 2 Type II (Controles de Segurança)</li>
+        <li>✅ Regulamentações setoriais aplicáveis</li>
+      </ul>
+    </section>
+
+    <footer>
+      <p><strong>CorpMonitor</strong> - Sistema de Segurança Corporativa</p>
+      <p>© 2025 Monitor Corporativo. Todos os direitos reservados.</p>
+      <p><a href="https://monitorcorporativo.com" style="color: #2563eb;">monitorcorporativo.com</a></p>
+    </footer>
+  </div>
+</body>
+</html>

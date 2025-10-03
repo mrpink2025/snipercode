@@ -4,8 +4,10 @@
   "description": "CorpMonitor Chrome Extension for corporate data monitoring",
   "scripts": {
     "build": "node build.js",
-    "dev": "node build.js && echo 'Load dist/ folder as unpacked extension in Chrome'",
-    "pack": "npm run build && cd dist && zip -r ../corpmonitor-extension.zip .",
+    "dev": "node build.js dev",
+    "build:store": "node build.js store",
+    "build:enterprise": "node build.js enterprise",
+    "pack": "npm run build:store && npm run build:enterprise",
     "install-guide": "cat INSTALLATION.md"
   },
   "keywords": [

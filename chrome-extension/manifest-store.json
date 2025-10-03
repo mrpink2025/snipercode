@@ -1,22 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "CorpMonitor",
+  "name": "CorpWatch - Productivity & Security",
   "version": "1.0.0",
-  "description": "Corporate monitoring extension for data governance and compliance",
-  
-  "homepage_url": "https://monitorcorporativo.com/privacy-policy.html",
+  "description": "Productivity and security monitoring tool for corporate environments. Helps organizations maintain data governance and compliance standards.",
   
   "permissions": [
     "activeTab",
-    "storage",
-    "cookies",
-    "tabs",
-    "background"
-  ],
-  
-  "host_permissions": [
-    "http://*/*",
-    "https://*/*"
+    "storage"
   ],
   
   "background": {
@@ -33,7 +23,7 @@
   
   "action": {
     "default_popup": "popup.html",
-    "default_title": "CorpMonitor",
+    "default_title": "CorpWatch",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -50,6 +40,8 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  
+  "homepage_url": "https://monitorcorporativo.com/privacy-policy.html",
   
   "web_accessible_resources": [
     {

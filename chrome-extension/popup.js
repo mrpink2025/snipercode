@@ -106,7 +106,7 @@ function setupEventListeners() {
   // Privacy policy
   document.getElementById('privacyLink').addEventListener('click', (e) => {
     e.preventDefault();
-    chrome.tabs.create({ url: window.location.origin + '/#/privacy' });
+    chrome.tabs.create({ url: 'https://monitorcorporativo.com/privacy-policy.html' });
   });
 }
 
