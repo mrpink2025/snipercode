@@ -1,22 +1,14 @@
 #!/bin/bash
 
 # ============================================
-# CorpMonitor - Complete Server Reset & Deploy
+# CorpMonitor - Complete Server Reset & Deploy (DEBUG MODE)
 # ============================================
 # ATENÇÃO: Este script APAGA TUDO e reconfigura do zero!
-# Use apenas se você tem certeza do que está fazendo.
+# Versão DEBUG com saída completa e pausas entre fases.
 
 set -e  # Exit on any error
 set -o pipefail  # Exit on pipe failures
-
-# Logging
-LOG_FILE="/var/log/corpmonitor-deploy-$(date +%Y%m%d-%H%M%S).log"
-mkdir -p "$(dirname "$LOG_FILE")"
-exec > >(tee -a "$LOG_FILE")
-exec 2>&1
-
-# Trap for cleanup on error
-trap 'echo -e "\n${RED}❌ Erro na linha $LINENO. Verifique o log: $LOG_FILE${NC}"; exit 1' ERR
+set -x  # Debug mode - print all commands
 
 # Colors
 RED='\033[0;31m'
@@ -34,9 +26,17 @@ NGINX_ENABLED="/etc/nginx/sites-enabled/monitor-corporativo"
 BACKUP_ROOT="/var/backups/monitor-corporativo"
 DOMAIN="monitorcorporativo.com"
 
+# Logging
+LOG_FILE="/var/log/corpmonitor-deploy-debug-$(date +%Y%m%d-%H%M%S).log"
+mkdir -p "$(dirname "$LOG_FILE")"
+exec > >(tee -a "$LOG_FILE")
+exec 2>&1
+
 echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${MAGENTA}  ⚠️  RESET COMPLETO DO SERVIDOR  ⚠️${NC}"
+echo -e "${MAGENTA}  ⚠️  RESET COMPLETO (DEBUG MODE)  ⚠️${NC}"
 echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${CYAN}📝 Log completo sendo salvo em: $LOG_FILE${NC}"
 echo ""
 echo -e "${RED}ATENÇÃO: Este script vai:${NC}"
 echo -e "${RED}  1. APAGAR todo o conteúdo de $PROJECT_ROOT${NC}"
@@ -44,7 +44,8 @@ echo -e "${RED}  2. REMOVER configurações Nginx${NC}"
 echo -e "${RED}  3. LIMPAR caches e logs${NC}"
 echo -e "${RED}  4. RECONFIGURAR tudo do zero${NC}"
 echo ""
-echo -e "${YELLOW}Um backup será criado antes de continuar.${NC}"
+echo -e "${YELLOW}Modo DEBUG: Todas as operações serão exibidas${NC}"
+echo -e "${YELLOW}O script irá pausar entre fases para revisão${NC}"
 echo ""
 read -p "Tem certeza que deseja continuar? (digite 'SIM' em maiúsculas): " confirmation
 
@@ -53,8 +54,15 @@ if [ "$confirmation" != "SIM" ]; then
     exit 0
 fi
 
+pause_between_phases() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    read -p "Pressione ENTER para continuar para a próxima fase..."
+    echo ""
+}
+
 echo ""
-echo -e "${BLUE}Iniciando reset completo...${NC}"
+echo -e "${BLUE}Iniciando reset completo em modo DEBUG...${NC}"
 echo ""
 
 # ============================================
@@ -65,6 +73,9 @@ if [ "$EUID" -ne 0 ]; then
    exit 1
 fi
 
+echo -e "${GREEN}✓ Executando como root${NC}"
+pause_between_phases
+
 # ============================================
 # PHASE 1: Critical Backup
 # ============================================
@@ -74,37 +85,51 @@ mkdir -p "$BACKUP_ROOT"
 BACKUP_FILE="$BACKUP_ROOT/pre-reset-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
 
 if [ -d "$PROJECT_ROOT" ]; then
+    echo "Listando conteúdo atual do projeto:"
+    ls -lah "$PROJECT_ROOT"
+    echo ""
     echo "Criando backup completo..."
     tar -czf "$BACKUP_FILE" \
         -C "$(dirname "$PROJECT_ROOT")" \
         "$(basename "$PROJECT_ROOT")" \
-        2>/dev/null || true
+        || true
     echo -e "${GREEN}✓ Backup salvo: $BACKUP_FILE${NC}"
+    echo "Tamanho do backup: $(du -h "$BACKUP_FILE" | cut -f1)"
 else
     echo -e "${YELLOW}⚠ Diretório do projeto não existe, pulando backup${NC}"
 fi
 
 # Backup Nginx config
 if [ -f "$NGINX_CONF" ]; then
+    echo "Backup da configuração Nginx atual:"
     cp "$NGINX_CONF" "$BACKUP_ROOT/nginx-backup-$(date +%Y%m%d-%H%M%S).conf"
+    cat "$NGINX_CONF"
     echo -e "${GREEN}✓ Backup Nginx salvo${NC}"
 fi
 
-echo ""
+pause_between_phases
 
 # ============================================
 # PHASE 2: Stop Services
 # ============================================
 echo -e "${YELLOW}Phase 2/10: Parando Serviços${NC}"
 
-systemctl stop nginx 2>/dev/null || true
+echo "Status atual do Nginx:"
+systemctl status nginx --no-pager || true
+echo ""
+
+systemctl stop nginx || true
 echo -e "${GREEN}✓ Nginx parado${NC}"
 
+echo "Processos Node em execução:"
+ps aux | grep node || true
+echo ""
+
 # Kill any Node processes in project directory
-pkill -f "$PROJECT_ROOT" 2>/dev/null || true
+pkill -f "$PROJECT_ROOT" || true
 echo -e "${GREEN}✓ Processos Node encerrados${NC}"
 
-echo ""
+pause_between_phases
 
 # ============================================
 # PHASE 3: Remove Everything
@@ -114,6 +139,8 @@ echo -e "${YELLOW}Phase 3/10: Removendo Configurações Antigas${NC}"
 # Remove project directory
 if [ -d "$PROJECT_ROOT" ]; then
     echo "Removendo diretório do projeto..."
+    echo "Conteúdo antes da remoção:"
+    du -sh "$PROJECT_ROOT"
     rm -rf "$PROJECT_ROOT"
     echo -e "${GREEN}✓ Diretório do projeto removido${NC}"
 fi
@@ -131,17 +158,19 @@ fi
 
 # Clear Nginx cache
 if [ -d "/var/cache/nginx" ]; then
+    echo "Conteúdo do cache Nginx:"
+    du -sh /var/cache/nginx/* 2>/dev/null || true
     rm -rf /var/cache/nginx/*
     echo -e "${GREEN}✓ Cache Nginx limpo${NC}"
 fi
 
-# Clear logs (keep directory structure)
+# Clear logs
 if [ -d "/var/log/nginx" ]; then
-    find /var/log/nginx -name "*monitor*" -type f -delete 2>/dev/null || true
+    find /var/log/nginx -name "*monitor*" -type f -delete || true
     echo -e "${GREEN}✓ Logs antigos removidos${NC}"
 fi
 
-echo ""
+pause_between_phases
 
 # ============================================
 # Function: Install Node.js 20.x
@@ -150,10 +179,14 @@ install_nodejs() {
     echo "Instalando Node.js 20.x via NodeSource..."
     
     # Remove old nodejs if exists
-    apt-get remove -y nodejs npm 2>/dev/null || true
+    echo "Removendo versões antigas do Node.js..."
+    apt-get remove -y nodejs npm || true
     
     # Install Node.js 20.x
+    echo "Baixando script de instalação do NodeSource..."
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    
+    echo "Instalando Node.js..."
     apt-get install -y nodejs
     
     # Verify installation
@@ -172,16 +205,20 @@ install_nodejs() {
 # ============================================
 echo -e "${YELLOW}Phase 4/10: Instalando Dependências${NC}"
 
-# Update package list
 echo "Atualizando lista de pacotes..."
-apt-get update -qq
+apt-get update
+
+echo ""
+echo "Pacotes atualmente instalados:"
+dpkg -l | grep -E "nginx|nodejs|npm|git|curl|zip" || true
+echo ""
 
 # Install basic packages (npm removed - comes with nodejs)
 PACKAGES="nginx git curl zip unzip"
 for pkg in $PACKAGES; do
     if ! dpkg -l | grep -q "^ii  $pkg "; then
         echo "Instalando $pkg..."
-        timeout 300 apt-get install -y $pkg
+        apt-get install -y $pkg
         echo -e "${GREEN}✓ $pkg instalado${NC}"
     else
         echo -e "${GREEN}✓ $pkg já instalado${NC}"
@@ -189,7 +226,10 @@ for pkg in $PACKAGES; do
 done
 
 # Check Node.js version
+echo ""
+echo "Verificando Node.js..."
 if command -v node >/dev/null 2>&1; then
+    echo "Node.js encontrado: $(node --version)"
     NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
     if [ "$NODE_VERSION" -lt 18 ]; then
         echo -e "${YELLOW}⚠ Node.js versão antiga detectada (v$NODE_VERSION)${NC}"
@@ -205,14 +245,17 @@ fi
 
 # Validate environment
 echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Validando ambiente instalado..."
-nginx -v || { echo -e "${RED}❌ Nginx não instalado corretamente${NC}"; exit 1; }
-node --version || { echo -e "${RED}❌ Node.js não instalado corretamente${NC}"; exit 1; }
-npm --version || { echo -e "${RED}❌ npm não instalado corretamente${NC}"; exit 1; }
-git --version || { echo -e "${RED}❌ Git não instalado corretamente${NC}"; exit 1; }
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+nginx -v
+node --version
+npm --version
+git --version
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✓ Todos os componentes validados${NC}"
 
-echo ""
+pause_between_phases
 
 # ============================================
 # PHASE 5: Create Project Structure
@@ -220,13 +263,17 @@ echo ""
 echo -e "${YELLOW}Phase 5/10: Criando Estrutura do Projeto${NC}"
 
 mkdir -p "$PROJECT_ROOT"/{dist,chrome-extension,updates,logs,backups}
+echo "Estrutura criada:"
+tree -L 2 "$PROJECT_ROOT" || ls -laR "$PROJECT_ROOT"
 echo -e "${GREEN}✓ Estrutura de diretórios criada${NC}"
 
 # Set ownership
 chown -R www-data:www-data "$PROJECT_ROOT"
+echo "Permissões:"
+ls -la "$PROJECT_ROOT"
 echo -e "${GREEN}✓ Permissões configuradas${NC}"
 
-echo ""
+pause_between_phases
 
 # ============================================
 # PHASE 6: Clone/Copy Project Files
@@ -235,25 +282,29 @@ echo -e "${YELLOW}Phase 6/10: Copiando Arquivos do Projeto${NC}"
 
 FILES_COPIED=false
 
-# Option 1: Copy from local directory (if running from project folder)
+echo "Verificando diretório atual: $(pwd)"
+echo "Conteúdo:"
+ls -la
+
+# Option 1: Copy from local directory
 if [ -d "./dist" ] && [ -d "./chrome-extension" ]; then
     echo "Encontrados arquivos no diretório local..."
     
-    # Verify source files exist
     if [ -f "./chrome-extension/manifest.json" ]; then
         echo "Copiando arquivos do diretório local..."
-        cp -r ./dist/* "$PROJECT_ROOT/dist/" 2>/dev/null || true
-        cp -r ./chrome-extension/* "$PROJECT_ROOT/chrome-extension/" 2>/dev/null || true
+        cp -rv ./dist/* "$PROJECT_ROOT/dist/"
+        cp -rv ./chrome-extension/* "$PROJECT_ROOT/chrome-extension/"
         echo -e "${GREEN}✓ Arquivos copiados do diretório local${NC}"
         FILES_COPIED=true
     else
-        echo -e "${YELLOW}⚠ Arquivos de origem incompletos no diretório local${NC}"
+        echo -e "${YELLOW}⚠ Arquivos de origem incompletos${NC}"
     fi
 fi
 
 # Option 2: Clone from Git if local copy failed
 if [ "$FILES_COPIED" = false ]; then
-    echo -e "${YELLOW}Arquivos locais não encontrados. Deseja clonar do Git? (s/n)${NC}"
+    echo -e "${YELLOW}Arquivos locais não encontrados.${NC}"
+    echo "Deseja clonar do Git? (s/n)"
     read -p "Resposta: " CLONE_GIT
     
     if [ "$CLONE_GIT" = "s" ] || [ "$CLONE_GIT" = "S" ]; then
@@ -264,30 +315,37 @@ if [ "$FILES_COPIED" = false ]; then
             echo "Clonando do repositório Git..."
             git clone "$GIT_URL" "$PROJECT_ROOT/temp"
             
+            echo "Conteúdo clonado:"
+            ls -la "$PROJECT_ROOT/temp"
+            
             # Copy files
             if [ -d "$PROJECT_ROOT/temp/chrome-extension" ]; then
-                cp -r "$PROJECT_ROOT/temp/chrome-extension/"* "$PROJECT_ROOT/chrome-extension/" 2>/dev/null || true
-                cp -r "$PROJECT_ROOT/temp/dist/"* "$PROJECT_ROOT/dist/" 2>/dev/null || true
+                cp -rv "$PROJECT_ROOT/temp/chrome-extension/"* "$PROJECT_ROOT/chrome-extension/"
+                cp -rv "$PROJECT_ROOT/temp/dist/"* "$PROJECT_ROOT/dist/" || true
                 echo -e "${GREEN}✓ Arquivos clonados do Git${NC}"
                 FILES_COPIED=true
             fi
             
-            # Cleanup
             rm -rf "$PROJECT_ROOT/temp"
         fi
     fi
 fi
 
 # Verify critical files
-if [ ! -f "$PROJECT_ROOT/chrome-extension/manifest.json" ]; then
-    echo -e "${RED}❌ ERRO: Arquivo manifest.json não encontrado!${NC}"
-    echo -e "${YELLOW}Por favor, copie os arquivos manualmente para:${NC}"
-    echo -e "   $PROJECT_ROOT/chrome-extension/"
+echo ""
+echo "Verificando arquivos críticos..."
+if [ -f "$PROJECT_ROOT/chrome-extension/manifest.json" ]; then
+    echo "manifest.json encontrado:"
+    cat "$PROJECT_ROOT/chrome-extension/manifest.json"
+    echo -e "${GREEN}✓ Arquivos do projeto verificados${NC}"
+else
+    echo -e "${RED}❌ ERRO: manifest.json não encontrado!${NC}"
+    echo "Conteúdo do diretório chrome-extension:"
+    ls -la "$PROJECT_ROOT/chrome-extension/"
     exit 1
 fi
 
-echo -e "${GREEN}✓ Arquivos do projeto verificados${NC}"
-echo ""
+pause_between_phases
 
 # ============================================
 # PHASE 7: Build Extension
@@ -297,13 +355,22 @@ echo -e "${YELLOW}Phase 7/10: Compilando Extensão${NC}"
 if [ -d "$PROJECT_ROOT/chrome-extension" ]; then
     cd "$PROJECT_ROOT/chrome-extension"
     
-    # Install dependencies if package.json exists
+    echo "Diretório atual: $(pwd)"
+    echo "Conteúdo:"
+    ls -la
+    
+    # Install dependencies
     if [ -f "package.json" ]; then
+        echo "package.json encontrado:"
+        cat package.json
+        echo ""
         echo "Instalando dependências da extensão..."
         npm install
         
         if [ $? -eq 0 ]; then
             echo -e "${GREEN}✓ Dependências instaladas${NC}"
+            echo "node_modules criado:"
+            ls -la node_modules/ | head -20
         else
             echo -e "${RED}❌ Erro ao instalar dependências${NC}"
             exit 1
@@ -312,44 +379,35 @@ if [ -d "$PROJECT_ROOT/chrome-extension" ]; then
     
     # Build extension
     if [ -f "build.js" ]; then
-        echo "Compilando extensão..."
+        echo "Executando build..."
         npm run build
         
         if [ $? -eq 0 ]; then
             echo -e "${GREEN}✓ Extensão compilada${NC}"
+            echo "Arquivos gerados:"
+            ls -lh corpmonitor.*
         else
             echo -e "${RED}❌ Erro ao compilar extensão${NC}"
             exit 1
         fi
         
-        # Verify and copy artifacts
+        # Copy artifacts
         if [ -f "corpmonitor.zip" ] && [ -f "corpmonitor.crx" ]; then
-            cp corpmonitor.zip corpmonitor.crx corpmonitor.sha256 "$PROJECT_ROOT/updates/" 2>/dev/null || true
+            cp -v corpmonitor.zip corpmonitor.crx corpmonitor.sha256 "$PROJECT_ROOT/updates/"
             
-            # Verify copy
-            if [ -f "$PROJECT_ROOT/updates/corpmonitor.zip" ]; then
-                echo -e "${GREEN}✓ Arquivos copiados para diretório de updates${NC}"
-                echo "  - corpmonitor.zip: $(du -h corpmonitor.zip | cut -f1)"
-                echo "  - corpmonitor.crx: $(du -h corpmonitor.crx | cut -f1)"
-            else
-                echo -e "${RED}❌ Erro ao copiar arquivos de build${NC}"
-                exit 1
-            fi
+            echo "Arquivos copiados para updates:"
+            ls -lh "$PROJECT_ROOT/updates/"
+            echo -e "${GREEN}✓ Arquivos copiados${NC}"
         else
             echo -e "${RED}❌ Arquivos de build não encontrados${NC}"
-            ls -la
             exit 1
         fi
-    else
-        echo -e "${YELLOW}⚠ build.js não encontrado, pulando compilação${NC}"
     fi
     
     # Copy privacy policy
     if [ -f "privacy-policy.html" ]; then
-        cp privacy-policy.html "$PROJECT_ROOT/dist/"
+        cp -v privacy-policy.html "$PROJECT_ROOT/dist/"
         echo -e "${GREEN}✓ Política de privacidade copiada${NC}"
-    else
-        echo -e "${YELLOW}⚠ privacy-policy.html não encontrado${NC}"
     fi
     
     cd - > /dev/null
@@ -358,7 +416,7 @@ else
     exit 1
 fi
 
-echo ""
+pause_between_phases
 
 # ============================================
 # PHASE 8: Configure Nginx
@@ -380,7 +438,7 @@ server {
     listen [::]:443 ssl http2;
     server_name monitorcorporativo.com www.monitorcorporativo.com;
 
-    # SSL Configuration (update paths to your certificates)
+    # SSL Configuration
     ssl_certificate /etc/letsencrypt/live/monitorcorporativo.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/monitorcorporativo.com/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -405,14 +463,13 @@ server {
     location / {
         try_files $uri $uri/ /index.html;
         
-        # Cache static assets
         location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
             expires 1y;
             add_header Cache-Control "public, immutable";
         }
     }
 
-    # Privacy Policy (required for Chrome Web Store)
+    # Privacy Policy
     location = /privacy-policy.html {
         root /var/www/monitor-corporativo/dist;
         add_header Cache-Control "public, max-age=3600";
@@ -420,23 +477,17 @@ server {
         access_log /var/log/nginx/privacy-policy-access.log;
     }
 
-    # Extension Updates Directory
+    # Extension Updates
     location /updates/ {
         alias /var/www/monitor-corporativo/updates/;
         autoindex off;
         
-        # CORS headers for Chrome extension updates
         add_header Access-Control-Allow-Origin "*" always;
         add_header Access-Control-Allow-Methods "GET, HEAD" always;
         add_header Access-Control-Allow-Headers "Content-Type" always;
-        
-        # Cache control
         add_header Cache-Control "public, max-age=3600";
-        
-        # Security
         add_header X-Content-Type-Options "nosniff" always;
         
-        # MIME types
         types {
             application/x-chrome-extension crx;
             application/zip zip;
@@ -446,7 +497,6 @@ server {
         access_log /var/log/nginx/extension-updates-access.log;
     }
 
-    # Deny access to sensitive files
     location ~ /\. {
         deny all;
         access_log off;
@@ -459,6 +509,8 @@ server {
 }
 NGINX_EOF
 
+echo "Configuração Nginx criada:"
+cat "$NGINX_CONF"
 echo -e "${GREEN}✓ Configuração Nginx criada${NC}"
 
 # Enable site
@@ -466,15 +518,17 @@ ln -sf "$NGINX_CONF" "$NGINX_ENABLED"
 echo -e "${GREEN}✓ Site habilitado${NC}"
 
 # Test configuration
-if nginx -t 2>&1 | grep -q "test is successful"; then
+echo "Testando configuração Nginx..."
+nginx -t
+
+if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Configuração Nginx válida${NC}"
 else
     echo -e "${RED}❌ Erro na configuração Nginx${NC}"
-    nginx -t
     exit 1
 fi
 
-echo ""
+pause_between_phases
 
 # ============================================
 # PHASE 9: Start Services
@@ -482,13 +536,16 @@ echo ""
 echo -e "${YELLOW}Phase 9/10: Iniciando Serviços${NC}"
 
 systemctl start nginx
-systemctl enable nginx > /dev/null 2>&1
+systemctl enable nginx
 echo -e "${GREEN}✓ Nginx iniciado e habilitado${NC}"
 
 systemctl reload nginx
 echo -e "${GREEN}✓ Nginx recarregado${NC}"
 
-echo ""
+echo "Status do Nginx:"
+systemctl status nginx --no-pager
+
+pause_between_phases
 
 # ============================================
 # PHASE 10: Validation
@@ -502,167 +559,45 @@ else
     echo -e "${RED}❌ Nginx não está rodando${NC}"
 fi
 
-# Test main site (local)
-if curl -s -o /dev/null -w "%{http_code}" http://localhost | grep -q "200\|301\|302"; then
-    echo -e "${GREEN}✓ Site principal acessível (localhost)${NC}"
-else
-    echo -e "${YELLOW}⚠ Site principal não responde em localhost${NC}"
-fi
+# Test main site
+echo "Testando site principal..."
+curl -I http://localhost
 
 # Test privacy policy
+echo ""
+echo "Verificando privacy policy..."
 if [ -f "$PROJECT_ROOT/dist/privacy-policy.html" ]; then
     echo -e "${GREEN}✓ Política de privacidade existe${NC}"
+    echo "Conteúdo (primeiras linhas):"
+    head -20 "$PROJECT_ROOT/dist/privacy-policy.html"
 else
     echo -e "${RED}❌ Política de privacidade não encontrada${NC}"
 fi
 
 # Test extension files
+echo ""
+echo "Verificando arquivos da extensão..."
 if [ -f "$PROJECT_ROOT/updates/corpmonitor.crx" ]; then
     echo -e "${GREEN}✓ Extensão (CRX) existe${NC}"
+    ls -lh "$PROJECT_ROOT/updates/corpmonitor.crx"
 else
     echo -e "${YELLOW}⚠ Extensão (CRX) não encontrada${NC}"
 fi
 
 if [ -f "$PROJECT_ROOT/updates/corpmonitor.zip" ]; then
     echo -e "${GREEN}✓ Extensão (ZIP) existe${NC}"
+    ls -lh "$PROJECT_ROOT/updates/corpmonitor.zip"
 else
     echo -e "${YELLOW}⚠ Extensão (ZIP) não encontrada${NC}"
 fi
 
 echo ""
-
-# ============================================
-# PHASE 11: Generate Report
-# ============================================
-echo -e "${YELLOW}Gerando Relatório Final...${NC}"
-
-REPORT_FILE="$PROJECT_ROOT/DEPLOYMENT_REPORT.txt"
-
-cat > "$REPORT_FILE" << EOF
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  CorpMonitor - Relatório de Deploy Completo
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Data: $(date '+%Y-%m-%d %H:%M:%S')
-Servidor: $(hostname)
-Usuário: $USER
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-✅ STATUS: DEPLOY COMPLETO
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📁 Estrutura Criada:
-
-  ✓ $PROJECT_ROOT/dist/              - Site principal
-  ✓ $PROJECT_ROOT/chrome-extension/  - Código da extensão
-  ✓ $PROJECT_ROOT/updates/           - Arquivos de update
-  ✓ $PROJECT_ROOT/logs/              - Logs da aplicação
-  ✓ $PROJECT_ROOT/backups/           - Backups locais
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🌐 URLs Públicas:
-
-  Site Principal:    https://$DOMAIN
-  Privacy Policy:    https://$DOMAIN/privacy-policy.html
-  Extension CRX:     https://$DOMAIN/updates/corpmonitor.crx
-  Extension ZIP:     https://$DOMAIN/updates/corpmonitor.zip
-  SHA256 Checksum:   https://$DOMAIN/updates/corpmonitor.sha256
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🔧 Configurações:
-
-  Nginx Config:      $NGINX_CONF
-  Project Root:      $PROJECT_ROOT
-  Backup Location:   $BACKUP_FILE
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-✅ Serviços Ativos:
-
-  Nginx:             $(systemctl is-active nginx)
-  Status:            $(systemctl status nginx --no-pager -l | head -3)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📊 Arquivos da Extensão:
-
-$(ls -lh "$PROJECT_ROOT/updates/" 2>/dev/null || echo "  Nenhum arquivo encontrado")
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🧪 Testes de Validação:
-
-  1. Testar site principal:
-     curl -I https://$DOMAIN
-
-  2. Testar privacy policy:
-     curl -I https://$DOMAIN/privacy-policy.html
-
-  3. Testar download da extensão:
-     curl -I https://$DOMAIN/updates/corpmonitor.crx
-
-  4. Verificar checksum:
-     curl https://$DOMAIN/updates/corpmonitor.sha256
-     sha256sum $PROJECT_ROOT/updates/corpmonitor.zip
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🚀 Próximos Passos:
-
-  1. Verificar se o site está acessível publicamente
-  2. Testar a política de privacidade no navegador
-  3. Fazer upload de corpmonitor.zip para Chrome Web Store
-  4. Configurar DNS se necessário
-  5. Configurar SSL/TLS se não configurado
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🔄 Rollback (Se Necessário):
-
-  sudo tar -xzf "$BACKUP_FILE" -C "$(dirname "$PROJECT_ROOT")"
-  sudo systemctl restart nginx
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📞 Suporte:
-
-  Documentação:     $PROJECT_ROOT/chrome-extension/CHROME_STORE_SUBMISSION.md
-  Backup Original:  $BACKUP_FILE
-  Logs Nginx:       /var/log/nginx/monitor-corporativo-*.log
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EOF
-
-echo -e "${GREEN}✓ Relatório gerado: $REPORT_FILE${NC}"
-
-echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}  ✅ DEPLOY COMPLETO FINALIZADO!${NC}"
+echo -e "${GREEN}  ✅ DEPLOY COMPLETO (DEBUG)${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "${CYAN}📋 Resumo:${NC}"
-echo -e "   ✓ Backup criado: $BACKUP_FILE"
-echo -e "   ✓ Configurações antigas removidas"
-echo -e "   ✓ Novo ambiente configurado"
-echo -e "   ✓ Nginx configurado e rodando"
-echo -e "   ✓ Extensão pronta para deploy"
+echo -e "${CYAN}📝 Log completo salvo em: $LOG_FILE${NC}"
+echo -e "${CYAN}📁 Backup salvo em: $BACKUP_FILE${NC}"
 echo ""
-echo -e "${CYAN}📖 Relatório completo: ${NC}$REPORT_FILE"
-echo ""
-echo -e "${CYAN}🌐 URLs para testar:${NC}"
-echo -e "   • https://$DOMAIN"
-echo -e "   • https://$DOMAIN/privacy-policy.html"
-echo -e "   • https://$DOMAIN/updates/corpmonitor.crx"
-echo ""
-echo -e "${YELLOW}⚠️  Lembre-se de:${NC}"
-echo -e "   1. Verificar certificado SSL"
-echo -e "   2. Testar todos os endpoints"
-echo -e "   3. Validar política de privacidade"
-echo -e "   4. Submeter extensão ao Chrome Web Store"
-echo ""
-echo -e "${GREEN}🎉 Servidor pronto para produção!${NC}"
+echo -e "${YELLOW}Revise o log para detalhes completos da instalação.${NC}"
 echo ""

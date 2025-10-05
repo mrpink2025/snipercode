@@ -7,6 +7,61 @@ Este script **APAGA TUDO** e reconfigura o servidor do zero. Use apenas se:
 - Você quer começar completamente do zero
 - Você tem um backup manual adicional (além do backup automático do script)
 
+## 🆕 Versões Disponíveis
+
+### Versão de Produção (Recomendada)
+**Arquivo**: `reset-and-deploy-complete.sh`
+- ✅ Instalação automatizada completa
+- ✅ Instalação automática do Node.js 20.x via NodeSource
+- ✅ Validação robusta de ambiente
+- ✅ Verificação de arquivos fonte
+- ✅ Tratamento de erros melhorado
+- ✅ Logging detalhado em arquivo separado
+- ✅ Saída limpa e organizada
+
+### Versão de Debug
+**Arquivo**: `reset-and-deploy-complete-debug.sh`
+- 🔍 Mesma funcionalidade com saída verbosa
+- 🔍 Pausas entre fases para revisão
+- 🔍 Modo debug ativado (set -x)
+- 🔍 Exibe conteúdo de arquivos e diretórios
+- 🔍 Ideal para troubleshooting e primeira instalação
+
+## ✨ Melhorias na Nova Versão
+
+### 🔧 Correções Implementadas
+
+**1. Instalação Correta do Node.js**
+- ❌ Removido `npm` da lista de pacotes (vem automaticamente com nodejs)
+- ✅ Instala Node.js 20.x via NodeSource oficial
+- ✅ Verifica versão instalada e atualiza se < v18
+- ✅ Timeout de 5 minutos para instalação de pacotes
+
+**2. Validação de Ambiente**
+- ✅ Testa todas as dependências após instalação
+- ✅ Exibe versões instaladas (nginx, node, npm, git)
+- ✅ Falha imediatamente se algum componente crítico não estiver disponível
+- ✅ Comandos: `nginx -v`, `node --version`, `npm --version`, `git --version`
+
+**3. Verificação de Arquivos Fonte**
+- ✅ Verifica se arquivos do projeto existem antes de copiar
+- ✅ Oferece opção interativa de clonar do Git se arquivos locais não existirem
+- ✅ Valida `manifest.json` e outros arquivos críticos
+- ✅ Falha com mensagem clara se arquivos essenciais não forem encontrados
+
+**4. Melhor Tratamento de Erros**
+- ✅ Logging detalhado em `/var/log/corpmonitor-deploy-TIMESTAMP.log`
+- ✅ `trap` para cleanup automático em caso de erro
+- ✅ `set -o pipefail` para detectar falhas em pipes
+- ✅ Exit codes apropriados e mensagens de erro claras
+
+**5. Build da Extensão Robusto**
+- ✅ Verifica sucesso explícito de `npm install`
+- ✅ Verifica sucesso explícito de `npm run build`
+- ✅ Valida existência de arquivos gerados (.crx, .zip, .sha256)
+- ✅ Exibe tamanho dos arquivos gerados
+- ✅ Falha graciosamente com mensagens detalhadas
+
 ## 📋 O Que o Script Faz
 
 ### Fase 1: Backup Crítico
@@ -25,9 +80,13 @@ Este script **APAGA TUDO** e reconfigura o servidor do zero. Use apenas se:
 - Limpa cache Nginx
 - Remove logs antigos
 
-### Fase 4: Instalar Dependências
+### Fase 4: Instalar Dependências ⭐ MELHORADO
 - Atualiza lista de pacotes
-- Instala: `nginx`, `git`, `nodejs`, `npm`, `curl`, `zip`, `unzip`
+- Instala pacotes base: `nginx`, `git`, `curl`, `zip`, `unzip`
+- **Verifica versão do Node.js instalada**
+- **Instala Node.js 20.x via NodeSource se necessário** (remove `npm` da lista - vem com nodejs)
+- **Valida todas as dependências** com comandos de verificação
+- **Timeout de 5 minutos** para cada instalação
 
 ### Fase 5: Criar Estrutura
 - Cria diretórios:
@@ -38,18 +97,21 @@ Este script **APAGA TUDO** e reconfigura o servidor do zero. Use apenas se:
   - `/var/www/monitor-corporativo/backups/` (backups locais)
 - Define permissões corretas (www-data)
 
-### Fase 6: Copiar Arquivos
-- Copia arquivos do projeto para o servidor
-- Você pode customizar esta parte para:
-  - Copiar de diretório local
-  - Clonar de repositório Git
-  - Baixar de S3/Cloud Storage
+### Fase 6: Copiar Arquivos ⭐ MELHORADO
+- **Verifica existência de arquivos locais** (./dist e ./chrome-extension)
+- **Valida manifest.json** antes de copiar
+- Copia de diretório local se disponível
+- **Oferece opção interativa de clonar do Git** se arquivos locais não existirem
+- **Falha com mensagem clara** se arquivos críticos não forem encontrados
 
-### Fase 7: Compilar Extensão
-- Instala dependências npm da extensão
-- Executa build (`npm run build`)
-- Copia `corpmonitor.zip`, `corpmonitor.crx`, `corpmonitor.sha256`
-- Copia `privacy-policy.html` para o site
+### Fase 7: Compilar Extensão ⭐ MELHORADO
+- Instala dependências npm da extensão com **verificação de sucesso**
+- Executa build (`npm run build`) com **verificação de sucesso**
+- **Valida existência dos arquivos gerados** (corpmonitor.zip, .crx, .sha256)
+- **Verifica cópia bem-sucedida** para diretório de updates
+- **Exibe tamanho dos arquivos** gerados
+- Copia `privacy-policy.html` com verificação
+- **Falha imediatamente** se build não gerar arquivos esperados
 
 ### Fase 8: Configurar Nginx
 - Cria configuração completa do zero
@@ -80,25 +142,50 @@ Este script **APAGA TUDO** e reconfigura o servidor do zero. Use apenas se:
 
 ### Pré-requisitos
 
-1. **Servidor Ubuntu/Debian** com acesso root
+1. **Servidor Ubuntu/Debian** (testado em Ubuntu 20.04+) com acesso root
 2. **Certificado SSL** configurado (Let's Encrypt recomendado)
 3. **Arquivos do projeto** disponíveis (local ou Git)
 4. **DNS** apontando para o servidor
+5. **Conexão internet estável** (para download do Node.js)
 
-### Instalação
+### Instalação - Versão de Produção
 
 ```bash
 # 1. Fazer upload do script
-scp deploy/reset-and-deploy-complete.sh root@monitorcorporativo.com:/tmp/
+scp deploy/reset-and-deploy-complete.sh root@monitorcorporativo.com:/root/
 
 # 2. Conectar via SSH
 ssh root@monitorcorporativo.com
 
 # 3. Dar permissão de execução
-chmod +x /tmp/reset-and-deploy-complete.sh
+chmod +x /root/reset-and-deploy-complete.sh
 
 # 4. Executar (vai pedir confirmação)
-sudo /tmp/reset-and-deploy-complete.sh
+sudo bash /root/reset-and-deploy-complete.sh
+
+# 5. O script vai gerar um log detalhado
+# Log location: /var/log/corpmonitor-deploy-YYYYMMDD-HHMMSS.log
+```
+
+### Instalação - Versão de Debug (Primeira Vez)
+
+Se esta é sua primeira instalação ou você está tendo problemas, use a versão debug:
+
+```bash
+# 1. Fazer upload do script de debug
+scp deploy/reset-and-deploy-complete-debug.sh root@monitorcorporativo.com:/root/
+
+# 2. Conectar via SSH
+ssh root@monitorcorporativo.com
+
+# 3. Dar permissão de execução
+chmod +x /root/reset-and-deploy-complete-debug.sh
+
+# 4. Executar
+sudo bash /root/reset-and-deploy-complete-debug.sh
+
+# O script irá pausar entre cada fase para você revisar
+# Pressione ENTER para continuar para a próxima fase
 ```
 
 ### Confirmação Necessária
@@ -284,7 +371,67 @@ sudo ufw status
 
 ## 📞 Suporte e Troubleshooting
 
-### Nginx não inicia
+### ❌ Script para na instalação do npm
+
+**Problema**: O script antigo tentava instalar `npm` como pacote separado, mas no Ubuntu moderno ele vem com `nodejs`.
+
+**Solução**: Use a nova versão do script que:
+- Remove `npm` da lista de pacotes
+- Instala Node.js 20.x via NodeSource (que já inclui npm)
+- Valida as versões instaladas
+
+```bash
+# Se você está preso neste erro:
+sudo bash deploy/reset-and-deploy-complete.sh
+```
+
+### ❌ Node.js versão antiga
+
+**Problema**: Servidor tem Node.js v14 ou v16 instalado.
+
+**Solução**: O novo script detecta automaticamente e instala Node.js 20.x:
+
+```bash
+# Ou instale manualmente primeiro:
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -
+sudo apt-get install -y nodejs
+node --version  # Deve mostrar v20.x
+npm --version   # Deve mostrar v10.x
+```
+
+### ❌ Erro ao compilar extensão
+
+**Problema**: `npm run build` falha ou não gera arquivos.
+
+**Solução**: Verifique logs detalhados:
+
+```bash
+# Ver log completo do deploy
+sudo cat /var/log/corpmonitor-deploy-*.log | grep -A 20 "Compilando extensão"
+
+# Ou use versão debug
+sudo bash deploy/reset-and-deploy-complete-debug.sh
+```
+
+### ❌ manifest.json não encontrado
+
+**Problema**: Arquivos do projeto não foram copiados corretamente.
+
+**Solução**: 
+1. Use a versão debug do script
+2. Ou copie manualmente os arquivos:
+
+```bash
+# Copiar de diretório local
+sudo cp -r /caminho/local/chrome-extension/* /var/www/monitor-corporativo/chrome-extension/
+
+# Ou clonar do Git
+sudo git clone SEU_REPO /tmp/projeto
+sudo cp -r /tmp/projeto/chrome-extension/* /var/www/monitor-corporativo/chrome-extension/
+sudo rm -rf /tmp/projeto
+```
+
+### ❌ Nginx não inicia
 
 ```bash
 # Ver logs de erro
@@ -292,6 +439,9 @@ sudo journalctl -u nginx -n 50 --no-pager
 
 # Testar configuração
 sudo nginx -t
+
+# Ver log do deploy
+sudo tail -100 /var/log/corpmonitor-deploy-*.log
 ```
 
 ### Site não carrega
