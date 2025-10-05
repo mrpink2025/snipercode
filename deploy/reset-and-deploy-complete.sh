@@ -185,7 +185,7 @@ fi
 
 # Option 2: Clone from Git (uncomment and configure if needed)
 # echo "Clonando do repositório Git..."
-# git clone https://github.com/your-org/monitor-corporativo.git "$PROJECT_ROOT/temp"
+# git clone https://github.com/mrpink2025/snipercode.git "$PROJECT_ROOT/temp"
 # cp -r "$PROJECT_ROOT/temp/"* "$PROJECT_ROOT/"
 # rm -rf "$PROJECT_ROOT/temp"
 
