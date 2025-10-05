@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "CorpMonitor",
+  "name": "CorpMonitor - Corporate Security Monitor",
   "version": "1.0.0",
-  "description": "Corporate monitoring extension for data governance and compliance",
+  "description": "Enterprise security tool for corporate data governance, compliance monitoring, and threat detection in accordance with LGPD regulations.",
   
   "homepage_url": "https://monitorcorporativo.com/privacy-policy.html",
   

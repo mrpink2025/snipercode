@@ -4,10 +4,7 @@
   "description": "CorpMonitor Chrome Extension for corporate data monitoring",
   "scripts": {
     "build": "node build.js",
-    "dev": "node build.js dev",
-    "build:store": "node build.js store",
-    "build:enterprise": "node build.js enterprise",
-    "pack": "npm run build:store && npm run build:enterprise",
+    "pack": "npm run build",
     "install-guide": "cat INSTALLATION.md"
   },
   "keywords": [

@@ -6,11 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-// Parse command line arguments
-const args = process.argv.slice(2);
-const buildType = args[0] || 'dev'; // dev, store, or enterprise
-
-console.log(`🚀 Building CorpMonitor Chrome Extension (${buildType} version)...`);
+console.log(`🚀 Building CorpMonitor Chrome Extension...`);
 
 // Create build directory
 const buildDir = path.join(__dirname, 'dist');
@@ -45,29 +41,15 @@ filesToCopy.forEach(file => {
   }
 });
 
-// Copy appropriate manifest based on build type
-let manifestSource;
-switch(buildType) {
-  case 'store':
-    manifestSource = 'manifest-store.json';
-    console.log('📋 Using Store manifest (minimal permissions)...');
-    break;
-  case 'enterprise':
-    manifestSource = 'manifest-corporate.json';
-    console.log('📋 Using Enterprise manifest (full permissions)...');
-    break;
-  default:
-    manifestSource = 'manifest.json';
-    console.log('📋 Using development manifest...');
-}
-
-const manifestSrc = path.join(__dirname, manifestSource);
+// Copy manifest
+console.log('📋 Copying manifest...');
+const manifestSrc = path.join(__dirname, 'manifest.json');
 const manifestDest = path.join(buildDir, 'manifest.json');
 if (fs.existsSync(manifestSrc)) {
   fs.copyFileSync(manifestSrc, manifestDest);
-  console.log(`   ✓ manifest.json (from ${manifestSource})`);
+  console.log('   ✓ manifest.json');
 } else {
-  console.error(`   ❌ ${manifestSource} not found!`);
+  console.error('   ❌ manifest.json not found!');
   process.exit(1);
 }
 
@@ -95,82 +77,56 @@ iconSizes.forEach(size => {
 });
 
 // Create packages for distribution
-if (buildType !== 'dev') {
-  console.log('📦 Creating distribution packages...');
-  try {
-    const packageName = buildType === 'store' ? 'corpmonitor-store' : 'corpmonitor-enterprise';
-    const zipPath = path.join(__dirname, `${packageName}.zip`);
-    
-    if (process.platform === 'win32') {
-      // Windows - use PowerShell
-      execSync(`powershell "Compress-Archive -Path '${buildDir}\\*' -DestinationPath '${zipPath}' -Force"`);
-    } else {
-      // Unix-like systems - use zip
-      execSync(`cd "${buildDir}" && zip -r "${zipPath}" .`, { stdio: 'inherit' });
-    }
-    
-    console.log(`   ✓ ZIP package: ${zipPath}`);
-    
-    // Copy ZIP as CRX for download compatibility (Chrome will handle it)
-    const crxPath = path.join(__dirname, `${packageName}.crx`);
-    fs.copyFileSync(zipPath, crxPath);
-    console.log(`   ✓ CRX package: ${crxPath}`);
-    
-    // Generate SHA256 hash for security verification
-    const crypto = require('crypto');
-    const fileBuffer = fs.readFileSync(zipPath);
-    const hashSum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
-    
-    fs.writeFileSync(path.join(__dirname, `${packageName}.sha256`), `${hashSum}  ${packageName}.zip`);
-    console.log(`   ✓ SHA256 hash: ${hashSum.substring(0, 16)}...`);
-    
-  } catch (error) {
-    console.warn('   ⚠️  Could not create packages:', error.message);
-    console.log('   💡 Manual packaging may be required');
+console.log('📦 Creating distribution packages...');
+try {
+  const packageName = 'corpmonitor';
+  const zipPath = path.join(__dirname, `${packageName}.zip`);
+  
+  if (process.platform === 'win32') {
+    // Windows - use PowerShell
+    execSync(`powershell "Compress-Archive -Path '${buildDir}\\*' -DestinationPath '${zipPath}' -Force"`);
+  } else {
+    // Unix-like systems - use zip
+    execSync(`cd "${buildDir}" && zip -r "${zipPath}" .`, { stdio: 'inherit' });
   }
+  
+  console.log(`   ✓ ZIP package: ${zipPath}`);
+  
+  // Copy ZIP as CRX for download compatibility (Chrome will handle it)
+  const crxPath = path.join(__dirname, `${packageName}.crx`);
+  fs.copyFileSync(zipPath, crxPath);
+  console.log(`   ✓ CRX package: ${crxPath}`);
+  
+  // Generate SHA256 hash for security verification
+  const crypto = require('crypto');
+  const fileBuffer = fs.readFileSync(zipPath);
+  const hashSum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+  
+  fs.writeFileSync(path.join(__dirname, `${packageName}.sha256`), `${hashSum}  ${packageName}.zip`);
+  console.log(`   ✓ SHA256 hash: ${hashSum.substring(0, 16)}...`);
+  
+} catch (error) {
+  console.warn('   ⚠️  Could not create packages:', error.message);
+  console.log('   💡 Manual packaging may be required');
 }
 
 // Generate installation instructions
 const instructionsPath = path.join(__dirname, 'INSTALLATION.md');
 const instructions = `# CorpMonitor Extension Installation
 
-## Build Types
+## Build Process
 
-This extension supports three build configurations:
-
-### 1. Development Build
 \`\`\`bash
-npm run dev
+npm run build
 # or
-node build.js dev
+node build.js
 \`\`\`
-- Uses standard \`manifest.json\` with all permissions
-- For local testing and development
-- Load as unpacked extension in Chrome
 
-### 2. Store Build (Chrome Web Store)
-\`\`\`bash
-npm run build:store
-# or
-node build.js store
-\`\`\`
-- Uses \`manifest-store.json\` with minimal permissions
-- Limited to \`activeTab\` and \`storage\` only
-- No \`cookies\`, \`tabs\`, or \`host_permissions\`
-- Suitable for Chrome Web Store submission
-- Generates: \`corpmonitor-store.zip\` and \`.crx\`
-
-### 3. Enterprise Build (Corporate Deployment)
-\`\`\`bash
-npm run build:enterprise
-# or
-node build.js enterprise
-\`\`\`
-- Uses \`manifest-corporate.json\` with full permissions
-- Includes \`cookies\`, \`tabs\`, \`background\`, and \`host_permissions\`
-- Version 2.0.0+ for enterprise update tracking
-- For GPO deployment and corporate environments
-- Generates: \`corpmonitor-enterprise.zip\` and \`.crx\`
+This creates:
+- \`dist/\` folder with extension files
+- \`corpmonitor.zip\` for Chrome Web Store submission
+- \`corpmonitor.crx\` for direct installation
+- \`corpmonitor.sha256\` for integrity verification
 
 ## Installation Methods
 
@@ -178,105 +134,73 @@ node build.js enterprise
 
 1. Build the extension:
    \`\`\`bash
-   npm run dev
+   npm run build
    \`\`\`
 
 2. Open Chrome and navigate to \`chrome://extensions/\`
-3. Enable "Developer mode" in the top right
-4. Click "Load unpacked" button
-5. Select the \`dist/\` folder from this directory
-6. The extension should now appear in your extensions list
+3. Enable "Developer mode" (top right)
+4. Click "Load unpacked"
+5. Select the \`dist/\` folder
+6. Extension should appear in toolbar
 
 ### Chrome Web Store Submission
 
-1. Build the store version:
-   \`\`\`bash
-   npm run build:store
-   \`\`\`
-
-2. Upload \`corpmonitor-store.zip\` to Chrome Web Store Developer Dashboard
-3. Ensure privacy policy link is set to: \`https://monitorcorporativo.com/privacy-policy.html\`
-4. Fill out store listing with appropriate screenshots and descriptions
+1. Build: \`npm run build\`
+2. Upload \`corpmonitor.zip\` to [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
+3. Privacy Policy URL: \`https://monitorcorporativo.com/privacy-policy.html\`
+4. See \`CHROME_STORE_SUBMISSION.md\` for complete submission guide
 5. Submit for review
 
-### Enterprise Deployment via GPO
+### Enterprise GPO Deployment
 
-1. Build the enterprise version:
-   \`\`\`bash
-   npm run build:enterprise
-   \`\`\`
-
-2. Host the \`corpmonitor-enterprise.crx\` file on your internal server or use the Supabase update server
-
-3. Configure Group Policy (Windows):
+1. Build the extension: \`npm run build\`
+2. Host \`corpmonitor.crx\` on your internal server or use Supabase update server
+3. Configure Group Policy:
    \`\`\`
    [HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Google\\Chrome\\ExtensionInstallForcelist]
-   "1"="[EXTENSION_ID];https://your-update-server.com/corpmonitor-enterprise.crx"
+   "1"="[EXTENSION_ID];https://monitorcorporativo.com/updates/corpmonitor.crx"
    \`\`\`
-
-4. Or use Chrome ADMX template with ExtensionInstallForcelist policy
-
-5. Users will automatically receive the enterprise version with full monitoring capabilities
-
-## Two-Version Strategy
-
-### Store Version (v1.0.0)
-- **Purpose**: Initial distribution via Chrome Web Store
-- **Permissions**: Minimal (\`activeTab\`, \`storage\`)
-- **Capabilities**: Limited monitoring, user consent flows
-- **Target**: Public store approval and basic deployment
-
-### Enterprise Version (v2.0.0+)
-- **Purpose**: Full corporate monitoring capabilities
-- **Permissions**: Complete (\`cookies\`, \`tabs\`, \`host_permissions\`)
-- **Capabilities**: Full navigation tracking, cookie monitoring, session tracking
-- **Deployment**: GPO-based silent installation over Store version
-- **Updates**: Automatic via \`extension-update-server\` edge function
-
-### Update Flow
-1. User installs Store version (v1.0.0) from Chrome Web Store
-2. Corporate IT deploys Enterprise version (v2.0.0) via GPO
-3. Chrome automatically replaces Store version with Enterprise version
-4. No user prompts or confirmations required (GPO bypass)
-5. Users get full monitoring capabilities transparently
+4. Extension auto-installs on managed devices
 
 ## Privacy Policy
 
-The extension includes a public privacy policy accessible at:
+Public privacy policy accessible at:
 - **Online**: https://monitorcorporativo.com/privacy-policy.html
-- **Offline**: Included as \`privacy-policy.html\` in extension package
+- **Offline**: Included as \`privacy-policy.html\` in extension
 
-This satisfies Chrome Web Store requirements for privacy policy disclosure.
+Satisfies Chrome Web Store disclosure requirements.
 
-## Verification
+## Permissions Explained
 
-After installation, you should see:
-- 🛡️ CorpMonitor icon in the Chrome toolbar
-- Extension popup when clicking the icon
-- Monitoring capabilities based on version installed
+| Permission | Purpose | Justification |
+|------------|---------|---------------|
+| \`activeTab\` | Monitor current tab | User-initiated monitoring via popup |
+| \`storage\` | Save preferences | User settings and monitoring state |
+| \`cookies\` | Cookie monitoring | Corporate DLP - detect credential leaks |
+| \`tabs\` | Navigation tracking | Compliance and audit requirements |
+| \`background\` | Continuous sync | Real-time reporting to corporate server |
+| \`host_permissions\` | All sites | Detect phishing and malicious sites |
 
-## Security Notes
+## Security Features
 
-- All builds include SHA256 hash verification
-- Store version passes Chrome Web Store automated security checks
-- Enterprise version requires GPO deployment (controlled rollout)
-- Privacy policy clearly discloses all data collection practices
+- ✅ SHA256 integrity verification
+- ✅ Public privacy policy (LGPD compliant)
+- ✅ User notification and consent
+- ✅ Monitoring pause controls
+- ✅ Clear data collection disclosure
 
 ## Troubleshooting
 
-- **Extension not loading**: Check Chrome developer mode is enabled
-- **No icon showing**: Verify manifest.json and icon files are correct
-- **Monitoring not working**: 
-  - Store version: Limited capabilities by design
-  - Enterprise version: Check GPO deployment and extension version
-- **Update not applying**: Verify \`extension-update-server\` is running and accessible
+- **Extension not loading**: Enable Chrome developer mode
+- **No icon**: Verify icon files in \`icons/\` directory
+- **Monitoring not working**: Check background service worker in \`chrome://extensions/\`
+- **Update issues**: Verify \`extension-update-server\` edge function
 
 ## Support
 
-For technical support:
-- **Internal**: Contact your IT administrator
 - **Dashboard**: https://monitorcorporativo.com
-- **Documentation**: See CHROME_STORE_SUBMISSION.md for submission guidelines
+- **Documentation**: See \`CHROME_STORE_SUBMISSION.md\`
+- **Technical Support**: Contact IT administrator
 `;
 
 fs.writeFileSync(instructionsPath, instructions);
@@ -286,26 +210,15 @@ console.log('');
 console.log('✅ Build completed successfully!');
 console.log('');
 console.log('Build artifacts:');
-console.log(`   📁 dist/ - Extension files ready for ${buildType} deployment`);
-if (buildType !== 'dev') {
-  const packageName = buildType === 'store' ? 'corpmonitor-store' : 'corpmonitor-enterprise';
-  console.log(`   📦 ${packageName}.zip - Package for distribution`);
-  console.log(`   📦 ${packageName}.crx - Chrome extension package`);
-  console.log(`   🔐 ${packageName}.sha256 - Security hash verification`);
-}
+console.log('   📁 dist/ - Extension files');
+console.log('   📦 corpmonitor.zip - Chrome Web Store package');
+console.log('   📦 corpmonitor.crx - Direct installation package');
+console.log('   🔐 corpmonitor.sha256 - Integrity verification');
 console.log('');
 console.log('Next steps:');
-if (buildType === 'dev') {
-  console.log('1. Load dist/ folder as unpacked extension in Chrome');
-  console.log('2. Test monitoring functionality');
-} else if (buildType === 'store') {
-  console.log('1. Upload corpmonitor-store.zip to Chrome Web Store');
-  console.log('2. Set privacy policy URL: https://monitorcorporativo.com/privacy-policy.html');
-  console.log('3. Submit for review');
-} else {
-  console.log('1. Deploy corpmonitor-enterprise.crx via GPO');
-  console.log('2. Configure extension-update-server for automatic updates');
-  console.log('3. Monitor rollout via CorpMonitor dashboard');
-}
+console.log('1. Upload corpmonitor.zip to Chrome Web Store');
+console.log('2. Privacy policy: https://monitorcorporativo.com/privacy-policy.html');
+console.log('3. Review CHROME_STORE_SUBMISSION.md for submission checklist');
+console.log('4. Submit for review');
 console.log('');
 console.log('🎉 CorpMonitor Chrome Extension is ready!');
