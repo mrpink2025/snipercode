@@ -49,7 +49,11 @@ const ExtensionPopup = () => {
             >
               Concordo
             </Button>
-            <Button variant="outline" size="sm">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => window.open('https://monitorcorporativo.com/privacy-policy.html', '_blank')}
+            >
               Ver políticas
             </Button>
           </div>
@@ -152,7 +156,12 @@ const ExtensionPopup = () => {
 
         {/* Footer */}
         <div className="text-xs text-muted-foreground text-center pt-2 border-t">
-          v1.0.0-PoC • Política de privacidade corporativa
+          v1.0.0-PoC • <button 
+            onClick={() => window.open('https://monitorcorporativo.com/privacy-policy.html', '_blank')}
+            className="hover:text-primary underline cursor-pointer"
+          >
+            Política de privacidade
+          </button>
         </div>
       </CardContent>
     </Card>
