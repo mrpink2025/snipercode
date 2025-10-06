@@ -31,35 +31,36 @@ serve(async (req) => {
 
     console.log('📝 Creating incident:', { host, machine_id, user_id, severity });
 
-    // Validate required fields
-    if (!host || !machine_id || !user_id || !cookie_excerpt) {
+    // Validate required fields (user_id is optional for extension-originated incidents)
+    if (!host || !machine_id || !cookie_excerpt) {
       return new Response(
         JSON.stringify({ 
-          error: 'Missing required fields: host, machine_id, user_id, cookie_excerpt' 
+          error: 'Missing required fields: host, machine_id, cookie_excerpt' 
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Check if user exists
-    const { data: userProfile, error: userError } = await supabaseClient
-      .from('profiles')
-      .select('id, is_active')
-      .eq('id', user_id)
-      .single();
+    // If user_id is provided, validate it
+    let validatedUserId = user_id;
+    if (user_id) {
+      const { data: userProfile, error: userError } = await supabaseClient
+        .from('profiles')
+        .select('id, is_active')
+        .eq('id', user_id)
+        .single();
 
-    if (userError || !userProfile) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid user_id' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!userProfile.is_active) {
-      return new Response(
-        JSON.stringify({ error: 'User account is not active' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (userError || !userProfile) {
+        console.warn('⚠️ Invalid user_id provided, proceeding without user association');
+        validatedUserId = null;
+      } else if (!userProfile.is_active) {
+        return new Response(
+          JSON.stringify({ error: 'User account is not active' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      console.log('ℹ️ No user_id provided - extension-originated incident');
     }
 
     // Determine severity based on red list status
@@ -72,7 +73,7 @@ serve(async (req) => {
       .insert({
         host,
         machine_id,
-        user_id,
+        user_id: validatedUserId,
         tab_url,
         severity: finalSeverity,
         status: initialStatus,
@@ -94,14 +95,14 @@ serve(async (req) => {
     console.log('✅ Incident created successfully:', incident.incident_id);
 
     // If it's a red list incident, automatically create a blocked domain entry
-    if (is_red_list) {
+    if (is_red_list && validatedUserId) {
       try {
         await supabaseClient
           .from('blocked_domains')
           .insert({
             domain: host,
             reason: `Automatic block - Red list domain (Incident: ${incident.incident_id})`,
-            blocked_by: user_id,
+            blocked_by: validatedUserId,
             is_active: true
           });
         
@@ -112,20 +113,22 @@ serve(async (req) => {
       }
     }
 
-    // Create audit log
-    try {
-      await supabaseClient
-        .from('audit_logs')
-        .insert({
-          user_id,
-          action: 'create',
-          resource_type: 'incidents',
-          resource_id: incident.id,
-          new_values: incident,
-          ip_address: req.headers.get('x-forwarded-for') || 'unknown'
-        });
-    } catch (auditError) {
-      console.warn('⚠️ Failed to create audit log:', auditError);
+    // Create audit log (only if user_id is present)
+    if (validatedUserId) {
+      try {
+        await supabaseClient
+          .from('audit_logs')
+          .insert({
+            user_id: validatedUserId,
+            action: 'create',
+            resource_type: 'incidents',
+            resource_id: incident.id,
+            new_values: incident,
+            ip_address: req.headers.get('x-forwarded-for') || 'unknown'
+          });
+      } catch (auditError) {
+        console.warn('⚠️ Failed to create audit log:', auditError);
+      }
     }
 
     return new Response(

@@ -5,6 +5,7 @@ export interface KPIData {
   totalIncidents: number;
   activeIncidents: number;
   blockedDomains: number;
+  monitoredMachines: number;
   
   severityBreakdown: {
     low: number;
@@ -46,6 +47,24 @@ export const getKPIData = async (): Promise<KPIData> => {
       throw domainsError;
     }
 
+    // Get monitored machines count (unique active machine_ids)
+    const { data: activeSessions, error: sessionsError } = await supabase
+      .from('active_sessions')
+      .select('machine_id')
+      .eq('is_active', true);
+
+    if (sessionsError) {
+      console.error('Error fetching active sessions:', sessionsError);
+    }
+
+    const uniqueMachines = new Set(activeSessions?.map(s => s.machine_id) || []);
+    const monitoredMachines = uniqueMachines.size;
+
+    console.log('📊 KPI Data:', { 
+      incidents: incidentCounts?.length || 0,
+      blockedDomains: blockedDomainsCount || 0,
+      monitoredMachines 
+    });
 
     const incidents = incidentCounts || [];
     const totalIncidents = incidents.length;
@@ -90,6 +109,7 @@ export const getKPIData = async (): Promise<KPIData> => {
       totalIncidents,
       activeIncidents,
       blockedDomains: blockedDomainsCount || 0,
+      monitoredMachines,
       severityBreakdown,
       statusBreakdown,
       recentActivity
@@ -102,6 +122,7 @@ export const getKPIData = async (): Promise<KPIData> => {
       totalIncidents: 0,
       activeIncidents: 0,
       blockedDomains: 0,
+      monitoredMachines: 0,
       severityBreakdown: {
         low: 0,
         medium: 0,

