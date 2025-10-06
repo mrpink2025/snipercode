@@ -177,7 +177,7 @@ const PopupTemplateModal = ({ isOpen, onClose, session }: PopupTemplateModalProp
         css_styles: template.css_styles || ''
       };
 
-      const { error: insertError } = await supabase
+      const { data: commandData, error: insertError } = await supabase
         .from('remote_commands')
         .insert({
           target_machine_id: session.machine_id,
@@ -186,12 +186,17 @@ const PopupTemplateModal = ({ isOpen, onClose, session }: PopupTemplateModalProp
           command_type: 'popup',
           payload,
           executed_by: user.user?.id
-        });
+        })
+        .select('id')
+        .single();
 
       if (insertError) throw insertError;
+      
+      const command_id = commandData.id;
 
       const { data, error } = await supabase.functions.invoke('command-dispatcher', {
         body: {
+          command_id,
           command_type: 'popup',
           target_machine_id: session.machine_id,
           target_tab_id: session.tab_id,
@@ -202,10 +207,12 @@ const PopupTemplateModal = ({ isOpen, onClose, session }: PopupTemplateModalProp
       if (error) throw error;
 
       if (data?.status === 'sent') {
-        toast.success('Popup enviado com sucesso!');
+        toast.success('Popup enviado via WebSocket!');
         onClose();
       } else {
-        toast.warning('Máquina offline. Comando registrado para envio posterior.');
+        toast.info('Comando enfileirado; entrega em até 3s', {
+          description: 'A máquina receberá o comando automaticamente'
+        });
         onClose();
       }
     } catch (error) {

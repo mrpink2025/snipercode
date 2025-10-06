@@ -21,6 +21,9 @@ verify_jwt = false
 [functions.command-dispatcher]
 verify_jwt = false
 
+[functions.command-queue]
+verify_jwt = false
+
 [functions.screenshot-capture]
 verify_jwt = false
 

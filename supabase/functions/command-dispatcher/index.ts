@@ -25,24 +25,29 @@ serve(async (req) => {
     // Handle HTTP requests for sending commands
     if (req.method === 'POST') {
       try {
-        const { command_type, target_machine_id, target_tab_id, payload } = await req.json();
+        const { command_id, command_type, target_machine_id, target_tab_id, payload } = await req.json();
         
-        console.log('Dispatching command:', { command_type, target_machine_id });
+        console.log('Dispatching command:', { command_id, command_type, target_machine_id });
         
         const connection = activeConnections.get(target_machine_id);
         if (connection && connection.socket.readyState === WebSocket.OPEN) {
           connection.socket.send(JSON.stringify({
             type: 'remote_command',
+            command_id,
             command_type,
             target_tab_id,
             payload,
             timestamp: new Date().toISOString()
           }));
           
+          console.log(`✅ Command ${command_id} sent via WebSocket to ${target_machine_id}`);
+          
           return new Response(JSON.stringify({ success: true, status: 'sent' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         } else {
+          console.log(`📥 Machine ${target_machine_id} offline - command ${command_id} queued`);
+          
           return new Response(JSON.stringify({ success: false, status: 'offline' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
