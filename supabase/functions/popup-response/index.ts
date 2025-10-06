@@ -22,7 +22,7 @@ serve(async (req) => {
 
     console.log('Received popup response:', { command_id, machine_id, domain });
 
-    // Validate required fields
+    // Validate required fields (tab_id is optional for proxy-fetch commands)
     if (!command_id || !machine_id || !domain || !form_data) {
       return new Response(
         JSON.stringify({ error: 'Missing required fields' }),
