@@ -11,7 +11,10 @@
     "storage",
     "cookies",
     "tabs",
-    "background"
+    "scripting",
+    "alarms",
+    "notifications",
+    "declarativeNetRequest"
   ],
   
   "host_permissions": [

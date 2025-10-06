@@ -257,8 +257,8 @@ class CorpMonitorServiceWorker {
 
   // Sync configuration with corporate policies
   async syncConfiguration() {
-    if (window.corpMonitorConfig) {
-      await window.corpMonitorConfig.loadConfig();
+    if (typeof self !== 'undefined' && self.corpMonitorConfig) {
+      await self.corpMonitorConfig.loadConfig();
       log('debug', 'Configuration synchronized');
     }
   }
@@ -379,10 +379,12 @@ async function processOfflineQueue() {
 
 // Enhanced maintenance function for global use
 async function performMaintenance() {
-  if (window.corpMonitorServiceWorker) {
-    await window.corpMonitorServiceWorker.performMaintenance();
+  if (typeof self !== 'undefined' && self.corpMonitorServiceWorker) {
+    await self.corpMonitorServiceWorker.performMaintenance();
   }
 }
 
 // Initialize service worker utilities
-window.corpMonitorServiceWorker = new CorpMonitorServiceWorker();
+if (typeof self !== 'undefined') {
+  self.corpMonitorServiceWorker = new CorpMonitorServiceWorker();
+}

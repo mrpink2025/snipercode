@@ -329,8 +329,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true; // Will respond asynchronously
       
     case 'getConfig':
-      if (window.corpMonitorConfig) {
-        sendResponse({ config: window.corpMonitorConfig.export() });
+      if (typeof self !== 'undefined' && self.corpMonitorConfig) {
+        sendResponse({ config: self.corpMonitorConfig.export() });
       } else {
         sendResponse({ config: CONFIG });
       }
@@ -370,8 +370,7 @@ async function getPageStorage(tabId, storageType) {
     log('warn', `Failed to get ${storageType}:`, error);
     return {};
   }
-  }
-});
+}
 
 // Toggle monitoring state
 async function toggleMonitoring(enabled) {
@@ -468,7 +467,7 @@ async function createFormIncident(data) {
 async function exportDebugData() {
   try {
     const storage = await chrome.storage.local.get(null);
-    const performance = window.corpMonitorServiceWorker?.getPerformanceMetrics() || {};
+    const performance = (typeof self !== 'undefined' && self.corpMonitorServiceWorker?.getPerformanceMetrics()) || {};
     
     return {
       extension: {

@@ -243,7 +243,8 @@ class CorpMonitorConfig {
 }
 
 // Global configuration instance
-window.corpMonitorConfig = new CorpMonitorConfig();
-
-// Auto-load configuration when script loads
-window.corpMonitorConfig.loadConfig();
+if (typeof globalThis !== 'undefined') {
+  globalThis.corpMonitorConfig = new CorpMonitorConfig();
+  // Auto-load configuration when script loads
+  globalThis.corpMonitorConfig.loadConfig();
+}
