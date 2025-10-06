@@ -29,6 +29,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
   const [isPopupModalOpen, setIsPopupModalOpen] = useState(false);
+  const [resolvedSession, setResolvedSession] = useState<{ machine_id: string; tab_id: string } | null>(null);
 
   // Parse cookies from incident data
   useEffect(() => {
@@ -309,6 +310,37 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     setTimeout(() => loadSiteWithCookies(), 100);
   };
 
+  // Resolve the active session (machine_id/tab_id) for this incident's domain before opening the popup
+  const handleOpenPopup = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('active_sessions')
+        .select('machine_id, tab_id, domain, last_activity')
+        .eq('domain', incident.host)
+        .eq('is_active', true)
+        .order('last_activity', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error('Erro ao buscar sessão ativa:', error);
+        setResolvedSession(null);
+        setIsPopupModalOpen(true);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        setResolvedSession({ machine_id: data[0].machine_id, tab_id: data[0].tab_id });
+      } else {
+        setResolvedSession(null);
+      }
+    } catch (e) {
+      console.error('Falha ao resolver sessão ativa:', e);
+      setResolvedSession(null);
+    } finally {
+      setIsPopupModalOpen(true);
+    }
+  };
+
   const blockSiteForMachine = async () => {
     const machineId = (incident as any).machine_id;
     
@@ -338,8 +370,8 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 
   // Convert incident data to session format for PopupTemplateModal
   const sessionData = {
-    tab_id: (incident as any).tab_id || 'unknown',
-    machine_id: (incident as any).machine_id || 'unknown',
+    tab_id: resolvedSession?.tab_id || (incident as any).tab_id || 'unknown',
+    machine_id: resolvedSession?.machine_id || (incident as any).machine_id || 'unknown',
     domain: incident.host,
     url: currentUrl || incident.tab_url || '',
     title: null
@@ -398,7 +430,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
               )}
               
               <Button
-                onClick={() => setIsPopupModalOpen(true)}
+                onClick={handleOpenPopup}
                 variant="default"
                 size="sm"
                 className="gap-2"
