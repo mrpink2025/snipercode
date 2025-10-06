@@ -1072,14 +1072,80 @@ const runtimePatchScript = `
         console.error('Failed to fetch cookies for GET request:', err);
       }
 
+      // Helper: check if domain is Google-owned
+      const isGoogleDomain = (hostname: string) => {
+        return hostname.endsWith('.google.com') || 
+               hostname.endsWith('.google.com.br') ||
+               hostname === 'google.com';
+      };
+
+      // Normalize URL: remove fragment
+      const normalizedUrl = decodedUrl.split('#')[0];
+      
       // Retry logic: try up to 3 times with different strategies
       let response: Response | null = null;
       let lastError: Error | null = null;
       let lastStatus = 0;
       let attemptVariant = 'original';
+      let rotatedCookies = false;
       
-      const baseUrl = new URL(decodedUrl);
+      const baseUrl = new URL(normalizedUrl);
       const referrerUrl = `${baseUrl.protocol}//${baseUrl.host}`;
+
+      // For Google domains: call RotateCookiesPage first to get fresh cookies
+      if (isGoogleDomain(baseUrl.hostname) && cookieHeader) {
+        try {
+          console.log('  Google domain detected, calling RotateCookiesPage...');
+          const rotateUrl = `https://accounts.google.com/RotateCookiesPage?og_pid=23&rot=3&origin=${encodeURIComponent(baseUrl.origin)}&exp_id=3701163`;
+          
+          const rotateResponse = await fetch(rotateUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+              'Referer': baseUrl.origin,
+              'Cookie': cookieHeader
+            },
+            redirect: 'follow'
+          });
+
+          if (rotateResponse.ok) {
+            // Extract new cookies from Set-Cookie headers
+            const setCookieHeaders = rotateResponse.headers.getSetCookie?.() || [];
+            if (setCookieHeaders.length > 0) {
+              console.log(`  RotateCookiesPage returned ${setCookieHeaders.length} new cookies`);
+              
+              // Parse and merge new cookies with existing ones
+              const newCookies: Record<string, string> = {};
+              for (const setCookie of setCookieHeaders) {
+                const match = setCookie.match(/^([^=]+)=([^;]+)/);
+                if (match) {
+                  newCookies[match[1]] = match[2];
+                }
+              }
+              
+              // Merge: new cookies override old ones
+              const existingCookies: Record<string, string> = {};
+              if (cookieHeader) {
+                for (const pair of cookieHeader.split('; ')) {
+                  const [name, value] = pair.split('=');
+                  if (name && value) existingCookies[name] = value;
+                }
+              }
+              
+              const mergedCookies = { ...existingCookies, ...newCookies };
+              cookieHeader = Object.entries(mergedCookies).map(([k, v]) => `${k}=${v}`).join('; ');
+              cookieCount = Object.keys(mergedCookies).length;
+              rotatedCookies = true;
+              console.log(`  Merged cookies: ${cookieCount} total after rotation`);
+            }
+          } else {
+            console.log(`  RotateCookiesPage failed with status ${rotateResponse.status}`);
+          }
+        } catch (err) {
+          console.error('  RotateCookiesPage error:', err);
+        }
+      }
 
       // Build comprehensive headers (matching POST)
       const buildHeaders = (includeCookie: boolean) => {
@@ -1109,8 +1175,8 @@ const runtimePatchScript = `
 
       // Attempt 1: Original URL with cookies
       try {
-        console.log(`  Attempt 1: Fetching ${decodedUrl} with ${cookieCount} cookies`);
-        response = await fetch(decodedUrl, {
+        console.log(`  Attempt 1: Fetching ${normalizedUrl} with ${cookieCount} cookies`);
+        response = await fetch(normalizedUrl, {
           headers: buildHeaders(true),
           redirect: 'follow'
         });
@@ -1129,8 +1195,8 @@ const runtimePatchScript = `
       // Attempt 2: Original URL without cookies (if first attempt failed)
       if (!response || !response.ok) {
         try {
-          console.log(`  Attempt 2: Fetching ${decodedUrl} WITHOUT cookies`);
-          response = await fetch(decodedUrl, {
+          console.log(`  Attempt 2: Fetching ${normalizedUrl} WITHOUT cookies`);
+          response = await fetch(normalizedUrl, {
             headers: buildHeaders(false),
             redirect: 'follow'
           });
@@ -1148,34 +1214,39 @@ const runtimePatchScript = `
       }
 
       // Attempt 3: Toggle www subdomain (if previous attempts failed)
+      // SKIP for Google domains (www.mail.google.com doesn't work)
       if (!response || !response.ok) {
-        try {
-          const urlToTry = new URL(decodedUrl);
-          const originalHost = urlToTry.host;
-          
-          if (originalHost.startsWith('www.')) {
-            urlToTry.host = originalHost.substring(4);
-          } else {
-            urlToTry.host = 'www.' + originalHost;
+        if (!isGoogleDomain(baseUrl.hostname)) {
+          try {
+            const urlToTry = new URL(normalizedUrl);
+            const originalHost = urlToTry.host;
+            
+            if (originalHost.startsWith('www.')) {
+              urlToTry.host = originalHost.substring(4);
+            } else {
+              urlToTry.host = 'www.' + originalHost;
+            }
+            
+            const altUrl = urlToTry.href;
+            console.log(`  Attempt 3: Trying alternate host ${altUrl} with cookies`);
+            
+            response = await fetch(altUrl, {
+              headers: buildHeaders(true),
+              redirect: 'follow'
+            });
+            lastStatus = response.status;
+            
+            if (!response.ok) {
+              console.log(`  Attempt 3 failed with status ${response.status}`);
+              throw new Error(`HTTP ${response.status}`);
+            }
+            attemptVariant = 'alternate-host';
+          } catch (error) {
+            lastError = error as Error;
+            response = null;
           }
-          
-          const altUrl = urlToTry.href;
-          console.log(`  Attempt 3: Trying alternate host ${altUrl} with cookies`);
-          
-          response = await fetch(altUrl, {
-            headers: buildHeaders(true),
-            redirect: 'follow'
-          });
-          lastStatus = response.status;
-          
-          if (!response.ok) {
-            console.log(`  Attempt 3 failed with status ${response.status}`);
-            throw new Error(`HTTP ${response.status}`);
-          }
-          attemptVariant = 'alternate-host';
-        } catch (error) {
-          lastError = error as Error;
-          response = null;
+        } else {
+          console.log('  Attempt 3: Skipped (Google domain, www fallback not applicable)');
         }
       }
 
@@ -1337,7 +1408,8 @@ const runtimePatchScript = `
             'X-Debug-Upstream-CT': contentType,
             'X-Debug-Final-CT': contentType,
             'X-Debug-Attempts': attemptVariant === 'original-with-cookies' ? '1' : (attemptVariant === 'original-no-cookies' ? '2' : '3'),
-            'X-Debug-Variant': attemptVariant
+            'X-Debug-Variant': attemptVariant,
+            'X-Debug-Rotate': rotatedCookies ? 'yes' : 'no'
           }
         });
       }
@@ -1438,7 +1510,8 @@ const runtimePatchScript = `
             'X-Debug-Why-HTML': forceHtmlParam ? 'forceHtml' : (detectedHtml ? 'detected' : 'content-type'),
             'X-Debug-Patch-Injected': String(injected),
             'X-Debug-Attempts': attemptVariant === 'original-with-cookies' ? '1' : (attemptVariant === 'original-no-cookies' ? '2' : '3'),
-            'X-Debug-Variant': attemptVariant
+            'X-Debug-Variant': attemptVariant,
+            'X-Debug-Rotate': rotatedCookies ? 'yes' : 'no'
           }
         });
       }
@@ -1454,7 +1527,8 @@ const runtimePatchScript = `
             'X-Debug-Upstream-CT': contentType,
             'X-Debug-Final-CT': 'text/css; charset=utf-8',
             'X-Debug-Attempts': attemptVariant === 'original-with-cookies' ? '1' : (attemptVariant === 'original-no-cookies' ? '2' : '3'),
-            'X-Debug-Variant': attemptVariant
+            'X-Debug-Variant': attemptVariant,
+            'X-Debug-Rotate': rotatedCookies ? 'yes' : 'no'
           }
         });
       }
@@ -1467,7 +1541,8 @@ const runtimePatchScript = `
           'X-Debug-Upstream-CT': contentType,
           'X-Debug-Final-CT': contentType,
           'X-Debug-Attempts': attemptVariant === 'original-with-cookies' ? '1' : (attemptVariant === 'original-no-cookies' ? '2' : '3'),
-          'X-Debug-Variant': attemptVariant
+          'X-Debug-Variant': attemptVariant,
+          'X-Debug-Rotate': rotatedCookies ? 'yes' : 'no'
         }
       });
     }
