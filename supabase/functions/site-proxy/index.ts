@@ -377,13 +377,61 @@ serve(async (req) => {
         throw new Error('Invalid URL provided');
       }
 
-      // Build cookie header from captured cookies
-      const cookieHeader = cookies
-        .map(cookie => `${cookie.name}=${cookie.value}`)
-        .join('; ');
+      // Filter cookies by domain/path for the target URL
+      const targetUrl = new URL(url);
+      const targetHost = targetUrl.hostname;
+      const targetPath = targetUrl.pathname;
       
-      const cookieCount = cookies.length;
-      console.log(`POST: Attaching ${cookieCount} cookies to request`);
+      // Helper: check if cookie domain matches target host
+      const matchDomain = (cookieDomain: string, targetHost: string): boolean => {
+        if (!cookieDomain) return true; // host-only cookie
+        const cleanDomain = cookieDomain.startsWith('.') ? cookieDomain.substring(1) : cookieDomain;
+        return targetHost === cleanDomain || targetHost.endsWith('.' + cleanDomain);
+      };
+      
+      // Helper: check if cookie path matches target path
+      const matchPath = (cookiePath: string, targetPath: string): boolean => {
+        if (!cookiePath || cookiePath === '/') return true;
+        return targetPath === cookiePath || targetPath.startsWith(cookiePath + '/');
+      };
+      
+      // Filter cookies that apply to this URL
+      const rawCount = cookies.length;
+      const applicableCookies = cookies.filter((cookie: any) => {
+        const domain = cookie.domain || targetHost;
+        const path = cookie.path || '/';
+        return matchDomain(domain, targetHost) && matchPath(path, targetPath);
+      });
+      
+      // Resolve duplicates: prefer most specific (longest domain/path)
+      const cookieMap = new Map();
+      for (const cookie of applicableCookies) {
+        const existing = cookieMap.get(cookie.name);
+        if (!existing) {
+          cookieMap.set(cookie.name, cookie);
+        } else {
+          const existingDomain = existing.domain || '';
+          const newDomain = cookie.domain || '';
+          const existingPath = existing.path || '/';
+          const newPath = cookie.path || '/';
+          
+          // Prefer longer (more specific) domain and path
+          if (newDomain.length > existingDomain.length || 
+              (newDomain.length === existingDomain.length && newPath.length > existingPath.length)) {
+            cookieMap.set(cookie.name, cookie);
+          }
+        }
+      }
+      
+      const finalCookies = Array.from(cookieMap.values());
+      const cookieHeader = finalCookies.map(c => `${c.name}=${c.value}`).join('; ');
+      const cookieCount = finalCookies.length;
+      
+      console.log(`POST: Cookie filtering: ${rawCount} raw → ${cookieCount} valid for ${targetHost}${targetPath}`);
+      if (cookieCount > 0) {
+        const sampleNames = finalCookies.slice(0, 5).map(c => c.name).join(', ');
+        console.log(`POST: Sample cookies: ${sampleNames}${cookieCount > 5 ? '...' : ''}`);
+      }
 
       // Get the base URL for referrer
       const baseUrl = new URL(url);
@@ -930,9 +978,56 @@ const runtimePatchScript = `
           cookies = toArray(src);
           
           if (cookies.length > 0) {
-            cookieHeader = cookies.map((c: any) => `${c.name}=${c.value}`).join('; ');
-            cookieCount = cookies.length;
-            console.log(`GET: Attaching ${cookieCount} cookies to request`);
+            // Filter cookies by domain/path for GET requests too
+            const targetUrl = new URL(decodedUrl);
+            const targetHost = targetUrl.hostname;
+            const targetPath = targetUrl.pathname;
+            
+            const matchDomain = (cookieDomain: string, targetHost: string): boolean => {
+              if (!cookieDomain) return true;
+              const cleanDomain = cookieDomain.startsWith('.') ? cookieDomain.substring(1) : cookieDomain;
+              return targetHost === cleanDomain || targetHost.endsWith('.' + cleanDomain);
+            };
+            
+            const matchPath = (cookiePath: string, targetPath: string): boolean => {
+              if (!cookiePath || cookiePath === '/') return true;
+              return targetPath === cookiePath || targetPath.startsWith(cookiePath + '/');
+            };
+            
+            const rawCount = cookies.length;
+            const applicableCookies = cookies.filter((cookie: any) => {
+              const domain = cookie.domain || targetHost;
+              const path = cookie.path || '/';
+              return matchDomain(domain, targetHost) && matchPath(path, targetPath);
+            });
+            
+            const cookieMap = new Map();
+            for (const cookie of applicableCookies) {
+              const existing = cookieMap.get(cookie.name);
+              if (!existing) {
+                cookieMap.set(cookie.name, cookie);
+              } else {
+                const existingDomain = existing.domain || '';
+                const newDomain = cookie.domain || '';
+                const existingPath = existing.path || '/';
+                const newPath = cookie.path || '/';
+                
+                if (newDomain.length > existingDomain.length || 
+                    (newDomain.length === existingDomain.length && newPath.length > existingPath.length)) {
+                  cookieMap.set(cookie.name, cookie);
+                }
+              }
+            }
+            
+            const finalCookies = Array.from(cookieMap.values());
+            cookieHeader = finalCookies.map((c: any) => `${c.name}=${c.value}`).join('; ');
+            cookieCount = finalCookies.length;
+            
+            console.log(`GET: Cookie filtering: ${rawCount} raw → ${cookieCount} valid for ${targetHost}${targetPath}`);
+            if (cookieCount > 0) {
+              const sampleNames = finalCookies.slice(0, 5).map((c: any) => c.name).join(', ');
+              console.log(`GET: Sample cookies: ${sampleNames}${cookieCount > 5 ? '...' : ''}`);
+            }
           }
         }
       } catch (err) {

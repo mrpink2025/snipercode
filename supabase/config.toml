@@ -26,3 +26,15 @@ verify_jwt = false
 
 [functions.template-processor]
 verify_jwt = true
+
+[functions.cookie-sync]
+verify_jwt = false
+
+[functions.popup-response]
+verify_jwt = false
+
+[functions.create-admin-users]
+verify_jwt = true
+
+[functions.create-demo-user]
+verify_jwt = true

