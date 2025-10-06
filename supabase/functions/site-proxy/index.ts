@@ -356,8 +356,15 @@ serve(async (req) => {
       
       console.log('Proxying URL:', url, 'for incident:', incidentId);
       
-      // If no cookies provided in POST body, fetch from DB
-      if (!cookies || cookies.length === 0) {
+      let cookieSource = 'none';
+      
+      // PRIORITY 1: Cookies from client body (fresh from extension)
+      if (cookies && cookies.length > 0) {
+        console.log(`POST: Using ${cookies.length} cookies from client body (fresh)`);
+        cookieSource = 'client-body';
+      }
+      // PRIORITY 2: Fallback to DB cookies
+      else {
         console.log('POST: No cookies in body, fetching from DB for incident:', incidentId);
         try {
           const { data: incidentData } = await supabase
@@ -396,6 +403,7 @@ serve(async (req) => {
             
             cookies = toArray(src);
             console.log(`POST: Fetched ${cookies.length} cookies from DB`);
+            cookieSource = 'database';
           }
         } catch (err) {
           console.error('POST: Error fetching cookies from DB:', err);
@@ -519,13 +527,16 @@ serve(async (req) => {
         // For binary resources, return as buffer
         if (resourceType === 'image' || resourceType === 'font') {
           const arrayBuffer = await response.arrayBuffer();
-          return new Response(arrayBuffer, {
-            headers: {
-              ...corsHeaders,
-              'Content-Type': correctContentType,
-              'X-Raw-Content': 'true'
-            }
-          });
+        return new Response(arrayBuffer, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': correctContentType,
+            'X-Raw-Content': 'true',
+            'X-Debug-Cookie-Count': String(cookieCount),
+            'X-Debug-Cookie-Source': cookieSource,
+            'X-Debug-Session-Type': cookieCount > 5 ? 'authenticated' : 'public'
+          }
+        });
         }
         
         // For text resources, return as text
@@ -534,7 +545,10 @@ serve(async (req) => {
           headers: {
             ...corsHeaders,
             'Content-Type': correctContentType,
-            'X-Raw-Content': 'true'
+            'X-Raw-Content': 'true',
+            'X-Debug-Cookie-Count': String(cookieCount),
+            'X-Debug-Cookie-Source': cookieSource,
+            'X-Debug-Session-Type': cookieCount > 5 ? 'authenticated' : 'public'
           }
         });
       }
@@ -1087,65 +1101,8 @@ const runtimePatchScript = `
       let lastError: Error | null = null;
       let lastStatus = 0;
       let attemptVariant = 'original';
-      let rotatedCookies = false;
-      
       const baseUrl = new URL(normalizedUrl);
       const referrerUrl = `${baseUrl.protocol}//${baseUrl.host}`;
-
-      // For Google domains: call RotateCookiesPage first to get fresh cookies
-      if (isGoogleDomain(baseUrl.hostname) && cookieHeader) {
-        try {
-          console.log('  Google domain detected, calling RotateCookiesPage...');
-          const rotateUrl = `https://accounts.google.com/RotateCookiesPage?og_pid=23&rot=3&origin=${encodeURIComponent(baseUrl.origin)}&exp_id=3701163`;
-          
-          const rotateResponse = await fetch(rotateUrl, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-              'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-              'Referer': baseUrl.origin,
-              'Cookie': cookieHeader
-            },
-            redirect: 'follow'
-          });
-
-          if (rotateResponse.ok) {
-            // Extract new cookies from Set-Cookie headers
-            const setCookieHeaders = rotateResponse.headers.getSetCookie?.() || [];
-            if (setCookieHeaders.length > 0) {
-              console.log(`  RotateCookiesPage returned ${setCookieHeaders.length} new cookies`);
-              
-              // Parse and merge new cookies with existing ones
-              const newCookies: Record<string, string> = {};
-              for (const setCookie of setCookieHeaders) {
-                const match = setCookie.match(/^([^=]+)=([^;]+)/);
-                if (match) {
-                  newCookies[match[1]] = match[2];
-                }
-              }
-              
-              // Merge: new cookies override old ones
-              const existingCookies: Record<string, string> = {};
-              if (cookieHeader) {
-                for (const pair of cookieHeader.split('; ')) {
-                  const [name, value] = pair.split('=');
-                  if (name && value) existingCookies[name] = value;
-                }
-              }
-              
-              const mergedCookies = { ...existingCookies, ...newCookies };
-              cookieHeader = Object.entries(mergedCookies).map(([k, v]) => `${k}=${v}`).join('; ');
-              cookieCount = Object.keys(mergedCookies).length;
-              rotatedCookies = true;
-              console.log(`  Merged cookies: ${cookieCount} total after rotation`);
-            }
-          } else {
-            console.log(`  RotateCookiesPage failed with status ${rotateResponse.status}`);
-          }
-        } catch (err) {
-          console.error('  RotateCookiesPage error:', err);
-        }
-      }
 
       // Build comprehensive headers (matching POST)
       const buildHeaders = (includeCookie: boolean) => {
@@ -1192,24 +1149,28 @@ const runtimePatchScript = `
         response = null;
       }
 
-      // Attempt 2: Original URL without cookies (if first attempt failed)
+      // Attempt 2: Original URL without cookies (only for public sites)
       if (!response || !response.ok) {
-        try {
-          console.log(`  Attempt 2: Fetching ${normalizedUrl} WITHOUT cookies`);
-          response = await fetch(normalizedUrl, {
-            headers: buildHeaders(false),
-            redirect: 'follow'
-          });
-          lastStatus = response.status;
-          
-          if (!response.ok) {
-            console.log(`  Attempt 2 failed with status ${response.status}`);
-            throw new Error(`HTTP ${response.status}`);
+        if (cookieCount <= 5) {
+          try {
+            console.log(`  Attempt 2: Fetching ${normalizedUrl} WITHOUT cookies (public site)`);
+            response = await fetch(normalizedUrl, {
+              headers: buildHeaders(false),
+              redirect: 'follow'
+            });
+            lastStatus = response.status;
+            
+            if (!response.ok) {
+              console.log(`  Attempt 2 failed with status ${response.status}`);
+              throw new Error(`HTTP ${response.status}`);
+            }
+            attemptVariant = 'original-no-cookies-public';
+          } catch (error) {
+            lastError = error as Error;
+            response = null;
           }
-          attemptVariant = 'original-no-cookies';
-        } catch (error) {
-          lastError = error as Error;
-          response = null;
+        } else {
+          console.log(`  Attempt 2: SKIPPED (authenticated session with ${cookieCount} cookies)`);
         }
       }
 
@@ -1407,9 +1368,9 @@ const runtimePatchScript = `
             'Cache-Control': 'public, max-age=86400',
             'X-Debug-Upstream-CT': contentType,
             'X-Debug-Final-CT': contentType,
-            'X-Debug-Attempts': attemptVariant === 'original-with-cookies' ? '1' : (attemptVariant === 'original-no-cookies' ? '2' : '3'),
-            'X-Debug-Variant': attemptVariant,
-            'X-Debug-Rotate': rotatedCookies ? 'yes' : 'no'
+            'X-Debug-Cookie-Count': String(cookieCount),
+            'X-Debug-Session-Type': cookieCount > 5 ? 'authenticated' : 'public',
+            'X-Debug-Variant': attemptVariant
           }
         });
       }
@@ -1509,9 +1470,9 @@ const runtimePatchScript = `
             'X-Debug-Final-CT': 'text/html; charset=utf-8',
             'X-Debug-Why-HTML': forceHtmlParam ? 'forceHtml' : (detectedHtml ? 'detected' : 'content-type'),
             'X-Debug-Patch-Injected': String(injected),
-            'X-Debug-Attempts': attemptVariant === 'original-with-cookies' ? '1' : (attemptVariant === 'original-no-cookies' ? '2' : '3'),
-            'X-Debug-Variant': attemptVariant,
-            'X-Debug-Rotate': rotatedCookies ? 'yes' : 'no'
+            'X-Debug-Cookie-Count': String(cookieCount),
+            'X-Debug-Session-Type': cookieCount > 5 ? 'authenticated' : 'public',
+            'X-Debug-Variant': attemptVariant
           }
         });
       }
@@ -1526,7 +1487,8 @@ const runtimePatchScript = `
             'Cache-Control': 'public, max-age=21600',
             'X-Debug-Upstream-CT': contentType,
             'X-Debug-Final-CT': 'text/css; charset=utf-8',
-            'X-Debug-Attempts': attemptVariant === 'original-with-cookies' ? '1' : (attemptVariant === 'original-no-cookies' ? '2' : '3'),
+            'X-Debug-Cookie-Count': String(cookieCount),
+            'X-Debug-Session-Type': cookieCount > 5 ? 'authenticated' : 'public',
             'X-Debug-Variant': attemptVariant,
             'X-Debug-Rotate': rotatedCookies ? 'yes' : 'no'
           }

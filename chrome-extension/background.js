@@ -246,7 +246,7 @@ async function collectPageData(tab) {
         log('debug', `🍪 Found ${domainCookies.length} cookies for ${domain}`);
         
         for (const cookie of domainCookies) {
-          const key = `${cookie.name}::${cookie.domain}`;
+          const key = `${cookie.name}::${cookie.domain}::${cookie.path}`;
           if (!allCookies.has(key)) {
             allCookies.set(key, cookie);
           }
