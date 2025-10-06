@@ -1001,20 +1001,26 @@ const runtimePatchScript = `
               return matchDomain(domain, targetHost) && matchPath(path, targetPath);
             });
             
+            // Deduplicate by name::domain::path to preserve cookie variations (e.g., Google cookies)
             const cookieMap = new Map();
             for (const cookie of applicableCookies) {
-              const existing = cookieMap.get(cookie.name);
+              const domain = cookie.domain || targetHost;
+              const path = cookie.path || '/';
+              const cookieKey = `${cookie.name}::${domain}::${path}`;
+              
+              const existing = cookieMap.get(cookieKey);
               if (!existing) {
-                cookieMap.set(cookie.name, cookie);
+                cookieMap.set(cookieKey, cookie);
               } else {
+                // If duplicate key exists, prefer more specific domain/path
                 const existingDomain = existing.domain || '';
-                const newDomain = cookie.domain || '';
+                const newDomain = domain;
                 const existingPath = existing.path || '/';
-                const newPath = cookie.path || '/';
+                const newPath = path;
                 
                 if (newDomain.length > existingDomain.length || 
                     (newDomain.length === existingDomain.length && newPath.length > existingPath.length)) {
-                  cookieMap.set(cookie.name, cookie);
+                  cookieMap.set(cookieKey, cookie);
                 }
               }
             }

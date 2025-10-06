@@ -30,6 +30,30 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [iframeKey, setIframeKey] = useState(0);
   const [isPopupModalOpen, setIsPopupModalOpen] = useState(false);
   const [resolvedSession, setResolvedSession] = useState<{ machine_id: string; tab_id: string } | null>(null);
+  const [incidentIdForProxy, setIncidentIdForProxy] = useState<string | null>(null);
+
+  // Fetch correct incident_id (INC-XXXXX format) for proxy calls
+  useEffect(() => {
+    const fetchIncidentId = async () => {
+      try {
+        const { data } = await supabase
+          .from('incidents')
+          .select('incident_id')
+          .eq('id', incident.id)
+          .single();
+        
+        if (data?.incident_id) {
+          console.log('[LocalProxy] Using incident_id for proxy:', data.incident_id);
+          setIncidentIdForProxy(data.incident_id);
+        }
+      } catch (error) {
+        console.error('[LocalProxy] Failed to fetch incident_id:', error);
+        // Fallback to UUID if fetch fails
+        setIncidentIdForProxy(incident.id);
+      }
+    };
+    fetchIncidentId();
+  }, [incident.id]);
 
   // Parse cookies from incident data
   useEffect(() => {
@@ -97,12 +121,13 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   // Fetch raw content from backend (cookies + DNS tunnel via site-proxy)
   // Proxy automatically fetches cookies from DB using incident_id
   const fetchRawContent = async (url: string): Promise<string> => {
-    console.log('[LocalProxy] Fetching raw content:', url, 'for incident:', incident.id);
+    const proxyIncidentId = incidentIdForProxy || incident.id;
+    console.log('[LocalProxy] Fetching raw content:', url, 'for incident:', proxyIncidentId);
     
     // Build query params - proxy will fetch cookies from DB automatically
     const params = new URLSearchParams({
       url,
-      incident: incident.id,
+      incident: proxyIncidentId,
       rawContent: 'true'
     });
     
@@ -126,6 +151,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     
     const base = new URL(baseUrl);
     const origin = `${base.protocol}//${base.host}`;
+    const proxyIncidentId = incidentIdForProxy || incident.id;
     
     let processed = html;
     
@@ -135,7 +161,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       (match, prefix, url, suffix) => {
         try {
           const absolute = new URL(url, origin).href;
-          const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${incident.id}&rawContent=true`;
+          const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
           return `${prefix}${proxied}${suffix}`;
         } catch { return match; }
       }
@@ -147,7 +173,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       (match, prefix, url, suffix) => {
         try {
           const absolute = new URL(url, origin).href;
-          const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${incident.id}&rawContent=true`;
+          const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
           return `${prefix}${proxied}${suffix}`;
         } catch { return match; }
       }
@@ -159,7 +185,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       (match, prefix, url, suffix) => {
         try {
           const absolute = new URL(url, origin).href;
-          const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${incident.id}&rawContent=true`;
+          const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
           return `${prefix}${proxied}${suffix}`;
         } catch { return match; }
       }
@@ -192,7 +218,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 <script>
 (function() {
   const BASE_URL = ${JSON.stringify(baseUrl)};
-  const INCIDENT_ID = ${JSON.stringify(incident.id)};
+  const INCIDENT_ID = ${JSON.stringify(proxyIncidentId)};
   
   console.log('[LocalProxy] Interception active for:', BASE_URL);
   
@@ -359,13 +385,25 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   // Resolve the active session (machine_id/tab_id) for this incident's domain before opening the popup
   const handleOpenPopup = async () => {
     try {
-      const { data, error } = await supabase
+      // Prioritize machine_id from incident and only get truly active sessions (last 60s)
+      const machineId = (incident as any).machine_id;
+      const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
+      
+      let query = supabase
         .from('active_sessions')
         .select('machine_id, tab_id, domain, last_activity')
-        .eq('domain', incident.host)
         .eq('is_active', true)
-        .order('last_activity', { ascending: false })
-        .limit(1);
+        .gte('last_activity', sixtySecondsAgo)
+        .order('last_activity', { ascending: false });
+      
+      // If we have machine_id from incident, prioritize it
+      if (machineId) {
+        query = query.eq('machine_id', machineId);
+      } else {
+        query = query.eq('domain', incident.host);
+      }
+      
+      const { data, error } = await query.limit(1);
 
       if (error) {
         console.error('Erro ao buscar sessão ativa:', error);
