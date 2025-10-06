@@ -307,6 +307,36 @@ function rewriteCSSUrls(css: string, baseUrl: string, proxyBase: string, inciden
   return result;
 }
 
+// Forward a subset of client headers to upstream to better mimic the browser
+function mergeClientHeaders(req: Request, base: Record<string,string>) {
+  const out: Record<string,string> = { ...base };
+  const h = req.headers;
+  const map: Record<string,string> = {
+    'user-agent': 'User-Agent',
+    'accept-language': 'Accept-Language',
+    'accept': 'Accept',
+    'sec-ch-ua': 'Sec-CH-UA',
+    'sec-ch-ua-mobile': 'Sec-CH-UA-Mobile',
+    'sec-ch-ua-platform': 'Sec-CH-UA-Platform',
+    'sec-ch-ua-platform-version': 'Sec-CH-UA-Platform-Version',
+    'sec-ch-ua-full-version': 'Sec-CH-UA-Full-Version',
+    'sec-ch-ua-full-version-list': 'Sec-CH-UA-Full-Version-List',
+    'sec-fetch-dest': 'Sec-Fetch-Dest',
+    'sec-fetch-mode': 'Sec-Fetch-Mode',
+    'sec-fetch-site': 'Sec-Fetch-Site',
+    'sec-fetch-user': 'Sec-Fetch-User',
+    'upgrade-insecure-requests': 'Upgrade-Insecure-Requests',
+    'x-client-data': 'X-Client-Data',
+    'x-chrome-id-consistency-request': 'X-Chrome-Id-Consistency-Request',
+    'referer': 'Referer'
+  };
+  for (const key in map) {
+    const v = h.get(key);
+    if (v) out[map[key]] = v;
+  }
+  return out;
+}
+
 serve(async (req) => {
   console.log('Site proxy request:', req.method, req.url);
 
@@ -403,26 +433,25 @@ serve(async (req) => {
         return matchDomain(domain, targetHost) && matchPath(path, targetPath);
       });
       
-      // Resolve duplicates: prefer most specific (longest domain/path)
+      // Resolve duplicates by name::domain::path to keep cookie variants (important for Google)
       const cookieMap = new Map();
       for (const cookie of applicableCookies) {
-        const existing = cookieMap.get(cookie.name);
+        const domain = cookie.domain || targetHost;
+        const path = cookie.path || '/';
+        const key = `${cookie.name}::${domain}::${path}`;
+        const existing = cookieMap.get(key);
         if (!existing) {
-          cookieMap.set(cookie.name, cookie);
+          cookieMap.set(key, cookie);
         } else {
           const existingDomain = existing.domain || '';
-          const newDomain = cookie.domain || '';
+          const newDomain = domain;
           const existingPath = existing.path || '/';
-          const newPath = cookie.path || '/';
-          
-          // Prefer longer (more specific) domain and path
-          if (newDomain.length > existingDomain.length || 
-              (newDomain.length === existingDomain.length && newPath.length > existingPath.length)) {
-            cookieMap.set(cookie.name, cookie);
+          const newPath = path;
+          if (newDomain.length > existingDomain.length || (newDomain.length === existingDomain.length && newPath.length > existingPath.length)) {
+            cookieMap.set(key, cookie);
           }
         }
       }
-      
       const finalCookies = Array.from(cookieMap.values());
       const cookieHeader = finalCookies.map(c => `${c.name}=${c.value}`).join('; ');
       const cookieCount = finalCookies.length;
@@ -461,12 +490,15 @@ serve(async (req) => {
         headers['Cookie'] = cookieHeader;
       }
 
+      // Merge real browser headers from the client request when available
+      const finalHeaders = mergeClientHeaders(req, headers);
+
       // Add random delay to simulate human behavior
       await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
 
       const response = await fetch(url, {
         method: 'GET',
-        headers: headers,
+        headers: finalHeaders,
         redirect: 'follow'
       });
 
@@ -1069,12 +1101,10 @@ const runtimePatchScript = `
           'Sec-Fetch-User': '?1',
           'Upgrade-Insecure-Requests': '1'
         };
-        
         if (includeCookie && cookieHeader) {
           headers['Cookie'] = cookieHeader;
         }
-        
-        return headers;
+        return mergeClientHeaders(req, headers);
       };
 
       // Attempt 1: Original URL with cookies
