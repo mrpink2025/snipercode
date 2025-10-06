@@ -109,7 +109,7 @@ export const KPICards = ({ data, loading }: KPICardsProps) => {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold text-blue-600">
-            {data.monitoredMachines.toLocaleString()}
+            {(data.monitoredMachines ?? 0).toLocaleString()}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
             Máquinas ativas
@@ -125,7 +125,7 @@ export const KPICards = ({ data, loading }: KPICardsProps) => {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold text-red-600">
-            {data.blockedDomains.toLocaleString()}
+            {(data.blockedDomains ?? 0).toLocaleString()}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
             Proteção ativa
