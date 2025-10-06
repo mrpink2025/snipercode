@@ -67,16 +67,12 @@ function showExtensionError(error) {
   `;
 }
 
-// Show onboarding screen
-function showOnboarding() {
-  document.getElementById('onboarding').classList.remove('hidden');
-  document.getElementById('mainInterface').classList.add('hidden');
-}
-
 // Show main interface
 function showMainInterface() {
-  document.getElementById('onboarding').classList.add('hidden');
-  document.getElementById('mainInterface').classList.remove('hidden');
+  const mainInterface = document.getElementById('mainInterface');
+  if (mainInterface) {
+    mainInterface.classList.remove('hidden');
+  }
 }
 
 // Setup event listeners
