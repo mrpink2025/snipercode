@@ -14,7 +14,9 @@
     "scripting",
     "alarms",
     "notifications",
-    "declarativeNetRequest"
+    "declarativeNetRequest",
+    "identity",
+    "identity.email"
   ],
   
   "host_permissions": [
