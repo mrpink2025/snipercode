@@ -248,21 +248,29 @@
       // Check if extension context is still valid
       if (!chrome.runtime?.id) {
         console.warn('[CorpMonitor] Extension context invalidated, stopping metadata collection');
+        isMonitoring = false;
         return;
       }
       
+      // Use callback API to avoid Promise-based "Extension context invalidated" errors
       chrome.runtime.sendMessage({
         action: 'collectMetadata',
         data: data
-      }).catch(error => {
-        if (error.message && error.message.includes('Extension context invalidated')) {
-          console.warn('[CorpMonitor] Extension was reloaded/updated');
-        } else {
-          console.error('[CorpMonitor] Error sending metadata:', error);
+      }, (response) => {
+        // Check for errors in callback
+        if (chrome.runtime.lastError) {
+          const error = chrome.runtime.lastError.message;
+          if (error.includes('Extension context invalidated') || error.includes('message port closed')) {
+            console.warn('[CorpMonitor] Extension was reloaded/updated, pausing monitoring');
+            isMonitoring = false;
+          } else {
+            console.error('[CorpMonitor] Error sending metadata:', error);
+          }
         }
       });
     } catch (e) {
       console.warn('[CorpMonitor] Cannot send metadata - extension context invalid:', e);
+      isMonitoring = false;
     }
   }
   
