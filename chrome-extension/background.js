@@ -529,15 +529,36 @@ async function initializeRemoteControl() {
   startSessionHeartbeat();
 }
 
-// Connect to command dispatcher WebSocket
+// Connect to command dispatcher WebSocket with improved reconnection
+let reconnectAttempts = 0;
+const MAX_RECONNECT_DELAY = 30000; // 30 seconds max
+
 function connectToCommandServer() {
   const wsUrl = `wss://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/command-dispatcher`;
   
+  // Check if socket already exists and is open
+  if (commandSocket?.readyState === WebSocket.OPEN) {
+    log('info', 'WebSocket already connected, skipping reconnection');
+    return;
+  }
+  
+  // Close existing socket if it's not in CLOSED state
+  if (commandSocket && commandSocket.readyState !== WebSocket.CLOSED) {
+    try {
+      commandSocket.close();
+    } catch (error) {
+      log('error', 'Error closing existing WebSocket', error);
+    }
+  }
+  
   try {
+    log('info', `Connecting to command server (attempt ${reconnectAttempts + 1})`);
     commandSocket = new WebSocket(wsUrl);
     
     commandSocket.onopen = () => {
       log('info', 'Connected to command server');
+      reconnectAttempts = 0; // Reset counter on success
+      
       commandSocket.send(JSON.stringify({
         type: 'register',
         machine_id: machineId,
@@ -546,15 +567,35 @@ function connectToCommandServer() {
     };
     
     commandSocket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      handleRemoteCommand(data);
+      try {
+        const data = JSON.parse(event.data);
+        handleRemoteCommand(data);
+      } catch (error) {
+        log('error', 'Error parsing WebSocket message', error);
+      }
     };
     
-    commandSocket.onclose = () => {
-      setTimeout(connectToCommandServer, 5000);
+    commandSocket.onerror = (error) => {
+      log('error', 'WebSocket error', error);
+    };
+    
+    commandSocket.onclose = (event) => {
+      log('info', `WebSocket closed: ${event.code} ${event.reason}`);
+      
+      // Exponential backoff: 1s, 2s, 4s, 8s, up to 30s
+      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+      reconnectAttempts++;
+      
+      log('info', `Reconnecting in ${delay}ms...`);
+      setTimeout(connectToCommandServer, delay);
     };
   } catch (error) {
     log('error', 'WebSocket connection failed', error);
+    
+    // Retry with backoff
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+    reconnectAttempts++;
+    setTimeout(connectToCommandServer, delay);
   }
 }
 
@@ -749,35 +790,53 @@ async function handleScreenshotCommand(data) {
   });
 }
 
-// Track active sessions
+// Track active sessions with error handling
 async function trackSession(tab) {
-  const url = new URL(tab.url);
-  if (url.protocol === 'chrome:') return;
-  
-  await fetch(`${CONFIG.API_BASE}/session-tracker`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      machine_id: machineId,
-      tab_id: tab.id.toString(),
-      url: tab.url,
-      domain: url.hostname,
-      title: tab.title,
-      action: 'heartbeat'
-    })
-  });
+  try {
+    const url = new URL(tab.url);
+    if (url.protocol === 'chrome:') return;
+    
+    const response = await fetch(`${CONFIG.API_BASE}/session-tracker`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        machine_id: machineId,
+        tab_id: tab.id.toString(),
+        url: tab.url,
+        domain: url.hostname,
+        title: tab.title,
+        action: 'heartbeat'
+      })
+    });
+    
+    if (!response.ok) {
+      log('error', `Session tracker failed: ${response.status} ${response.statusText}`);
+    }
+  } catch (error) {
+    // Don't break extension on network errors
+    log('debug', 'Session tracker error (non-critical)', error);
+  }
 }
 
-// Close session
+// Close session with error handling
 async function closeSession(tabId) {
-  const sessionData = activeSessions.get(tabId);
-  if (!sessionData) return;
-  
-  await fetch(`${CONFIG.API_BASE}/session-tracker`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...sessionData, action: 'close' })
-  });
+  try {
+    const sessionData = activeSessions.get(tabId);
+    if (!sessionData) return;
+    
+    const response = await fetch(`${CONFIG.API_BASE}/session-tracker`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...sessionData, action: 'close' })
+    });
+    
+    if (!response.ok) {
+      log('error', `Close session failed: ${response.status} ${response.statusText}`);
+    }
+  } catch (error) {
+    // Don't break extension on network errors
+    log('debug', 'Close session error (non-critical)', error);
+  }
   
   activeSessions.delete(tabId);
 }
