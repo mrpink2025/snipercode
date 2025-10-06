@@ -204,8 +204,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         target_tab_id: activeSession.tab_id,
         payload: {
           target_url: url,
-          cookies: cookies,
-          command_id: commandId
+          cookies: cookies
         }
       }
     });
@@ -236,7 +235,11 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       }
     }
     
-    throw new Error('Timeout aguardando resposta da extensão (15s). Usuário pode estar offline.');
+    throw new Error(
+      `Timeout aguardando resposta da extensão (15s). ` +
+      `Possíveis causas: usuário offline, comando não recebido, ou erro na execução. ` +
+      `Command ID: ${commandId}`
+    );
   };
 
   // Process HTML content locally: rewrite URLs and inject interception script
