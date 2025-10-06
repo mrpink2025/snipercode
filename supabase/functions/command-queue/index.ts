@@ -12,6 +12,54 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // Handle PUT requests for status updates
+  if (req.method === 'PUT') {
+    try {
+      const { command_id, status, error } = await req.json();
+      
+      if (!command_id || !status) {
+        return new Response(JSON.stringify({ error: 'command_id and status required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      console.log(`📝 Updating command ${command_id} status to: ${status}`);
+
+      const updateData: any = { status };
+      if (error) {
+        updateData.response = { error };
+      }
+
+      const { error: updateError } = await supabase
+        .from('remote_commands')
+        .update(updateData)
+        .eq('id', command_id);
+
+      if (updateError) {
+        console.error('❌ Error updating command status:', updateError);
+        throw updateError;
+      }
+
+      console.log(`✅ Command ${command_id} status updated to ${status}`);
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+
+    } catch (error) {
+      console.error('❌ Command status update error:', error);
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+  }
+
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405, headers: corsHeaders });
   }
@@ -27,10 +75,6 @@ serve(async (req) => {
     }
 
     console.log(`📋 Fetching pending commands for machine: ${machine_id}`);
-
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Fetch pending commands
     const { data: commands, error: fetchError } = await supabase

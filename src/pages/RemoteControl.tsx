@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import { useRealtime } from "@/hooks/useRealtime";
+import CommandStatusBadge from "@/components/CommandStatusBadge";
 
 interface ActiveSession {
   id: string;
@@ -424,6 +425,7 @@ const RemoteControl = () => {
                               <TableHead>Domínio</TableHead>
                               <TableHead>URL</TableHead>
                               <TableHead>Atividade</TableHead>
+                              <TableHead>Status Comando</TableHead>
                               <TableHead>Ações</TableHead>
                             </TableRow>
                           </TableHeader>
@@ -444,6 +446,9 @@ const RemoteControl = () => {
                                     <Clock className="h-3 w-3" />
                                     {new Date(session.last_activity).toLocaleTimeString('pt-BR')}
                                   </div>
+                                </TableCell>
+                                <TableCell>
+                                  <CommandStatusBadge machineId={session.machine_id} />
                                 </TableCell>
                                 <TableCell>
                                    <div className="flex gap-2">

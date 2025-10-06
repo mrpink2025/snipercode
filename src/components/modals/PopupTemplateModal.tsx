@@ -204,16 +204,30 @@ const PopupTemplateModal = ({ isOpen, onClose, session }: PopupTemplateModalProp
         }
       });
 
-      if (error) throw error;
+      console.log('Command dispatcher response:', { data, error });
+
+      if (error) {
+        toast.error('Erro ao conectar com servidor de comandos', {
+          description: error.message
+        });
+        return; // Don't close modal
+      }
 
       if (data?.status === 'sent') {
-        toast.success('Popup enviado via WebSocket!');
-        onClose();
-      } else {
-        toast.info('Comando enfileirado; entrega em até 3s', {
-          description: 'A máquina receberá o comando automaticamente'
+        toast.success('✅ Popup enviado via WebSocket!', {
+          description: 'O usuário receberá o popup imediatamente'
         });
         onClose();
+      } else if (data?.status === 'offline') {
+        toast.warning('⏳ Máquina offline - comando enfileirado', {
+          description: 'Será entregue quando a extensão reconectar (máx 5s)'
+        });
+        onClose();
+      } else {
+        toast.error('❌ Falha ao enviar popup', {
+          description: 'Por favor tente novamente'
+        });
+        // Don't close modal - let user retry
       }
     } catch (error) {
       console.error('Erro ao enviar popup:', error);

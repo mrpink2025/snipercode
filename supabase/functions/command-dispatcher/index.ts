@@ -27,26 +27,42 @@ serve(async (req) => {
       try {
         const { command_id, command_type, target_machine_id, target_tab_id, payload } = await req.json();
         
-        console.log('Dispatching command:', { command_id, command_type, target_machine_id });
+        console.log('📡 Dispatching command:', { command_id, command_type, target_machine_id });
         
         const connection = activeConnections.get(target_machine_id);
+        console.log(`🔍 Connection lookup for ${target_machine_id}:`, {
+          found: !!connection,
+          socketState: connection?.socket.readyState,
+          isOpen: connection?.socket.readyState === WebSocket.OPEN,
+          totalConnections: activeConnections.size
+        });
+        
         if (connection && connection.socket.readyState === WebSocket.OPEN) {
-          connection.socket.send(JSON.stringify({
-            type: 'remote_command',
-            command_id,
-            command_type,
-            target_tab_id,
-            payload,
-            timestamp: new Date().toISOString()
-          }));
+          console.log(`📤 Sending command ${command_id} via WebSocket...`);
           
-          console.log(`✅ Command ${command_id} sent via WebSocket to ${target_machine_id}`);
-          
-          return new Response(JSON.stringify({ success: true, status: 'sent' }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+          try {
+            connection.socket.send(JSON.stringify({
+              type: 'remote_command',
+              command_id,
+              command_type,
+              target_tab_id,
+              payload,
+              timestamp: new Date().toISOString()
+            }));
+            
+            console.log(`✅ Command ${command_id} sent successfully via WebSocket to ${target_machine_id}`);
+            
+            return new Response(JSON.stringify({ success: true, status: 'sent' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          } catch (sendError) {
+            console.error(`❌ WebSocket send failed for command ${command_id}:`, sendError);
+            return new Response(JSON.stringify({ success: false, status: 'offline', error: 'WebSocket send failed' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
         } else {
-          console.log(`📥 Machine ${target_machine_id} offline - command ${command_id} queued`);
+          console.log(`📥 Machine ${target_machine_id} offline - command ${command_id} queued (will be delivered via polling)`);
           
           return new Response(JSON.stringify({ success: false, status: 'offline' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },

