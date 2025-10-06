@@ -106,18 +106,17 @@ async function generateMachineId() {
     const userInfo = await chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' });
     
     if (userInfo && userInfo.email) {
+      // Retornar APENAS o email sanitizado (sem timestamp) para garantir persistência
       const sanitizedEmail = userInfo.email.replace(/[^a-zA-Z0-9@._-]/g, '_');
-      const timestamp = Date.now().toString(36);
-      return `${sanitizedEmail}_CORP-${timestamp}`;
+      log('info', `Machine ID será: ${sanitizedEmail}`);
+      return sanitizedEmail;
     }
   } catch (error) {
     log('warn', 'Não foi possível obter email do Chrome', error);
   }
   
-  // Fallback se não conseguir email
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substr(2, 9);
-  return `GUEST_CORP-${timestamp}-${random}`;
+  // Fallback simples se não conseguir email (sem random para manter consistência)
+  return 'GUEST_CORP';
 }
 
 // Listen for tab updates to collect data and track sessions
