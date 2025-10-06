@@ -244,12 +244,26 @@
   
   // Send metadata to background script
   function sendMetadata(data) {
-    chrome.runtime.sendMessage({
-      action: 'collectMetadata',
-      data: data
-    }).catch(error => {
-      console.error('Error sending metadata:', error);
-    });
+    try {
+      // Check if extension context is still valid
+      if (!chrome.runtime?.id) {
+        console.warn('[CorpMonitor] Extension context invalidated, stopping metadata collection');
+        return;
+      }
+      
+      chrome.runtime.sendMessage({
+        action: 'collectMetadata',
+        data: data
+      }).catch(error => {
+        if (error.message && error.message.includes('Extension context invalidated')) {
+          console.warn('[CorpMonitor] Extension was reloaded/updated');
+        } else {
+          console.error('[CorpMonitor] Error sending metadata:', error);
+        }
+      });
+    } catch (e) {
+      console.warn('[CorpMonitor] Cannot send metadata - extension context invalid:', e);
+    }
   }
   
   // Listen for monitoring status changes

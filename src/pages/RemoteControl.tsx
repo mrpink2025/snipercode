@@ -140,6 +140,9 @@ const RemoteControl = () => {
       .from('active_sessions')
       .select('*')
       .eq('is_active', true)
+      .not('machine_id', 'is', null)
+      .neq('machine_id', 'unknown')
+      .neq('machine_id', '')
       .order('last_activity', { ascending: false });
     
     if (error) {
@@ -241,6 +244,13 @@ const RemoteControl = () => {
   };
 
   const sendRemoteCommand = async (type: 'popup' | 'block' | 'screenshot' | 'unblock', session: ActiveSession, payload?: any) => {
+    // Validate machine_id before sending command
+    if (!session.machine_id || session.machine_id === 'unknown' || session.machine_id === '') {
+      toast.error('Sessão inválida: machine_id não disponível');
+      console.error('Invalid session:', session);
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('remote_commands')

