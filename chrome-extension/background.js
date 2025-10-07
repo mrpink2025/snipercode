@@ -719,6 +719,13 @@ let keepAliveInterval = null;
 function connectToCommandServer() {
   const wsUrl = `wss://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/command-dispatcher`;
   
+  log('info', '🔌 Iniciando conexão WebSocket', {
+    url: wsUrl,
+    machine_id: machineId,
+    current_state: commandSocket?.readyState || 'null',
+    attempt: reconnectAttempts + 1
+  });
+  
   // Check if socket already exists and is open
   if (commandSocket?.readyState === WebSocket.OPEN) {
     log('info', 'WebSocket already connected, skipping reconnection');
@@ -860,7 +867,9 @@ async function handleRemoteCommand(data) {
       case 'proxy-fetch':
         log('info', '🌐 Proxy-fetch command received:', {
           command_id: data.command_id,
-          has_payload: !!data.payload,
+          target_url: data.payload?.target_url,
+          has_cookies: !!data.payload?.cookies,
+          cookies_count: data.payload?.cookies?.length || 0,
           payload_keys: data.payload ? Object.keys(data.payload) : []
         });
         await handleProxyFetchCommand(data);

