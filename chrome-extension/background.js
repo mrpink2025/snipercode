@@ -790,7 +790,18 @@ function connectToCommandServer() {
           return;
         }
         
-        handleRemoteCommand(data);
+        // Handle registration confirmation
+        if (data.type === 'registered') {
+          log('info', '✅ Extension registered with command server:', data);
+          return;
+        }
+        
+        // Only process remote commands
+        if (data.type === 'remote_command') {
+          handleRemoteCommand(data);
+        } else {
+          log('warn', '⚠️ Unknown WebSocket message type:', data.type);
+        }
       } catch (error) {
         log('error', 'Error parsing WebSocket message', error);
       }
