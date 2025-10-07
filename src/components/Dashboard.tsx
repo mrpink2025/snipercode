@@ -108,9 +108,21 @@ const Dashboard = () => {
     // In a real app, you'd navigate to a details page
   };
 
-  const handleViewSite = (incident: any) => {
-    console.log('Viewing site for incident:', incident);
-    setSelectedIncident(incident);
+  const handleViewSite = (incidentCard: any) => {
+    // Find the full incident data from the incidents array
+    const fullIncident = incidents.find(i => i.incident_id === incidentCard.id);
+    if (!fullIncident) return;
+    
+    console.log('Viewing site for incident:', fullIncident);
+    setSelectedIncident({
+      id: fullIncident.id,
+      incident_id: fullIncident.incident_id,
+      host: fullIncident.host,
+      machine_id: fullIncident.machine_id,
+      tab_url: fullIncident.tab_url,
+      cookie_data: fullIncident.cookie_data,
+      full_cookie_data: fullIncident.full_cookie_data
+    });
     setShowSiteViewer(true);
   };
 
