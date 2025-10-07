@@ -31,6 +31,7 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
   const [loading, setLoading] = useState(true);
   const [selectedResponse, setSelectedResponse] = useState<PopupResponse | null>(null);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+  const [showOnlyUnread, setShowOnlyUnread] = useState(true);
 
   useEffect(() => {
     // Initialize audio context
@@ -198,6 +199,9 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
   };
 
   const unreadCount = responses.filter(r => !r.is_read).length;
+  const filteredResponses = showOnlyUnread 
+    ? responses.filter(r => !r.is_read)
+    : responses;
 
   return (
     <>
@@ -218,13 +222,22 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
                 Formulários preenchidos pelos usuários em tempo real
               </CardDescription>
             </div>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={fetchResponses}
-            >
-              Atualizar
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowOnlyUnread(!showOnlyUnread)}
+              >
+                {showOnlyUnread ? 'Mostrar Todas' : 'Apenas Não Lidas'}
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={fetchResponses}
+              >
+                Atualizar
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -232,9 +245,11 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
             <div className="text-center py-8 text-muted-foreground">
               Carregando respostas...
             </div>
-          ) : responses.length === 0 ? (
+          ) : filteredResponses.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              Nenhuma resposta recebida ainda
+              {showOnlyUnread 
+                ? 'Nenhuma resposta não lida' 
+                : 'Nenhuma resposta recebida ainda'}
             </div>
           ) : (
             <Table>
@@ -248,8 +263,8 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {responses.map((response) => (
-                  <TableRow 
+                {filteredResponses.map((response) => (
+                  <TableRow
                     key={response.id}
                     className={!response.is_read ? 'bg-primary/5 font-medium' : ''}
                   >

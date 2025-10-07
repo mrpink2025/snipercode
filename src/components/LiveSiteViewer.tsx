@@ -218,27 +218,28 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       console.warn('[ExtensionProxy] ⚠️ Máquina offline - comando será entregue via polling quando usuário conectar');
     }
     
-    // 4. Poll for result in popup_responses
+    // 4. Poll for result in proxy_fetch_results (NOT popup_responses!)
     const maxAttempts = 30; // 15 seconds
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      const { data: responses } = await supabase
-        .from('popup_responses')
+      const { data: result } = await supabase
+        .from('proxy_fetch_results')
         .select('*')
         .eq('command_id', commandId)
         .maybeSingle();
       
-      if (responses?.form_data) {
-        console.log('[ExtensionProxy] ✅ Got response from extension');
+      if (result) {
+        console.log('[ExtensionProxy] ✅ Got result from extension:', {
+          success: result.success,
+          html_length: result.html_content?.length || 0
+        });
         
-        const formData = responses.form_data as any;
-        
-        if (formData.error || !formData.success) {
-          throw new Error(`Extension fetch failed: ${formData.error || 'Unknown error'}`);
+        if (!result.success) {
+          throw new Error(result.error || 'Fetch failed');
         }
         
-        return formData.html_content;
+        return result.html_content;
       }
     }
     

@@ -143,9 +143,11 @@ export const NotificationSystem = () => {
                     <div
                       key={notification.id}
                       className={cn(
-                        "p-4 cursor-pointer hover:bg-muted/50 transition-colors border-l-4",
+                        "p-4 cursor-pointer hover:bg-muted/50 border-l-4",
+                        "transition-all duration-300",
                         getNotificationColor(notification.type),
-                        !notification.read && "bg-muted/30"
+                        !notification.read && "bg-muted/30",
+                        notification.read && "opacity-50 animate-fade-out"
                       )}
                       onClick={() => handleNotificationClick(notification)}
                     >

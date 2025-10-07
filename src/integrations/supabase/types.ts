@@ -432,6 +432,50 @@ export type Database = {
         }
         Relationships: []
       }
+      proxy_fetch_results: {
+        Row: {
+          command_id: string
+          created_at: string
+          error: string | null
+          html_content: string | null
+          id: string
+          machine_id: string
+          status_code: number | null
+          success: boolean
+          url: string
+        }
+        Insert: {
+          command_id: string
+          created_at?: string
+          error?: string | null
+          html_content?: string | null
+          id?: string
+          machine_id: string
+          status_code?: number | null
+          success?: boolean
+          url: string
+        }
+        Update: {
+          command_id?: string
+          created_at?: string
+          error?: string | null
+          html_content?: string | null
+          id?: string
+          machine_id?: string
+          status_code?: number | null
+          success?: boolean
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "proxy_fetch_results_command_id_fkey"
+            columns: ["command_id"]
+            isOneToOne: false
+            referencedRelation: "remote_commands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       remote_commands: {
         Row: {
           command_type: string

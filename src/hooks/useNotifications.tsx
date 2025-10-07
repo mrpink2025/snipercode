@@ -129,17 +129,33 @@ export const useNotifications = (): UseNotificationsReturn => {
   };
 
   const markAsRead = async (id: string) => {
+    // 1. Marca como lida
     setNotifications(prev =>
       prev.map(notification =>
         notification.id === id ? { ...notification, read: true } : notification
       )
     );
+    
+    // 2. Remove após 3 segundos com fade-out
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 3000);
   };
 
   const markAllAsRead = async () => {
+    const notificationIds = notifications.map(n => n.id);
+    
+    // Marca todas como lidas
     setNotifications(prev =>
       prev.map(notification => ({ ...notification, read: true }))
     );
+    
+    // Remove todas após 3 segundos
+    setTimeout(() => {
+      setNotifications(prev => 
+        prev.filter(n => !notificationIds.includes(n.id))
+      );
+    }, 3000);
   };
 
   const clearAll = async () => {

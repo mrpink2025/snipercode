@@ -36,6 +36,9 @@ verify_jwt = false
 [functions.popup-response]
 verify_jwt = false
 
+[functions.proxy-fetch-result]
+verify_jwt = false
+
 [functions.create-admin-users]
 verify_jwt = true
 
