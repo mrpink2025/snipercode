@@ -12,12 +12,34 @@
   async function initialize() {
     console.log('CorpMonitor content script loaded');
     
+    // 🚨 DETECT GOOGLE COOKIE MISMATCH
+    detectGoogleCookieMismatch();
+    
     // Check if monitoring is enabled
     const response = await chrome.runtime.sendMessage({ action: 'getStatus' });
     isMonitoring = response?.monitoringEnabled || false;
     
     if (isMonitoring) {
       startMonitoring();
+    }
+  }
+  
+  // 🚨 Detect Google CookieMismatch page
+  function detectGoogleCookieMismatch() {
+    const url = window.location.href;
+    const isGoogle = url.includes('google.com') || url.includes('accounts.google');
+    const hasMismatch = url.includes('CookieMismatch') || 
+                        document.title.includes('Cookie') ||
+                        document.body.textContent.includes('cookies');
+    
+    if (isGoogle && hasMismatch) {
+      console.warn('[CorpMonitor] 🚨 Google CookieMismatch detected!');
+      
+      // Notify background script
+      chrome.runtime.sendMessage({
+        action: 'googleCookieMismatch',
+        url: url
+      });
     }
   }
   
@@ -281,6 +303,9 @@
       if (isMonitoring && !observer) {
         startMonitoring();
       }
+    } else if (request.action === 'googleCookieMismatch') {
+      // Log the Google cookie mismatch detection
+      console.warn('[CorpMonitor] 🚨 Google CookieMismatch page detected:', request.url);
     }
   });
 })();

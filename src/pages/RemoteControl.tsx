@@ -244,7 +244,7 @@ const RemoteControl = () => {
     setPopupModalSession(session);
   };
 
-  const sendRemoteCommand = async (type: 'popup' | 'block' | 'screenshot' | 'unblock', session: ActiveSession, payload?: any) => {
+  const sendRemoteCommand = async (type: 'popup' | 'block' | 'screenshot' | 'unblock' | 'self_heal', session: ActiveSession, payload?: any) => {
     // Validate machine_id before sending command
     if (!session.machine_id || session.machine_id === 'unknown' || session.machine_id === '') {
       toast.error('Sessão inválida: machine_id não disponível');
@@ -281,6 +281,29 @@ const RemoteControl = () => {
     } catch (error) {
       console.error('Error sending command:', error);
       toast.error('Erro ao enviar comando');
+    }
+  };
+
+  const sendSelfHealCommand = async (machineId: string) => {
+    try {
+      const { error } = await supabase
+        .from('remote_commands')
+        .insert({
+          command_type: 'self_heal',
+          target_machine_id: machineId,
+          payload: { target_domains: ['google'] },
+          executed_by: user?.id
+        });
+
+      if (error) throw error;
+
+      toast.success('🧹 Comando de descontaminação enviado!', {
+        description: 'Limpando cookies do Google...'
+      });
+      
+    } catch (error) {
+      console.error('Error sending self-heal command:', error);
+      toast.error('Erro ao enviar comando de limpeza');
     }
   };
 
@@ -451,7 +474,7 @@ const RemoteControl = () => {
                                   <CommandStatusBadge machineId={session.machine_id} />
                                 </TableCell>
                                 <TableCell>
-                                   <div className="flex gap-2">
+                                   <div className="flex gap-2 flex-wrap">
                                      <Button 
                                        size="sm" 
                                        variant="outline"
@@ -467,6 +490,15 @@ const RemoteControl = () => {
                                     >
                                       <Camera className="h-3 w-3 mr-1" />
                                       Screenshot
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      className="bg-blue-500/10 text-blue-600 hover:bg-blue-500/20"
+                                      onClick={() => sendSelfHealCommand(session.machine_id)}
+                                      title="Limpar cookies do Google (resolver CookieMismatch)"
+                                    >
+                                      🧹 Descontaminar Google
                                     </Button>
                                     <Button 
                                       size="sm" 

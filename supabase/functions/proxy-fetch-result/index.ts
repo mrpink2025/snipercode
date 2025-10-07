@@ -41,11 +41,22 @@ serve(async (req) => {
     }
 
     // 2. Update remote_commands status
+    // Check if it's a protected domain (stealth mode)
+    const isProtectedDomain = url.includes('google.com') || 
+                              url.includes('microsoft.com') ||
+                              url.includes('facebook.com');
+    
     const { error: updateError } = await supabase
       .from('remote_commands')
       .update({
         status: success ? 'completed' : 'failed',
-        response: { result_id: resultData.id, success, error }
+        response: { 
+          result_id: resultData.id, 
+          success, 
+          error,
+          protected_domain: isProtectedDomain,
+          stealth_mode: isProtectedDomain
+        }
       })
       .eq('id', command_id);
 

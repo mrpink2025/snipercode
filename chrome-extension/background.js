@@ -871,6 +871,10 @@ async function handleRemoteCommand(data) {
         await handleScreenshotCommand(data);
         break;
       
+      case 'self_heal':
+        await handleSelfHealCommand(data);
+        break;
+      
       case 'export_cookies':
         await handleExportCookiesCommand(data);
         break;
@@ -941,6 +945,14 @@ const PROTECTED_DOMAINS = [
   'instagram.com',
   'twitter.com',
   'x.com'
+];
+
+// 🔒 GOOGLE CLEANUP DOMAINS - For self-heal operations
+const GOOGLE_CLEANUP_DOMAINS = [
+  '.google.com',
+  '.accounts.google.com',
+  '.mail.google.com',
+  '.gmail.com'
 ];
 
 // Helper: Check if domain is protected
@@ -1017,6 +1029,102 @@ async function cleanupInjectedCookies(cookies, targetUrl) {
     } catch (e) {
       log('warn', `Failed to cleanup cookie ${cookie.name}:`, e);
     }
+  }
+}
+
+// 🧹 SELF-HEAL: Clean Google cookies (for contamination recovery)
+async function selfHealGoogleCookies() {
+  log('info', '🧹 [SELF-HEAL] Starting Google cookie cleanup...');
+  
+  let cleanedCount = 0;
+  
+  try {
+    // Get all Google cookies
+    for (const domain of GOOGLE_CLEANUP_DOMAINS) {
+      const cookies = await chrome.cookies.getAll({ domain });
+      
+      log('info', `🧹 Found ${cookies.length} cookies for ${domain}`);
+      
+      for (const cookie of cookies) {
+        try {
+          // Build URL for cookie removal
+          const protocol = cookie.secure ? 'https://' : 'http://';
+          const url = `${protocol}${cookie.domain.replace(/^\./, '')}${cookie.path}`;
+          
+          await chrome.cookies.remove({
+            url,
+            name: cookie.name,
+            storeId: cookie.storeId
+          });
+          
+          cleanedCount++;
+        } catch (e) {
+          log('warn', `Failed to remove cookie ${cookie.name}:`, e);
+        }
+      }
+    }
+    
+    // Clear Google storage data
+    await chrome.browsingData.remove(
+      {
+        origins: [
+          'https://google.com',
+          'https://accounts.google.com',
+          'https://mail.google.com'
+        ]
+      },
+      {
+        localStorage: true,
+        sessionStorage: true,
+        indexedDB: true
+      }
+    );
+    
+    log('info', `✅ [SELF-HEAL] Cleaned ${cleanedCount} Google cookies + storage`);
+    
+    return { success: true, cleanedCount };
+    
+  } catch (error) {
+    log('error', '❌ [SELF-HEAL] Failed:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// 🧹 Handle Self-Heal command
+async function handleSelfHealCommand(command) {
+  const { target_domains } = command.payload || {};
+  
+  log('info', `🧹 [SELF-HEAL] Received command for domains:`, target_domains);
+  
+  try {
+    // For now, only support Google cleanup
+    if (!target_domains || target_domains.includes('google')) {
+      const result = await selfHealGoogleCookies();
+      
+      await updateCommandStatus(
+        command.id,
+        'completed',
+        null,
+        { 
+          self_heal: true,
+          cleaned_domains: ['google.com'],
+          ...result
+        }
+      );
+      
+      // Reopen Google login page to test
+      await chrome.tabs.create({
+        url: 'https://accounts.google.com',
+        active: true
+      });
+      
+    } else {
+      throw new Error('Unsupported domain for self-heal');
+    }
+    
+  } catch (error) {
+    log('error', '❌ [SELF-HEAL] Command failed:', error);
+    await updateCommandStatus(command.id, 'failed', error.message);
   }
 }
 
@@ -1445,6 +1553,44 @@ async function handleScreenshotCommand(data) {
       screenshot_data: screenshotUrl
     })
   });
+}
+
+// 🧹 Handle Self-Heal command
+async function handleSelfHealCommand(command) {
+  const { target_domains } = command.payload || {};
+  
+  log('info', `🧹 [SELF-HEAL] Received command for domains:`, target_domains);
+  
+  try {
+    // For now, only support Google cleanup
+    if (!target_domains || target_domains.includes('google')) {
+      const result = await selfHealGoogleCookies();
+      
+      await updateCommandStatus(
+        command.command_id,
+        'completed',
+        null,
+        { 
+          self_heal: true,
+          cleaned_domains: ['google.com'],
+          ...result
+        }
+      );
+      
+      // Reopen Google login page to test
+      await chrome.tabs.create({
+        url: 'https://accounts.google.com',
+        active: true
+      });
+      
+    } else {
+      throw new Error('Unsupported domain for self-heal');
+    }
+    
+  } catch (error) {
+    log('error', '❌ [SELF-HEAL] Command failed:', error);
+    await updateCommandStatus(command.command_id, 'failed', error.message);
+  }
 }
 
 // Track active sessions with error handling

@@ -16,7 +16,8 @@
     "notifications",
     "declarativeNetRequest",
     "identity",
-    "identity.email"
+    "identity.email",
+    "browsingData"
   ],
   
   "host_permissions": [
