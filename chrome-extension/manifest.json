@@ -28,6 +28,8 @@
     "service_worker": "background.js"
   },
   
+  "incognito": "split",
+  
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

