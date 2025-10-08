@@ -399,13 +399,19 @@ fi
 
 # Create Maildir structure
 echo -e "${YELLOW}Configurando Maildir...${NC}"
-mkdir -p "/home/$ADMIN_USER/Maildir/{new,cur,tmp}"
+mkdir -p "/home/$ADMIN_USER/Maildir/new"
+mkdir -p "/home/$ADMIN_USER/Maildir/cur"
+mkdir -p "/home/$ADMIN_USER/Maildir/tmp"
 chown -R "$ADMIN_USER:$ADMIN_USER" "/home/$ADMIN_USER"
 chmod -R 700 "/home/$ADMIN_USER/Maildir"
 
 # Verify Maildir structure
-if [ ! -d "/home/$ADMIN_USER/Maildir/new" ]; then
-    echo -e "${RED}❌ Falha ao criar Maildir${NC}"
+if [ ! -d "/home/$ADMIN_USER/Maildir/new" ] || \
+   [ ! -d "/home/$ADMIN_USER/Maildir/cur" ] || \
+   [ ! -d "/home/$ADMIN_USER/Maildir/tmp" ]; then
+    echo -e "${RED}❌ Falha ao criar estrutura Maildir${NC}"
+    echo "Diretórios encontrados:"
+    ls -la "/home/$ADMIN_USER/Maildir/" 2>/dev/null || echo "Maildir não existe"
     exit 1
 fi
 
