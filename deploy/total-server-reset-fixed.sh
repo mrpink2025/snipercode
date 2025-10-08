@@ -21,7 +21,8 @@ GIT_REPO="https://github.com/mrpink2025/snipercode.git"
 GIT_BRANCH="main"
 PROJECT_DIR="/var/www/monitor-corporativo"
 DOMAIN="monitorcorporativo.com"
-ADMIN_EMAIL="admin@monitorcorporativo.com"
+ADMIN_EMAIL="administrador@monitorcorporativo.com"
+ADMIN_USER="administrador"
 ADMIN_PASSWORD="Vib797d8"
 LOG_FILE="/var/log/corpmonitor-total-setup-$(date +%Y%m%d-%H%M%S).log"
 
@@ -65,7 +66,7 @@ echo -e "${RED}║  E VAI INSTALAR:                                             
 echo -e "${RED}║                                                                ║${NC}"
 echo -e "${RED}║    ✅ CorpMonitor completo                                     ║${NC}"
 echo -e "${RED}║    ✅ Servidor de email (Postfix + Dovecot)                   ║${NC}"
-echo -e "${RED}║    ✅ Email: admin@monitorcorporativo.com                     ║${NC}"
+echo -e "${RED}║    ✅ Email: administrador@monitorcorporativo.com             ║${NC}"
 echo -e "${RED}║    ✅ Senha: Vib797d8                                          ║${NC}"
 echo -e "${RED}║                                                                ║${NC}"
 echo -e "${RED}╚════════════════════════════════════════════════════════════════╝${NC}"
@@ -360,62 +361,62 @@ echo ""
 echo -e "${CYAN}═══ Phase 8/15: Criando usuário de email ═══${NC}"
 
 # Check if user exists
-if id "admin" &>/dev/null; then
-    echo -e "${YELLOW}⚠️  Usuário admin já existe. Removendo...${NC}"
+if id "$ADMIN_USER" &>/dev/null; then
+    echo -e "${YELLOW}⚠️  Usuário $ADMIN_USER já existe. Removendo...${NC}"
     
-    # Kill any processes owned by admin
-    pkill -9 -u admin 2>/dev/null || true
+    # Kill any processes owned by user
+    pkill -9 -u "$ADMIN_USER" 2>/dev/null || true
     
     # Remove user and home directory
-    userdel -r admin 2>/dev/null || true
+    userdel -r "$ADMIN_USER" 2>/dev/null || true
     
     # Force remove home directory if still exists
-    rm -rf /home/admin 2>/dev/null || true
+    rm -rf "/home/$ADMIN_USER" 2>/dev/null || true
     
     echo -e "${GREEN}✓ Usuário antigo removido${NC}"
 fi
 
 # Create fresh user with proper settings
-echo -e "${YELLOW}Criando novo usuário admin...${NC}"
+echo -e "${YELLOW}Criando novo usuário $ADMIN_USER...${NC}"
 
 # Create user with home directory and bash shell
-useradd -m -s /bin/bash -d /home/admin admin
+useradd -m -s /bin/bash -d "/home/$ADMIN_USER" "$ADMIN_USER"
 
 # Set password using passwd command (more reliable than chpasswd)
-echo "admin:$ADMIN_PASSWORD" | chpasswd
+echo "$ADMIN_USER:$ADMIN_PASSWORD" | chpasswd
 
 # Alternative method if chpasswd fails
 if [ $? -ne 0 ]; then
     echo -e "${YELLOW}⚠️  Tentando método alternativo para senha...${NC}"
-    echo -e "$ADMIN_PASSWORD\n$ADMIN_PASSWORD" | passwd admin
+    echo -e "$ADMIN_PASSWORD\n$ADMIN_PASSWORD" | passwd "$ADMIN_USER"
 fi
 
 # Verify user was created
-if ! id "admin" &>/dev/null; then
-    echo -e "${RED}❌ Falha ao criar usuário admin${NC}"
+if ! id "$ADMIN_USER" &>/dev/null; then
+    echo -e "${RED}❌ Falha ao criar usuário $ADMIN_USER${NC}"
     exit 1
 fi
 
 # Create Maildir structure
 echo -e "${YELLOW}Configurando Maildir...${NC}"
-mkdir -p /home/admin/Maildir/{new,cur,tmp}
-chown -R admin:admin /home/admin
-chmod -R 700 /home/admin/Maildir
+mkdir -p "/home/$ADMIN_USER/Maildir/{new,cur,tmp}"
+chown -R "$ADMIN_USER:$ADMIN_USER" "/home/$ADMIN_USER"
+chmod -R 700 "/home/$ADMIN_USER/Maildir"
 
 # Verify Maildir structure
-if [ ! -d "/home/admin/Maildir/new" ]; then
+if [ ! -d "/home/$ADMIN_USER/Maildir/new" ]; then
     echo -e "${RED}❌ Falha ao criar Maildir${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}✓ Usuário criado: admin@monitorcorporativo.com${NC}"
+echo -e "${GREEN}✓ Usuário criado: $ADMIN_EMAIL${NC}"
 echo -e "${GREEN}✓ Senha: $ADMIN_PASSWORD${NC}"
-echo -e "${GREEN}✓ Home: /home/admin${NC}"
-echo -e "${GREEN}✓ Maildir: /home/admin/Maildir${NC}"
+echo -e "${GREEN}✓ Home: /home/$ADMIN_USER${NC}"
+echo -e "${GREEN}✓ Maildir: /home/$ADMIN_USER/Maildir${NC}"
 
 # Test authentication
 echo -e "${YELLOW}Testando autenticação...${NC}"
-su - admin -c "whoami" && echo -e "${GREEN}✓ Autenticação OK${NC}" || echo -e "${RED}⚠️  Aviso: Verificar autenticação${NC}"
+su - "$ADMIN_USER" -c "whoami" && echo -e "${GREEN}✓ Autenticação OK${NC}" || echo -e "${RED}⚠️  Aviso: Verificar autenticação${NC}"
 
 echo ""
 
@@ -593,8 +594,8 @@ systemctl is-active postfix
 echo "Testando Dovecot..."
 systemctl is-active dovecot
 
-echo "Testando usuário admin..."
-id admin
+echo "Testando usuário $ADMIN_USER..."
+id "$ADMIN_USER"
 
 echo ""
 
@@ -617,18 +618,18 @@ cat > "$REPORT_FILE" << 'REPORT_EOF'
    https://monitorcorporativo.com
 
 📧 Email Configurado:
-   Email: admin@monitorcorporativo.com
+   Email: administrador@monitorcorporativo.com
    Senha: Vib797d8
    
    Configuração IMAP:
    - Servidor: monitorcorporativo.com
    - Porta: 993 (SSL)
-   - Usuário: admin
+   - Usuário: administrador
    
    Configuração SMTP:
    - Servidor: monitorcorporativo.com
    - Porta: 587 (STARTTLS)
-   - Usuário: admin
+   - Usuário: administrador
 
 🔐 Certificados SSL:
    Configurados via Let's Encrypt
@@ -640,7 +641,7 @@ cat > "$REPORT_FILE" << 'REPORT_EOF'
 📁 Diretórios:
    Projeto: /var/www/monitor-corporativo
    Logs: /var/log/nginx/
-   Email: /home/admin/Maildir
+   Email: /home/administrador/Maildir
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -650,10 +651,10 @@ cat > "$REPORT_FILE" << 'REPORT_EOF'
 curl -I https://monitorcorporativo.com
 
 # Testar envio de email
-echo "Teste" | mail -s "Email de Teste" admin@monitorcorporativo.com
+echo "Teste" | mail -s "Email de Teste" administrador@monitorcorporativo.com
 
 # Verificar recebimento
-ls -la /home/admin/Maildir/new/
+ls -la /home/administrador/Maildir/new/
 
 # Logs de email
 tail -f /var/log/mail.log
@@ -672,7 +673,7 @@ A       www                IP_DO_SERVIDOR
 A       mail               IP_DO_SERVIDOR
 MX      @           10     mail.monitorcorporativo.com
 TXT     @                  "v=spf1 mx ~all"
-TXT     _dmarc             "v=DMARC1; p=none; rua=mailto:admin@monitorcorporativo.com"
+TXT     _dmarc             "v=DMARC1; p=none; rua=mailto:administrador@monitorcorporativo.com"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -686,7 +687,7 @@ tail -f /var/log/nginx/monitorcorporativo-access.log
 tail -f /var/log/mail.log
 
 # Testar autenticação
-su - admin
+su - administrador
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -711,7 +712,7 @@ echo -e "${GREEN}║               ✅ INSTALAÇÃO CONCLUÍDA COM SUCESSO!     
 echo -e "${GREEN}║                                                                    ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${CYAN}📧 Email: ${YELLOW}admin@monitorcorporativo.com${NC}"
+echo -e "${CYAN}📧 Email: ${YELLOW}administrador@monitorcorporativo.com${NC}"
 echo -e "${CYAN}🔑 Senha: ${YELLOW}$ADMIN_PASSWORD${NC}"
 echo -e "${CYAN}📄 Relatório: ${YELLOW}$REPORT_FILE${NC}"
 echo -e "${CYAN}📋 Log completo: ${YELLOW}$LOG_FILE${NC}"
