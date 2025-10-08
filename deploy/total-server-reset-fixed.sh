@@ -89,7 +89,7 @@ sleep 10
 # ============================================================================
 # PHASE 0: Root Check
 # ============================================================================
-echo -e "${CYAN}═══ Phase 0/15: Verificando permissões ═══${NC}"
+echo -e "${CYAN}═══ Phase 0/16: Verificando permissões ═══${NC}"
 if [ "$EUID" -ne 0 ]; then
     echo -e "${RED}❌ Este script deve ser executado como root${NC}"
     exit 1
@@ -100,7 +100,7 @@ echo ""
 # ============================================================================
 # PHASE 1: Stop ALL Services
 # ============================================================================
-echo -e "${CYAN}═══ Phase 1/15: Parando TODOS os serviços ═══${NC}"
+echo -e "${CYAN}═══ Phase 1/16: Parando TODOS os serviços ═══${NC}"
 
 systemctl stop nginx 2>/dev/null || true
 systemctl stop postfix 2>/dev/null || true
@@ -118,7 +118,7 @@ echo ""
 # ============================================================================
 # PHASE 2: Nuclear Clean
 # ============================================================================
-echo -e "${CYAN}═══ Phase 2/15: LIMPEZA TOTAL ═══${NC}"
+echo -e "${CYAN}═══ Phase 2/16: LIMPEZA TOTAL ═══${NC}"
 
 rm -rf /var/www/*
 mkdir -p /var/www
@@ -136,7 +136,7 @@ echo ""
 # ============================================================================
 # PHASE 3: System Update
 # ============================================================================
-echo -e "${CYAN}═══ Phase 3/15: Atualizando sistema ═══${NC}"
+echo -e "${CYAN}═══ Phase 3/16: Atualizando sistema ═══${NC}"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
@@ -150,7 +150,7 @@ echo ""
 # ============================================================================
 # PHASE 4: Install Core Dependencies
 # ============================================================================
-echo -e "${CYAN}═══ Phase 4/15: Instalando dependências principais ═══${NC}"
+echo -e "${CYAN}═══ Phase 4/16: Instalando dependências principais ═══${NC}"
 
 apt-get install -y -q \
     nginx \
@@ -186,7 +186,7 @@ echo ""
 # ============================================================================
 # PHASE 5: Install Mail Server
 # ============================================================================
-echo -e "${CYAN}═══ Phase 5/15: Instalando servidor de email ═══${NC}"
+echo -e "${CYAN}═══ Phase 5/16: Instalando servidor de email ═══${NC}"
 
 # Pre-configure Postfix
 echo "postfix postfix/main_mailer_type select Internet Site" | debconf-set-selections
@@ -208,7 +208,7 @@ echo ""
 # ============================================================================
 # PHASE 6: Configure Postfix
 # ============================================================================
-echo -e "${CYAN}═══ Phase 6/15: Configurando Postfix ═══${NC}"
+echo -e "${CYAN}═══ Phase 6/16: Configurando Postfix ═══${NC}"
 
 cat > /etc/postfix/main.cf << 'POSTFIX_MAIN'
 # Basic config
@@ -302,7 +302,7 @@ echo ""
 # ============================================================================
 # PHASE 7: Configure Dovecot
 # ============================================================================
-echo -e "${CYAN}═══ Phase 7/15: Configurando Dovecot ═══${NC}"
+echo -e "${CYAN}═══ Phase 7/16: Configurando Dovecot ═══${NC}"
 
 cat > /etc/dovecot/dovecot.conf << 'DOVECOT_MAIN'
 protocols = imap pop3 lmtp
@@ -367,7 +367,7 @@ echo ""
 # ============================================================================
 # PHASE 8: Create Email User (FIXED)
 # ============================================================================
-echo -e "${CYAN}═══ Phase 8/15: Criando usuário de email ═══${NC}"
+echo -e "${CYAN}═══ Phase 8/16: Criando usuário de email ═══${NC}"
 
 # Check if user exists
 if id "$ADMIN_USER" &>/dev/null; then
@@ -438,7 +438,7 @@ echo ""
 # ============================================================================
 # PHASE 9: Clone Repository
 # ============================================================================
-echo -e "${CYAN}═══ Phase 9/15: Clonando repositório Git ═══${NC}"
+echo -e "${CYAN}═══ Phase 9/16: Clonando repositório Git ═══${NC}"
 
 git clone -b "$GIT_BRANCH" "$GIT_REPO" "$PROJECT_DIR" || {
     echo -e "${RED}❌ Erro ao clonar repositório${NC}"
@@ -458,7 +458,7 @@ echo ""
 # ============================================================================
 # PHASE 10: Install Project Dependencies
 # ============================================================================
-echo -e "${CYAN}═══ Phase 10/15: Instalando dependências do projeto ═══${NC}"
+echo -e "${CYAN}═══ Phase 10/16: Instalando dependências do projeto ═══${NC}"
 
 cd "$PROJECT_DIR"
 npm install --legacy-peer-deps || npm install
@@ -472,7 +472,7 @@ echo ""
 # ============================================================================
 # PHASE 11: Build Everything
 # ============================================================================
-echo -e "${CYAN}═══ Phase 11/15: Compilando aplicação ═══${NC}"
+echo -e "${CYAN}═══ Phase 11/16: Compilando aplicação ═══${NC}"
 
 cd "$PROJECT_DIR"
 npm run build
@@ -493,7 +493,7 @@ echo ""
 # ============================================================================
 # PHASE 12: Configure Nginx
 # ============================================================================
-echo -e "${CYAN}═══ Phase 12/15: Configurando Nginx ═══${NC}"
+echo -e "${CYAN}═══ Phase 12/16: Configurando Nginx ═══${NC}"
 
 cat > /etc/nginx/sites-available/monitorcorporativo <<'EOF'
 server {
@@ -546,7 +546,7 @@ echo ""
 # ============================================================================
 # PHASE 13: Configure SSL
 # ============================================================================
-echo -e "${CYAN}═══ Phase 13/15: Configurando SSL ═══${NC}"
+echo -e "${CYAN}═══ Phase 13/16: Configurando SSL ═══${NC}"
 
 certbot --nginx \
     -d "$DOMAIN" \
@@ -565,7 +565,7 @@ echo ""
 # ============================================================================
 # PHASE 14: Configure Firewall
 # ============================================================================
-echo -e "${CYAN}═══ Phase 14/15: Configurando Firewall ═══${NC}"
+echo -e "${CYAN}═══ Phase 14/16: Configurando Firewall ═══${NC}"
 
 ufw --force enable
 ufw default deny incoming
@@ -585,7 +585,7 @@ echo ""
 # ============================================================================
 # PHASE 15: Start All Services
 # ============================================================================
-echo -e "${CYAN}═══ Phase 15/15: Iniciando serviços ═══${NC}"
+echo -e "${CYAN}═══ Phase 15/16: Iniciando serviços ═══${NC}"
 
 systemctl enable nginx postfix dovecot
 systemctl start nginx
@@ -594,6 +594,241 @@ systemctl restart dovecot
 
 echo -e "${GREEN}✓ Todos os serviços iniciados${NC}"
 echo ""
+
+# ============================================================================
+# PHASE 16: Install and Configure Roundcube Webmail
+# ============================================================================
+echo -e "${CYAN}═══ Phase 16/16: Instalando Roundcube Webmail ═══${NC}"
+
+# Generate random passwords
+ROUNDCUBE_DB_PASSWORD=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 16)
+ROUNDCUBE_DES_KEY=$(openssl rand -base64 24 | head -c 24)
+
+# Install PHP 8.3 and required modules
+echo -e "${YELLOW}Instalando PHP 8.3 e módulos...${NC}"
+apt-get install -y -q \
+    php8.3-fpm \
+    php8.3-cli \
+    php8.3-curl \
+    php8.3-gd \
+    php8.3-intl \
+    php8.3-ldap \
+    php8.3-mbstring \
+    php8.3-mysql \
+    php8.3-xml \
+    php8.3-zip \
+    php8.3-imagick \
+    mariadb-server \
+    composer
+
+echo -e "${GREEN}✓ PHP 8.3 instalado${NC}"
+
+# Start MariaDB
+systemctl start mariadb
+systemctl enable mariadb
+
+# Create Roundcube database and user
+echo -e "${YELLOW}Configurando banco de dados...${NC}"
+mysql -u root <<MYSQL_SCRIPT
+CREATE DATABASE IF NOT EXISTS roundcube CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+CREATE USER IF NOT EXISTS 'roundcube'@'localhost' IDENTIFIED BY '$ROUNDCUBE_DB_PASSWORD';
+GRANT ALL PRIVILEGES ON roundcube.* TO 'roundcube'@'localhost';
+FLUSH PRIVILEGES;
+MYSQL_SCRIPT
+
+echo -e "${GREEN}✓ Banco de dados criado${NC}"
+
+# Download and install Roundcube
+echo -e "${YELLOW}Baixando Roundcube...${NC}"
+ROUNDCUBE_VERSION="1.6.10"
+ROUNDCUBE_DIR="$PROJECT_DIR/webmail"
+
+cd /tmp
+wget -q "https://github.com/roundcube/roundcubemail/releases/download/$ROUNDCUBE_VERSION/roundcubemail-$ROUNDCUBE_VERSION-complete.tar.gz"
+tar xzf "roundcubemail-$ROUNDCUBE_VERSION-complete.tar.gz"
+mkdir -p "$ROUNDCUBE_DIR"
+cp -r "roundcubemail-$ROUNDCUBE_VERSION"/* "$ROUNDCUBE_DIR/"
+rm -rf "roundcubemail-$ROUNDCUBE_VERSION" "roundcubemail-$ROUNDCUBE_VERSION-complete.tar.gz"
+
+echo -e "${GREEN}✓ Roundcube baixado${NC}"
+
+# Install Roundcube dependencies
+echo -e "${YELLOW}Instalando dependências do Roundcube...${NC}"
+cd "$ROUNDCUBE_DIR"
+composer install --no-dev --prefer-dist
+
+# Import database schema
+echo -e "${YELLOW}Importando schema do banco de dados...${NC}"
+mysql -u roundcube -p"$ROUNDCUBE_DB_PASSWORD" roundcube < "$ROUNDCUBE_DIR/SQL/mysql.initial.sql"
+
+echo -e "${GREEN}✓ Schema importado${NC}"
+
+# Create Roundcube config
+echo -e "${YELLOW}Configurando Roundcube...${NC}"
+cat > "$ROUNDCUBE_DIR/config/config.inc.php" <<'ROUNDCUBE_CONFIG'
+<?php
+
+/* Database */
+$config['db_dsnw'] = 'mysql://roundcube:ROUNDCUBE_DB_PASSWORD_PLACEHOLDER@localhost/roundcube';
+
+/* IMAP */
+$config['imap_host'] = 'ssl://monitorcorporativo.com:993';
+$config['imap_auth_type'] = null;
+$config['imap_delimiter'] = null;
+$config['imap_vendor'] = null;
+
+/* SMTP */
+$config['smtp_host'] = 'tls://monitorcorporativo.com:587';
+$config['smtp_auth_type'] = 'LOGIN';
+$config['smtp_user'] = '%u';
+$config['smtp_pass'] = '%p';
+
+/* System */
+$config['des_key'] = 'ROUNDCUBE_DES_KEY_PLACEHOLDER';
+$config['product_name'] = 'CorpMonitor Webmail';
+$config['support_url'] = 'https://monitorcorporativo.com';
+$config['default_host'] = 'monitorcorporativo.com';
+$config['default_port'] = 993;
+$config['username_domain'] = 'monitorcorporativo.com';
+
+/* User Interface */
+$config['language'] = 'pt_BR';
+$config['skin'] = 'elastic';
+$config['timezone'] = 'America/Sao_Paulo';
+
+/* Plugins */
+$config['plugins'] = array('archive', 'zipdownload', 'managesieve');
+
+/* Security */
+$config['force_https'] = true;
+$config['login_autocomplete'] = 2;
+$config['session_lifetime'] = 30;
+$config['ip_check'] = true;
+$config['referer_check'] = true;
+
+/* Logging */
+$config['log_driver'] = 'file';
+$config['log_dir'] = 'logs/';
+$config['debug_level'] = 1;
+
+/* Performance */
+$config['enable_caching'] = true;
+$config['message_cache_lifetime'] = '10d';
+$config['messages_cache'] = 'db';
+
+/* Folders */
+$config['drafts_mbox'] = 'Drafts';
+$config['junk_mbox'] = 'Junk';
+$config['sent_mbox'] = 'Sent';
+$config['trash_mbox'] = 'Trash';
+$config['default_folders'] = array('INBOX', 'Drafts', 'Sent', 'Junk', 'Trash');
+ROUNDCUBE_CONFIG
+
+# Replace placeholders
+sed -i "s/ROUNDCUBE_DB_PASSWORD_PLACEHOLDER/$ROUNDCUBE_DB_PASSWORD/g" "$ROUNDCUBE_DIR/config/config.inc.php"
+sed -i "s/ROUNDCUBE_DES_KEY_PLACEHOLDER/$ROUNDCUBE_DES_KEY/g" "$ROUNDCUBE_DIR/config/config.inc.php"
+
+echo -e "${GREEN}✓ Configuração criada${NC}"
+
+# Set permissions
+echo -e "${YELLOW}Configurando permissões...${NC}"
+chown -R www-data:www-data "$ROUNDCUBE_DIR"
+chmod -R 755 "$ROUNDCUBE_DIR"
+chmod -R 777 "$ROUNDCUBE_DIR/logs"
+chmod -R 777 "$ROUNDCUBE_DIR/temp"
+
+echo -e "${GREEN}✓ Permissões configuradas${NC}"
+
+# Configure PHP-FPM
+echo -e "${YELLOW}Configurando PHP-FPM...${NC}"
+sed -i 's/upload_max_filesize = .*/upload_max_filesize = 25M/' /etc/php/8.3/fpm/php.ini
+sed -i 's/post_max_size = .*/post_max_size = 25M/' /etc/php/8.3/fpm/php.ini
+sed -i 's/memory_limit = .*/memory_limit = 256M/' /etc/php/8.3/fpm/php.ini
+
+systemctl restart php8.3-fpm
+systemctl enable php8.3-fpm
+
+echo -e "${GREEN}✓ PHP-FPM configurado${NC}"
+
+# Update Nginx configuration to include webmail
+echo -e "${YELLOW}Atualizando Nginx para Roundcube...${NC}"
+cat > /etc/nginx/sites-available/monitorcorporativo <<'EOF'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name monitorcorporativo.com www.monitorcorporativo.com;
+
+    root /var/www/monitor-corporativo/dist;
+    index index.html;
+
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location = /privacy-policy.html {
+        alias /var/www/monitor-corporativo/dist/privacy-policy.html;
+    }
+
+    location /updates/ {
+        alias /var/www/monitor-corporativo/updates/;
+        add_header Access-Control-Allow-Origin "*" always;
+        autoindex on;
+        types {
+            application/x-chrome-extension crx;
+            application/zip zip;
+            text/plain sha256;
+        }
+    }
+
+    location /webmail {
+        alias /var/www/monitor-corporativo/webmail;
+        index index.php;
+
+        location ~ \.php$ {
+            if (!-f $request_filename) { return 404; }
+            include snippets/fastcgi-php.conf;
+            fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+            fastcgi_param SCRIPT_FILENAME $request_filename;
+            fastcgi_param HTTPS on;
+        }
+
+        location ~ ^/webmail/(config|temp|logs) {
+            deny all;
+        }
+
+        location ~ /\. {
+            deny all;
+        }
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    access_log /var/log/nginx/monitorcorporativo-access.log;
+    error_log /var/log/nginx/monitorcorporativo-error.log;
+}
+EOF
+
+nginx -t && systemctl reload nginx
+
+echo -e "${GREEN}✓ Nginx atualizado${NC}"
+
+# Test Roundcube
+echo -e "${YELLOW}Testando Roundcube...${NC}"
+curl -I http://localhost/webmail 2>&1 | head -1
+
+echo -e "${GREEN}✓ Roundcube instalado e configurado!${NC}"
+echo ""
+
+# Save Roundcube credentials for report
+echo "$ROUNDCUBE_DB_PASSWORD" > /tmp/roundcube_db_pass.txt
+chmod 600 /tmp/roundcube_db_pass.txt
 
 # ============================================================================
 # FINAL VALIDATION
@@ -632,7 +867,15 @@ cat > "$REPORT_FILE" << 'REPORT_EOF'
 🌐 Site Principal:
    https://monitorcorporativo.com
 
-📧 Email Configurado:
+📧 Webmail (Roundcube):
+   URL: https://monitorcorporativo.com/webmail
+   
+   Login:
+   - Usuário: administrador
+   - Senha: Vib797d8
+   - Servidor: monitorcorporativo.com
+
+📮 Email Configurado:
    Email: administrador@monitorcorporativo.com
    Senha: Vib797d8
    
@@ -655,6 +898,7 @@ cat > "$REPORT_FILE" << 'REPORT_EOF'
 
 📁 Diretórios:
    Projeto: /var/www/monitor-corporativo
+   Webmail: /var/www/monitor-corporativo/webmail
    Logs: /var/log/nginx/
    Email: /home/administrador/Maildir
 
@@ -665,6 +909,9 @@ cat > "$REPORT_FILE" << 'REPORT_EOF'
 # Testar site
 curl -I https://monitorcorporativo.com
 
+# Testar webmail
+curl -I https://monitorcorporativo.com/webmail
+
 # Testar envio de email
 echo "Teste" | mail -s "Email de Teste" administrador@monitorcorporativo.com
 
@@ -673,6 +920,9 @@ ls -la /home/administrador/Maildir/new/
 
 # Logs de email
 tail -f /var/log/mail.log
+
+# Logs do webmail
+tail -f /var/www/monitor-corporativo/webmail/logs/errors.log
 
 # Login IMAP teste
 telnet monitorcorporativo.com 143
@@ -695,14 +945,18 @@ TXT     _dmarc             "v=DMARC1; p=none; rua=mailto:administrador@monitorco
 🔍 MONITORAMENTO
 
 # Status dos serviços
-systemctl status nginx postfix dovecot
+systemctl status nginx postfix dovecot php8.3-fpm
 
 # Logs em tempo real
 tail -f /var/log/nginx/monitorcorporativo-access.log
 tail -f /var/log/mail.log
+tail -f /var/www/monitor-corporativo/webmail/logs/errors.log
 
 # Testar autenticação
 su - administrador
+
+# Testar PHP-FPM
+systemctl status php8.3-fpm
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -710,9 +964,25 @@ su - administrador
 
 1. Configurar registros DNS (ver acima)
 2. Testar envio/recebimento de emails
-3. Configurar cliente de email (Thunderbird, Outlook, etc)
-4. Verificar extensão Chrome em /updates/
-5. Submeter extensão para Chrome Web Store (se aplicável)
+3. Acessar webmail: https://monitorcorporativo.com/webmail
+4. Login com: administrador / Vib797d8
+5. Configurar filtros de email no webmail
+6. Verificar extensão Chrome em /updates/
+7. Submeter extensão para Chrome Web Store (se aplicável)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎨 RECURSOS DO ROUNDCUBE
+
+✅ Interface moderna tipo Gmail
+✅ Arrastrar e soltar anexos
+✅ Filtros de email (Sieve)
+✅ Suporte a HTML e rich text
+✅ Busca avançada de emails
+✅ Autocomplete de contatos
+✅ Múltiplas identidades
+✅ Visualização de threads
+✅ Backup automático de rascunhos
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 REPORT_EOF
@@ -727,8 +997,13 @@ echo -e "${GREEN}║               ✅ INSTALAÇÃO CONCLUÍDA COM SUCESSO!     
 echo -e "${GREEN}║                                                                    ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${CYAN}📧 Email: ${YELLOW}administrador@monitorcorporativo.com${NC}"
+echo -e "${CYAN}🌐 Site: ${YELLOW}https://monitorcorporativo.com${NC}"
+echo -e "${CYAN}📧 Webmail: ${YELLOW}https://monitorcorporativo.com/webmail${NC}"
+echo -e "${CYAN}👤 Email: ${YELLOW}administrador@monitorcorporativo.com${NC}"
 echo -e "${CYAN}🔑 Senha: ${YELLOW}$ADMIN_PASSWORD${NC}"
 echo -e "${CYAN}📄 Relatório: ${YELLOW}$REPORT_FILE${NC}"
 echo -e "${CYAN}📋 Log completo: ${YELLOW}$LOG_FILE${NC}"
 echo ""
+
+# Cleanup temporary files
+rm -f /tmp/roundcube_db_pass.txt 2>/dev/null || true
