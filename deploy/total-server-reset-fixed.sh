@@ -197,6 +197,7 @@ apt-get install -y -q \
     dovecot-core \
     dovecot-imapd \
     dovecot-pop3d \
+    dovecot-lmtpd \
     mailutils \
     opendkim \
     opendkim-tools
@@ -344,6 +345,14 @@ service pop3-login {
   inet_listener pop3s {
     port = 995
     ssl = yes
+  }
+}
+
+service lmtp {
+  unix_listener /var/spool/postfix/private/dovecot-lmtp {
+    mode = 0600
+    user = postfix
+    group = postfix
   }
 }
 
