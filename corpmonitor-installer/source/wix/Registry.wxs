@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    
+    <!-- ===== REGISTRY KEYS PARA CHROME/EDGE ===== -->
+    <!-- Estas chaves forçam a instalação da extensão em todos os navegadores Chromium -->
+    
+    <!-- ========== 64-BIT REGISTRY ========== -->
+    <ComponentGroup Id="RegistryKeys_x64" Directory="TARGETDIR">
+      
+      <!-- Google Chrome: ExtensionInstallForcelist -->
+      <Component Id="ChromeForcelist_x64" Guid="[PREENCHER_GUID_17]" Win64="yes">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist">
+          
+          <!-- Formato: {extension-id};file:///{path} -->
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]" 
+            Action="write" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Google Chrome: ExtensionSettings (configurações avançadas) -->
+      <Component Id="ChromeSettings_x64" Guid="[PREENCHER_GUID_18]" Win64="yes">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Google\Chrome\ExtensionSettings\[PREENCHER_EXTENSION_ID]">
+          
+          <!-- installation_mode: force_installed (não permite remoção) -->
+          <RegistryValue 
+            Type="string" 
+            Name="installation_mode" 
+            Value="force_installed" 
+            Action="write" />
+          
+          <!-- update_url (Chrome Web Store para auto-updates) -->
+          <RegistryValue 
+            Type="string" 
+            Name="update_url" 
+            Value="https://clients2.google.com/service/update2/crx" 
+            Action="write" />
+          
+          <!-- toolbar_pin: force_pinned (força ícone na toolbar) -->
+          <RegistryValue 
+            Type="string" 
+            Name="toolbar_pin" 
+            Value="force_pinned" 
+            Action="write" />
+          
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Google\Chrome\ExtensionSettings\[PREENCHER_EXTENSION_ID]" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Microsoft Edge: ExtensionInstallForcelist -->
+      <Component Id="EdgeForcelist_x64" Guid="[PREENCHER_GUID_19]" Win64="yes">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]" 
+            Action="write" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Microsoft Edge: ExtensionSettings -->
+      <Component Id="EdgeSettings_x64" Guid="[PREENCHER_GUID_20]" Win64="yes">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionSettings\[PREENCHER_EXTENSION_ID]">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="installation_mode" 
+            Value="force_installed" 
+            Action="write" />
+          
+          <RegistryValue 
+            Type="string" 
+            Name="toolbar_pin" 
+            Value="force_pinned" 
+            Action="write" />
+          
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionSettings\[PREENCHER_EXTENSION_ID]" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+    </ComponentGroup>
+    
+    <!-- ========== 32-BIT REGISTRY (Wow6432Node) ========== -->
+    <ComponentGroup Id="RegistryKeys_x86" Directory="TARGETDIR">
+      
+      <!-- Google Chrome 32-bit: ExtensionInstallForcelist -->
+      <Component Id="ChromeForcelist_x86" Guid="[PREENCHER_GUID_21]" Win64="no">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]" 
+            Action="write" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Google Chrome 32-bit: ExtensionSettings -->
+      <Component Id="ChromeSettings_x86" Guid="[PREENCHER_GUID_22]" Win64="no">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Google\Chrome\ExtensionSettings\[PREENCHER_EXTENSION_ID]">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="installation_mode" 
+            Value="force_installed" 
+            Action="write" />
+          
+          <RegistryValue 
+            Type="string" 
+            Name="update_url" 
+            Value="https://clients2.google.com/service/update2/crx" 
+            Action="write" />
+          
+          <RegistryValue 
+            Type="string" 
+            Name="toolbar_pin" 
+            Value="force_pinned" 
+            Action="write" />
+          
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Google\Chrome\ExtensionSettings\[PREENCHER_EXTENSION_ID]" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Microsoft Edge 32-bit: ExtensionInstallForcelist -->
+      <Component Id="EdgeForcelist_x86" Guid="[PREENCHER_GUID_23]" Win64="no">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]" 
+            Action="write" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Microsoft Edge 32-bit: ExtensionSettings -->
+      <Component Id="EdgeSettings_x86" Guid="[PREENCHER_GUID_24]" Win64="no">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionSettings\[PREENCHER_EXTENSION_ID]">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="installation_mode" 
+            Value="force_installed" 
+            Action="write" />
+          
+          <RegistryValue 
+            Type="string" 
+            Name="toolbar_pin" 
+            Value="force_pinned" 
+            Action="write" />
+          
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionSettings\[PREENCHER_EXTENSION_ID]" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+    </ComponentGroup>
+    
+  </Fragment>
+</Wix>
