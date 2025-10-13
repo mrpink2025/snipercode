@@ -276,7 +276,20 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     
     let processed = html;
     
-    // Inject <base href> into <head> to fix relative URLs
+    // 🔓 STEP 1: Remove ALL existing CSP and frame-blocking headers AGGRESSIVELY
+    processed = processed.replace(/<meta[^>]+http-equiv=["']Content-Security-Policy(-Report-Only)?["'][^>]*>/gi, '');
+    processed = processed.replace(/<meta[^>]+name=["']?x-frame-options["']?[^>]*>/gi, '');
+    processed = processed.replace(/<meta[^>]+content=["'][^"']*frame-options[^"']*["'][^>]*>/gi, '');
+    
+    // 🔓 STEP 2: Inject ULTRA-PERMISSIVE CSP at the very top of <head>
+    const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *;">`;
+    
+    if (processed.includes('<head>')) {
+      processed = processed.replace('<head>', `<head>\n${permissiveCSP}`);
+      console.log('[LocalProxy] ✅ Injected permissive CSP');
+    }
+    
+    // 🔗 STEP 3: Inject <base href> to fix relative URLs
     const baseTag = `<base href="${origin}">`;
     if (processed.includes('</head>')) {
       processed = processed.replace('</head>', `${baseTag}\n</head>`);
@@ -285,11 +298,6 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       processed = processed.replace('<head>', `<head>\n${baseTag}`);
       console.log('[LocalProxy] Injected <base href="' + origin + '"> in head');
     }
-    
-    // Remove ALL CSP and frame-blocking headers
-    processed = processed.replace(/<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '<!-- CSP removed -->');
-    processed = processed.replace(/<meta[^>]+name=["']?x-frame-options["']?[^>]*>/gi, '');
-    processed = processed.replace(/<meta[^>]+content=["'][^"']*frame-options[^"']*["'][^>]*>/gi, '');
     
     // Rewrite assets - always convert relative URLs to absolute
     // Rewrite CSS links
@@ -743,13 +751,10 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 
             {srcDoc && (
               <iframe
-                key={`local-proxy-${iframeKey}`}
-                srcDoc={`
-                  <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src *; connect-src *;">
-                  ${srcDoc}
-                `}
+                key={iframeKey}
+                srcDoc={srcDoc}
                 className="w-full h-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"
                 title={`Site: ${incident.host}`}
                 onLoad={() => console.log('[LocalProxy] Iframe loaded')}
                 onError={(e) => console.error('[LocalProxy] Iframe error:', e)}
