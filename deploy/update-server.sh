@@ -233,9 +233,18 @@ echo -e "${YELLOW}Phase 7/9: Recarregando Nginx${NC}"
 if nginx -t 2>&1 | grep -q "test is successful"; then
     echo -e "${GREEN}✓ Configuração Nginx válida${NC}"
     
-    # Reload (não restart - zero downtime)
-    systemctl reload nginx
-    echo -e "${GREEN}✓ Nginx recarregado (zero downtime)${NC}"
+    # Check if Nginx is running
+    if systemctl is-active --quiet nginx; then
+        # Reload (não restart - zero downtime)
+        systemctl reload nginx
+        echo -e "${GREEN}✓ Nginx recarregado (zero downtime)${NC}"
+    else
+        # Start Nginx if not running
+        echo -e "${YELLOW}⚠ Nginx não estava rodando, iniciando...${NC}"
+        systemctl start nginx
+        systemctl enable nginx
+        echo -e "${GREEN}✓ Nginx iniciado${NC}"
+    fi
 else
     echo -e "${RED}❌ Erro na configuração Nginx${NC}"
     nginx -t
