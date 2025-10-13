@@ -187,9 +187,11 @@ export type Database = {
           id: string
           incident_id: string
           is_red_list: boolean
+          local_storage: Json | null
           machine_id: string
           resolution_notes: string | null
           resolved_at: string | null
+          session_storage: Json | null
           severity: Database["public"]["Enums"]["incident_severity"]
           status: Database["public"]["Enums"]["incident_status"]
           tab_url: string | null
@@ -205,9 +207,11 @@ export type Database = {
           id?: string
           incident_id: string
           is_red_list?: boolean
+          local_storage?: Json | null
           machine_id: string
           resolution_notes?: string | null
           resolved_at?: string | null
+          session_storage?: Json | null
           severity?: Database["public"]["Enums"]["incident_severity"]
           status?: Database["public"]["Enums"]["incident_status"]
           tab_url?: string | null
@@ -223,9 +227,11 @@ export type Database = {
           id?: string
           incident_id?: string
           is_red_list?: boolean
+          local_storage?: Json | null
           machine_id?: string
           resolution_notes?: string | null
           resolved_at?: string | null
+          session_storage?: Json | null
           severity?: Database["public"]["Enums"]["incident_severity"]
           status?: Database["public"]["Enums"]["incident_status"]
           tab_url?: string | null
