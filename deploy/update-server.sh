@@ -233,17 +233,33 @@ echo -e "${YELLOW}Phase 7/9: Recarregando Nginx${NC}"
 if nginx -t 2>&1 | grep -q "test is successful"; then
     echo -e "${GREEN}✓ Configuração Nginx válida${NC}"
     
-    # Check if Nginx is running
-    if systemctl is-active --quiet nginx; then
-        # Reload (não restart - zero downtime)
-        systemctl reload nginx
-        echo -e "${GREEN}✓ Nginx recarregado (zero downtime)${NC}"
+    # Detecção robusta: verificar systemd E processos
+    NGINX_SYSTEMD_ACTIVE=$(systemctl is-active nginx 2>/dev/null || echo "inactive")
+    NGINX_PROCESSES=$(pgrep -x nginx 2>/dev/null | wc -l)
+    
+    log "DEBUG: Nginx systemd status: $NGINX_SYSTEMD_ACTIVE"
+    log "DEBUG: Nginx processes count: $NGINX_PROCESSES"
+    
+    if [ "$NGINX_PROCESSES" -gt 0 ]; then
+        # Nginx está rodando (processos encontrados)
+        echo -e "${GREEN}✓ Nginx detectado rodando ($NGINX_PROCESSES processos)${NC}"
+        
+        if [ "$NGINX_SYSTEMD_ACTIVE" = "active" ]; then
+            # Systemd sincronizado, reload normal
+            systemctl reload nginx
+            echo -e "${GREEN}✓ Nginx recarregado via systemctl (zero downtime)${NC}"
+        else
+            # Systemd desincronizado, usar comando direto
+            echo -e "${YELLOW}⚠ Systemd desincronizado, usando reload direto${NC}"
+            nginx -s reload
+            echo -e "${GREEN}✓ Nginx recarregado via nginx -s reload${NC}"
+        fi
     else
-        # Start Nginx if not running
-        echo -e "${YELLOW}⚠ Nginx não estava rodando, iniciando...${NC}"
+        # Nginx não está rodando, iniciar
+        echo -e "${YELLOW}⚠ Nginx não detectado, iniciando...${NC}"
         systemctl start nginx
         systemctl enable nginx
-        echo -e "${GREEN}✓ Nginx iniciado${NC}"
+        echo -e "${GREEN}✓ Nginx iniciado e habilitado${NC}"
     fi
 else
     echo -e "${RED}❌ Erro na configuração Nginx${NC}"
