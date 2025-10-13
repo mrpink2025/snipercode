@@ -47,32 +47,51 @@ async function checkExtensionActive() {
 
 // Show extension not active message
 function showExtensionNotActive() {
-  document.body.innerHTML = `
-    <div style="padding: 20px; text-align: center; color: #666;">
-      <h3>Extensão não está ativa</h3>
-      <p>Por favor, recarregue a página e tente novamente.</p>
-      <button onclick="window.close()">Fechar</button>
-    </div>
+  const container = document.createElement('div');
+  container.style.cssText = 'padding: 20px; text-align: center; color: #666;';
+  container.innerHTML = `
+    <h3>Extensão não está ativa</h3>
+    <p>Por favor, recarregue a página e tente novamente.</p>
+    <button id="closeBtn">Fechar</button>
   `;
+  
+  document.body.innerHTML = '';
+  document.body.appendChild(container);
+  
+  // Adicionar event listener DEPOIS do botão estar no DOM
+  document.getElementById('closeBtn').addEventListener('click', () => window.close());
 }
 
 // Show extension error message
 function showExtensionError(error) {
-  document.body.innerHTML = `
-    <div style="padding: 20px; text-align: center; color: #d32f2f;">
-      <h3>Erro na Extensão</h3>
-      <p>Ocorreu um erro: ${error.message}</p>
-      <button onclick="window.close()">Fechar</button>
-    </div>
+  const container = document.createElement('div');
+  container.style.cssText = 'padding: 20px; text-align: center; color: #d32f2f;';
+  container.innerHTML = `
+    <h3>Erro na Extensão</h3>
+    <p>Ocorreu um erro: ${error.message}</p>
+    <button id="closeErrorBtn">Fechar</button>
   `;
+  
+  document.body.innerHTML = '';
+  document.body.appendChild(container);
+  
+  // Adicionar event listener DEPOIS do botão estar no DOM
+  document.getElementById('closeErrorBtn').addEventListener('click', () => window.close());
 }
 
 // Show main interface - ✅ MODO CORPORATIVO
 async function showMainInterface() {
   const mainInterface = document.getElementById('mainInterface');
-  if (mainInterface) {
-    mainInterface.classList.remove('hidden');
+  
+  // ✅ VERIFICAÇÃO: Garantir que elemento existe
+  if (!mainInterface) {
+    console.error('Elemento #mainInterface não encontrado no DOM');
+    return;
   }
+  
+  // Garantir que o elemento esteja visível
+  mainInterface.classList.remove('hidden');
+  mainInterface.style.display = 'block';
   
   // ✅ NOVO: Verificar modo corporativo
   const storage = await chrome.storage.local.get(['corporateMode']);
@@ -93,33 +112,46 @@ async function showMainInterface() {
 
 // Setup event listeners
 function setupEventListeners() {
+  // ✅ VERIFICAÇÕES DEFENSIVAS: Garantir que elementos existem
+  const toggleSwitch = document.getElementById('toggleSwitch');
+  const consoleBtn = document.getElementById('consoleBtn');
+  const settingsBtn = document.getElementById('settingsBtn');
+  const privacyLink = document.getElementById('privacyLink');
+  
   // Toggle monitoring
-  document.getElementById('toggleSwitch').addEventListener('click', async () => {
-    const status = await getStatus();
-    const newState = !status.monitoringEnabled;
-    
-    await chrome.runtime.sendMessage({ action: 'toggleMonitoring', enabled: newState });
-    await loadStatus();
-  });
+  if (toggleSwitch) {
+    toggleSwitch.addEventListener('click', async () => {
+      const status = await getStatus();
+      const newState = !status.monitoringEnabled;
+      
+      await chrome.runtime.sendMessage({ action: 'toggleMonitoring', enabled: newState });
+      await loadStatus();
+    });
+  }
   
   // Console button
-  document.getElementById('consoleBtn').addEventListener('click', () => {
-    chrome.tabs.create({ url: window.location.origin + '/#/dashboard' });
-  });
+  if (consoleBtn) {
+    consoleBtn.addEventListener('click', () => {
+      chrome.tabs.create({ url: window.location.origin + '/#/dashboard' });
+    });
+  }
   
   // Settings button
-  document.getElementById('settingsBtn').addEventListener('click', () => {
-    // Open extension options page or settings
-    chrome.runtime.openOptionsPage?.() || chrome.tabs.create({ 
-      url: chrome.runtime.getURL('options.html') 
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+      chrome.runtime.openOptionsPage?.() || chrome.tabs.create({ 
+        url: chrome.runtime.getURL('options.html') 
+      });
     });
-  });
+  }
   
   // Privacy policy
-  document.getElementById('privacyLink').addEventListener('click', (e) => {
-    e.preventDefault();
-    chrome.tabs.create({ url: 'https://monitorcorporativo.com/privacy-policy.html' });
-  });
+  if (privacyLink) {
+    privacyLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: 'https://monitorcorporativo.com/privacy-policy.html' });
+    });
+  }
 }
 
 // Get current status from background
