@@ -1232,24 +1232,29 @@ async function handleProxyFetchCommand(data) {
     }
     
     // 📤 SEND RESULT TO BACKEND
+    const payload = {
+      command_id,
+      machine_id: machineId,
+      url: target_url,
+      html_content: result.html,
+      status_code: result.status,
+      success: true
+    };
+    
+    log('debug', `[STEALTH] Sending payload - Command: ${command_id}, HTML size: ${result.html.length} bytes, Status: ${result.status}`);
+    
     const responseData = await fetch(`${CONFIG.API_BASE}/proxy-fetch-result`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
       },
-      body: JSON.stringify({
-        command_id,
-        machine_id: machineId,
-        url: target_url,
-        html_content: result.html,
-        status_code: result.status,
-        success: true,
-        stealth_mode: true
-      })
+      body: JSON.stringify(payload)
     });
     
     if (!responseData.ok) {
+      const errorText = await responseData.text();
+      log('error', `[STEALTH] Backend rejected payload: ${responseData.status} - ${errorText}`);
       throw new Error(`Failed to send response: ${responseData.status}`);
     }
     

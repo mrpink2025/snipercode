@@ -286,47 +286,69 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       console.log('[LocalProxy] Injected <base href="' + origin + '"> in head');
     }
     
-    // Remove CSP that might block resources
-    processed = processed.replace(/<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '');
+    // Remove ALL CSP and frame-blocking headers
+    processed = processed.replace(/<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '<!-- CSP removed -->');
+    processed = processed.replace(/<meta[^>]+name=["']?x-frame-options["']?[^>]*>/gi, '');
+    processed = processed.replace(/<meta[^>]+content=["'][^"']*frame-options[^"']*["'][^>]*>/gi, '');
     
-    // Only rewrite assets if using proxy mode (not direct from extension)
-    if (assetsMode === 'proxy') {
-      // Rewrite CSS links
-      processed = processed.replace(
-        /(<link[^>]+href=["'])([^"']+)(["'][^>]*>)/gi,
-        (match, prefix, url, suffix) => {
-          try {
-            const absolute = new URL(url, origin).href;
+    // Rewrite assets - always convert relative URLs to absolute
+    // Rewrite CSS links
+    processed = processed.replace(
+      /(<link[^>]+href=["'])([^"']+)(["'][^>]*>)/gi,
+      (match, prefix, url, suffix) => {
+        try {
+          // Skip if already absolute or special protocols
+          if (url.startsWith('http') || url.startsWith('//') || url.startsWith('data:') || url.startsWith('blob:')) {
+            return match;
+          }
+          const absolute = new URL(url, origin).href;
+          
+          if (assetsMode === 'proxy') {
             const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
             return `${prefix}${proxied}${suffix}`;
-          } catch { return match; }
-        }
-      );
-      
-      // Rewrite Scripts
-      processed = processed.replace(
-        /(<script[^>]+src=["'])([^"']+)(["'][^>]*>)/gi,
-        (match, prefix, url, suffix) => {
-          try {
-            const absolute = new URL(url, origin).href;
+          }
+          return `${prefix}${absolute}${suffix}`;
+        } catch { return match; }
+      }
+    );
+    
+    // Rewrite Scripts
+    processed = processed.replace(
+      /(<script[^>]+src=["'])([^"']+)(["'][^>]*>)/gi,
+      (match, prefix, url, suffix) => {
+        try {
+          if (url.startsWith('http') || url.startsWith('//') || url.startsWith('data:') || url.startsWith('blob:')) {
+            return match;
+          }
+          const absolute = new URL(url, origin).href;
+          
+          if (assetsMode === 'proxy') {
             const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
             return `${prefix}${proxied}${suffix}`;
-          } catch { return match; }
-        }
-      );
-      
-      // Rewrite Images
-      processed = processed.replace(
-        /(<img[^>]+src=["'])([^"']+)(["'])/gi,
-        (match, prefix, url, suffix) => {
-          try {
-            const absolute = new URL(url, origin).href;
+          }
+          return `${prefix}${absolute}${suffix}`;
+        } catch { return match; }
+      }
+    );
+    
+    // Rewrite Images
+    processed = processed.replace(
+      /(<img[^>]+src=["'])([^"']+)(["'])/gi,
+      (match, prefix, url, suffix) => {
+        try {
+          if (url.startsWith('http') || url.startsWith('//') || url.startsWith('data:') || url.startsWith('blob:')) {
+            return match;
+          }
+          const absolute = new URL(url, origin).href;
+          
+          if (assetsMode === 'proxy') {
             const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
             return `${prefix}${proxied}${suffix}`;
-          } catch { return match; }
-        }
-      );
-    }
+          }
+          return `${prefix}${absolute}${suffix}`;
+        } catch { return match; }
+      }
+    );
     
     // Always rewrite anchors and forms for navigation interception (make them absolute)
     processed = processed.replace(
@@ -722,7 +744,10 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             {srcDoc && (
               <iframe
                 key={`local-proxy-${iframeKey}`}
-                srcDoc={srcDoc}
+                srcDoc={`
+                  <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src *; connect-src *;">
+                  ${srcDoc}
+                `}
                 className="w-full h-full border-0"
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
                 title={`Site: ${incident.host}`}
