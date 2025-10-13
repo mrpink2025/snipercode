@@ -1321,11 +1321,6 @@ async function closeOffscreenDocument() {
     log('debug', '[STEALTH] Offscreen document already closed');
   }
 }
-        log('warn', 'Failed to close incognito tab:', e);
-      }
-    }
-  }
-}
 
 // Handle export cookies command - collect fresh cookies and sync to incident
 async function handleExportCookiesCommand(data) {
