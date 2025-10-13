@@ -96,6 +96,9 @@ if [ ! -d ".git" ]; then
     exit 1
 fi
 
+# Add safe.directory to avoid dubious ownership error
+git config --global --add safe.directory "$PROJECT_ROOT" 2>/dev/null || true
+
 # Stash local changes (if any)
 git stash save "Auto-stash before update $(date)" 2>/dev/null || true
 
