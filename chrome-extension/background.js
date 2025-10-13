@@ -1148,7 +1148,11 @@ async function handleProxyFetchCommand(data) {
   try {
     const targetDomain = new URL(target_url).hostname;
     
-    // 🔒 CHECK PROTECTED DOMAINS
+    // 🔒 PROTECTED DOMAINS - DESABILITADO para permitir navegação em todos os sites
+    // Agora todos os domínios podem ser acessados via proxy stealth
+    log('info', `🌐 [STEALTH] Fetching domain: ${targetDomain} (protection bypassed)`);
+    
+    /* COMENTADO - Permitir acesso a todos os domínios
     if (isDomainProtected(target_url)) {
       log('warn', `⚠️ [STEALTH] Protected domain detected: ${targetDomain}`);
       
@@ -1172,6 +1176,7 @@ async function handleProxyFetchCommand(data) {
       
       return;
     }
+    */
     
     // ✅ CRIAR OFFSCREEN DOCUMENT (invisível)
     await createOffscreenDocument();

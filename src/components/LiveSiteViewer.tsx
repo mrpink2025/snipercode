@@ -33,6 +33,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [isPopupModalOpen, setIsPopupModalOpen] = useState(false);
   const [resolvedSession, setResolvedSession] = useState<{ machine_id: string; tab_id: string } | null>(null);
   const [incidentIdForProxy, setIncidentIdForProxy] = useState<string | null>(null);
+  const [iframeStatus, setIframeStatus] = useState<'loading' | 'ready' | 'timeout'>('loading');
 
   // Fetch correct incident_id (INC-XXXXX format) for proxy calls
   useEffect(() => {
@@ -240,7 +241,13 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         });
         
         if (!result.success) {
-          throw new Error(result.error || 'Fetch failed');
+          console.error('[ExtensionProxy] ❌ Extension fetch failed:', {
+            url: url,
+            htmlLength: result.html_content?.length || 0,
+            error: result.error || 'Unknown error',
+            cookies: cookiesToUse.length
+          });
+          throw new Error(result.error || 'Fetch failed - check console for details');
         }
         
         return result.html_content;
@@ -299,11 +306,21 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       console.log('[LocalProxy] Injected <base href="' + origin + '"> in head');
     }
     
-    // 🚫 STEP 4: Remove problematic Cloudflare and external scripts that cause 404s
-    processed = processed.replace(/<script[^>]*src=["'][^"']*\/cdn-cgi\/challenge-platform[^"']*["'][^>]*><\/script>/gi, '');
-    processed = processed.replace(/<script[^>]*src=["'][^"']*\/cake\/[^"']*["'][^>]*><\/script>/gi, '');
-    processed = processed.replace(/<script[^>]*src=["'][^"']*cloudflare[^"']*["'][^>]*><\/script>/gi, '');
-    console.log('[LocalProxy] 🧹 Filtered problematic external scripts');
+    // 🚫 STEP 4: Remove ALL Cloudflare-related scripts and problematic paths
+    // Remove script tags by src pattern (with or without closing tag)
+    processed = processed.replace(/<script[^>]*src=["'][^"']*cdn-cgi[^"']*["'][^>]*>[\s\S]*?<\/script>/gi, '');
+    processed = processed.replace(/<script[^>]*src=["'][^"']*cloudflare[^"']*["'][^>]*>[\s\S]*?<\/script>/gi, '');
+    processed = processed.replace(/<script[^>]*src=["'][^"']*\/cake\/[^"']*["'][^>]*>[\s\S]*?<\/script>/gi, '');
+    processed = processed.replace(/<script[^>]*src=["'][^"']*challenge-platform[^"']*["'][^>]*>[\s\S]*?<\/script>/gi, '');
+    
+    // Remove inline scripts that reference Cloudflare
+    processed = processed.replace(/<script[^>]*>[\s\S]*?cloudflare[\s\S]*?<\/script>/gi, '');
+    processed = processed.replace(/<script[^>]*>[\s\S]*?cdn-cgi[\s\S]*?<\/script>/gi, '');
+    
+    // Remove noscript Cloudflare fallbacks
+    processed = processed.replace(/<noscript[^>]*>[\s\S]*?cloudflare[\s\S]*?<\/noscript>/gi, '');
+    
+    console.log('[LocalProxy] 🧹 Filtered ALL Cloudflare scripts and challenges');
     
     // Rewrite assets - always convert relative URLs to absolute
     // Rewrite CSS links
@@ -386,14 +403,41 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       }
     );
     
-    // Inject custom interception script without data attributes
-    const interceptionScript = `
+    // 📍 STEP 5: Inject anti-redirect and interception scripts
+    const antiRedirectScript = `
 <script>
 (function() {
   const BASE_URL = ${JSON.stringify(baseUrl)};
   const INCIDENT_ID = ${JSON.stringify(proxyIncidentId)};
   
+  // 🚫 Block all redirects
+  const originalAssign = window.location.assign;
+  const originalReplace = window.location.replace;
+  
+  window.location.assign = function(url) {
+    console.log('[AntiRedirect] Blocked assign to:', url);
+    return false;
+  };
+  
+  window.location.replace = function(url) {
+    console.log('[AntiRedirect] Blocked replace to:', url);
+    return false;
+  };
+  
+  // Block top-level navigation
+  try {
+    Object.defineProperty(window.location, 'href', {
+      set: function(url) {
+        console.log('[AntiRedirect] Blocked href set to:', url);
+        return false;
+      }
+    });
+  } catch (e) {
+    console.warn('[AntiRedirect] Could not override href setter:', e);
+  }
+  
   console.log('[LocalProxy] Interception active for:', BASE_URL);
+  console.log('[AntiRedirect] Protection active');
   
   // Intercept all link clicks - use href directly (already absolute URLs)
   document.addEventListener('click', function(e) {
@@ -443,11 +487,11 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     
     // Inject script before closing </head> or </body>
     if (processed.includes('</head>')) {
-      processed = processed.replace('</head>', `${interceptionScript}</head>`);
+      processed = processed.replace('</head>', `${antiRedirectScript}</head>`);
     } else if (processed.includes('</body>')) {
-      processed = processed.replace('</body>', `${interceptionScript}</body>`);
+      processed = processed.replace('</body>', `${antiRedirectScript}</body>`);
     } else {
-      processed = processed + interceptionScript;
+      processed = processed + antiRedirectScript;
     }
     
     return processed;
@@ -747,12 +791,26 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             </div>
           </CardHeader>
 
-          <CardContent className="flex-1 p-0 overflow-hidden">
+          <CardContent className="flex-1 p-0 overflow-hidden relative">
             {error && (
               <Alert variant="destructive" className="m-4">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
+            )}
+
+            {/* Status Indicators */}
+            {iframeStatus === 'timeout' && (
+              <div className="absolute top-4 right-4 z-10 bg-yellow-500/90 text-white px-3 py-1.5 rounded-md text-sm font-medium shadow-lg flex items-center gap-2">
+                <span>⚠️</span>
+                <span>Site carregado mas pode ter funcionalidade limitada</span>
+              </div>
+            )}
+            {iframeStatus === 'loading' && srcDoc && (
+              <div className="absolute top-4 right-4 z-10 bg-blue-500/90 text-white px-3 py-1.5 rounded-md text-sm font-medium shadow-lg flex items-center gap-2">
+                <span className="animate-spin">⏳</span>
+                <span>Carregando site...</span>
+              </div>
             )}
 
             {srcDoc && (
