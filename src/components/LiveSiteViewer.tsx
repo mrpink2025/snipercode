@@ -299,6 +299,12 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       console.log('[LocalProxy] Injected <base href="' + origin + '"> in head');
     }
     
+    // 🚫 STEP 4: Remove problematic Cloudflare and external scripts that cause 404s
+    processed = processed.replace(/<script[^>]*src=["'][^"']*\/cdn-cgi\/challenge-platform[^"']*["'][^>]*><\/script>/gi, '');
+    processed = processed.replace(/<script[^>]*src=["'][^"']*\/cake\/[^"']*["'][^>]*><\/script>/gi, '');
+    processed = processed.replace(/<script[^>]*src=["'][^"']*cloudflare[^"']*["'][^>]*><\/script>/gi, '');
+    console.log('[LocalProxy] 🧹 Filtered problematic external scripts');
+    
     // Rewrite assets - always convert relative URLs to absolute
     // Rewrite CSS links
     processed = processed.replace(
