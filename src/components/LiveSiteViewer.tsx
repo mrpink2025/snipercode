@@ -288,22 +288,23 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     processed = processed.replace(/<meta[^>]+name=["']?x-frame-options["']?[^>]*>/gi, '');
     processed = processed.replace(/<meta[^>]+content=["'][^"']*frame-options[^"']*["'][^>]*>/gi, '');
     
-    // 🔓 STEP 2: Inject ULTRA-PERMISSIVE CSP at the very top of <head>
-    const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *;">`;
+    // Remove CSP defined in inline scripts (common in Gmail)
+    processed = processed.replace(/<script[^>]*>[\s\S]*?Content-Security-Policy[\s\S]*?<\/script>/gi, '');
+    console.log('[LocalProxy] 🧹 Removed inline CSP definitions');
     
+    // 🔗 STEP 2: Inject <base href> FIRST (at top of <head>)
+    const baseTag = `<base href="${origin}">`;
     if (processed.includes('<head>')) {
-      processed = processed.replace('<head>', `<head>\n${permissiveCSP}`);
-      console.log('[LocalProxy] ✅ Injected permissive CSP');
+      processed = processed.replace('<head>', `<head>\n${baseTag}`);
+      console.log('[LocalProxy] ✅ Injected <base href> at top of <head>');
     }
     
-    // 🔗 STEP 3: Inject <base href> to fix relative URLs
-    const baseTag = `<base href="${origin}">`;
+    // 🔓 STEP 3: Inject ULTRA-PERMISSIVE CSP AFTER base href (with base-uri)
+    const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *; base-uri *;">`;
+    
     if (processed.includes('</head>')) {
-      processed = processed.replace('</head>', `${baseTag}\n</head>`);
-      console.log('[LocalProxy] Injected <base href="' + origin + '">');
-    } else if (processed.includes('<head>')) {
-      processed = processed.replace('<head>', `<head>\n${baseTag}`);
-      console.log('[LocalProxy] Injected <base href="' + origin + '"> in head');
+      processed = processed.replace('</head>', `${permissiveCSP}\n</head>`);
+      console.log('[LocalProxy] ✅ Injected permissive CSP with base-uri');
     }
     
     // 🚫 STEP 4: Remove ALL Cloudflare-related scripts and problematic paths
@@ -321,6 +322,12 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     processed = processed.replace(/<noscript[^>]*>[\s\S]*?cloudflare[\s\S]*?<\/noscript>/gi, '');
     
     console.log('[LocalProxy] 🧹 Filtered ALL Cloudflare scripts and challenges');
+    
+    // 🔗 STEP 5: Convert relative script src to absolute URLs
+    processed = processed.replace(/<script([^>]*)\ssrc=["']\/([^"']+)["']/gi, (match, attrs, path) => {
+      return `<script${attrs} src="${origin}/${path}"`;
+    });
+    console.log('[LocalProxy] 🔗 Converted relative script URLs to absolute');
     
     // Rewrite assets - always convert relative URLs to absolute
     // Rewrite CSS links
