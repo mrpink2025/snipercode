@@ -67,11 +67,27 @@ function showExtensionError(error) {
   `;
 }
 
-// Show main interface
-function showMainInterface() {
+// Show main interface - ✅ MODO CORPORATIVO
+async function showMainInterface() {
   const mainInterface = document.getElementById('mainInterface');
   if (mainInterface) {
     mainInterface.classList.remove('hidden');
+  }
+  
+  // ✅ NOVO: Verificar modo corporativo
+  const storage = await chrome.storage.local.get(['corporateMode']);
+  if (storage.corporateMode === true) {
+    // Esconder toggle de ativação
+    const toggleContainer = document.querySelector('.status-section');
+    if (toggleContainer) {
+      // Substituir por badge corporativo
+      toggleContainer.innerHTML = `
+        <div style="text-align: center; padding: 15px; background: rgba(39, 174, 96, 0.2); border-radius: 8px;">
+          <strong style="font-size: 14px;">🏢 Modo Corporativo</strong>
+          <p style="font-size: 12px; margin-top: 5px; opacity: 0.9;">Monitoramento sempre ativo</p>
+        </div>
+      `;
+    }
   }
 }
 
