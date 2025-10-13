@@ -249,10 +249,25 @@ if nginx -t 2>&1 | grep -q "test is successful"; then
             systemctl reload nginx
             echo -e "${GREEN}✓ Nginx recarregado via systemctl (zero downtime)${NC}"
         else
-            # Systemd desincronizado, usar comando direto
-            echo -e "${YELLOW}⚠ Systemd desincronizado, usando reload direto${NC}"
-            nginx -s reload
-            echo -e "${GREEN}✓ Nginx recarregado via nginx -s reload${NC}"
+            # Systemd desincronizado - fazer reinício limpo
+            echo -e "${YELLOW}⚠ Systemd desincronizado, fazendo reinício limpo...${NC}"
+            
+            # Parar todos os processos nginx
+            echo "Parando processos nginx..."
+            killall -QUIT nginx 2>/dev/null || true
+            sleep 2
+            killall -9 nginx 2>/dev/null || true
+            
+            # Limpar PID file
+            echo "Limpando PID file..."
+            rm -f /run/nginx.pid
+            
+            # Iniciar via systemd (sincroniza tudo)
+            echo "Iniciando nginx via systemd..."
+            systemctl start nginx
+            systemctl enable nginx
+            
+            echo -e "${GREEN}✓ Nginx reiniciado e sincronizado com systemd${NC}"
         fi
     else
         # Nginx não está rodando, iniciar
