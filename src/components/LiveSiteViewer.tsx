@@ -214,8 +214,12 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       machine_online: dispatchData?.success === true
     });
     
-    if (!dispatchData?.success) {
+    if (!dispatchData?.success && dispatchData?.status !== 'queued') {
       console.warn('[ExtensionProxy] ⚠️ Máquina offline - comando será entregue via polling quando usuário conectar');
+    }
+    
+    if (dispatchData?.status === 'queued') {
+      console.log('[ExtensionProxy] ✅ Máquina online - comando enfileirado, será entregue via polling');
     }
     
     // 4. Poll for result in proxy_fetch_results (NOT popup_responses!)

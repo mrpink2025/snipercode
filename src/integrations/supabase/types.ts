@@ -568,12 +568,37 @@ export type Database = {
           },
         ]
       }
+      websocket_connections: {
+        Row: {
+          connected_at: string
+          is_active: boolean | null
+          last_ping_at: string
+          machine_id: string
+        }
+        Insert: {
+          connected_at?: string
+          is_active?: boolean | null
+          last_ping_at?: string
+          machine_id: string
+        }
+        Update: {
+          connected_at?: string
+          is_active?: boolean | null
+          last_ping_at?: string
+          machine_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
       cleanup_old_sessions: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      cleanup_stale_websockets: {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
