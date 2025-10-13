@@ -1215,21 +1215,19 @@ async function handleProxyFetchCommand(data) {
     
     log('info', `✅ [STEALTH] Fetched ${result.html.length} bytes from ${target_url}`);
     
-    // 🧹 CLEANUP COOKIES
-    if (injectedCookies.length > 0) {
-      log('info', `🧹 [STEALTH] Cleaning up ${injectedCookies.length} cookies...`);
-      
-      for (const cookie of injectedCookies) {
-        try {
-          await chrome.cookies.remove({
-            url: target_url,
-            name: cookie.name
-          });
-        } catch (err) {
-          // Ignore cleanup errors
-        }
-      }
-    }
+    /**
+     * 🔐 STEALTH MODE ISOLATION
+     * 
+     * Cookies are injected ONLY in the Offscreen Document context,
+     * which is completely isolated from the user's main browser session.
+     * 
+     * When the offscreen document is closed, all temporary cookies
+     * are automatically discarded without affecting the user.
+     * 
+     * ⚠️ NEVER use chrome.cookies.remove() here, as it would delete
+     *    cookies from the user's actual browser session!
+     */
+    log('info', '✅ [STEALTH] Offscreen fetch completed (cookies isolated from user session)');
     
     // 📤 SEND RESULT TO BACKEND
     const payload = {
