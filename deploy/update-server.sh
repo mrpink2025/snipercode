@@ -237,8 +237,8 @@ if nginx -t 2>&1 | grep -q "test is successful"; then
     NGINX_SYSTEMD_ACTIVE=$(systemctl is-active nginx 2>/dev/null || echo "inactive")
     NGINX_PROCESSES=$(pgrep -x nginx 2>/dev/null | wc -l)
     
-    log "DEBUG: Nginx systemd status: $NGINX_SYSTEMD_ACTIVE"
-    log "DEBUG: Nginx processes count: $NGINX_PROCESSES"
+    echo -e "${BLUE}DEBUG: Nginx systemd status: $NGINX_SYSTEMD_ACTIVE${NC}"
+    echo -e "${BLUE}DEBUG: Nginx processes count: $NGINX_PROCESSES${NC}"
     
     if [ "$NGINX_PROCESSES" -gt 0 ]; then
         # Nginx está rodando (processos encontrados)
