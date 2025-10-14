@@ -200,7 +200,7 @@ class MainWindow(ctk.CTk):
         
         self.status_filter = ctk.CTkOptionMenu(
             filters_frame,
-            values=["Todos", "new", "in_progress", "resolved"],
+            values=["Todos", "new", "in-progress", "resolved"],
             command=self.filter_incidents,
             width=150
         )
@@ -293,30 +293,62 @@ class MainWindow(ctk.CTk):
             value = kpis.get(key, 0)
             card.value_label.configure(text=str(value))
     
-    def load_incidents(self):
-        """Carregar lista de incidentes"""
-        # Limpar lista atual
-        for widget in self.incidents_scroll.winfo_children():
-            widget.destroy()
+    def load_incidents(self, *args):
+        """Carregar lista de incidentes com debounce"""
+        # Cancelar carregamento anterior se pendente
+        if hasattr(self, '_load_incidents_after_id'):
+            try:
+                self.after_cancel(self._load_incidents_after_id)
+            except:
+                pass
         
-        # Buscar incidentes
-        status = None if self.status_filter.get() == "Todos" else self.status_filter.get()
-        severity = None if self.severity_filter.get() == "Todas" else self.severity_filter.get()
-        
-        self.incidents_list = self.incident_manager.get_incidents(status, severity)
-        
-        if not self.incidents_list:
-            no_data = ctk.CTkLabel(
-                self.incidents_scroll,
-                text="Nenhum incidente encontrado",
-                text_color="gray"
-            )
-            no_data.pack(pady=20)
-            return
-        
-        # Criar cards de incidentes
-        for incident in self.incidents_list:
-            self.create_incident_card(incident)
+        # Agendar carregamento com debounce de 300ms
+        self._load_incidents_after_id = self.safe_after(300, self._do_load_incidents)
+    
+    def _do_load_incidents(self):
+        """Executar carregamento de incidentes"""
+        try:
+            import time
+            start_time = time.time()
+            
+            # Limpar widgets antigos de forma segura
+            for widget in self.incidents_scroll.winfo_children():
+                try:
+                    widget.destroy()
+                except:
+                    pass
+            
+            # Forçar atualização do Tkinter
+            self.incidents_scroll.update_idletasks()
+            
+            # Buscar incidentes
+            status = None if self.status_filter.get() == "Todos" else self.status_filter.get()
+            severity = None if self.severity_filter.get() == "Todas" else self.severity_filter.get()
+            
+            self.incidents_list = self.incident_manager.get_incidents(status, severity)
+            
+            if not self.incidents_list:
+                no_data = ctk.CTkLabel(
+                    self.incidents_scroll,
+                    text="Nenhum incidente encontrado",
+                    text_color="gray"
+                )
+                no_data.pack(pady=20)
+                return
+            
+            # Criar cards de incidentes com tratamento de erro
+            for incident in self.incidents_list:
+                try:
+                    self.create_incident_card(incident)
+                except Exception as e:
+                    logger.warning(f"Erro ao criar card de incidente {incident.get('id')}: {e}")
+                    continue
+            
+            elapsed = time.time() - start_time
+            logger.info(f"✓ Lista de incidentes renderizada: {len(self.incidents_list)} itens em {elapsed:.2f}s")
+            
+        except Exception as e:
+            logger.error(f"Erro ao carregar incidentes: {e}", exc_info=True)
     
     def filter_incidents(self, _=None):
         """Filtrar incidentes"""
