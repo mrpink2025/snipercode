@@ -283,11 +283,8 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     
     let processed = html;
     
-    // 🧹 SHADOW CLEANUP: Remove all scripts and inline event handlers
-    console.log('[LocalProxy] 🧹 Removing inline scripts and event handlers...');
-    processed = processed.replace(/<script[\s\S]*?<\/script>/gi, '');
-    processed = processed.replace(/\son[a-z]+\s*=\s*["'][\s\S]*?["']/gi, '');
-    console.log('[LocalProxy] ✅ Shadow cleanup complete');
+    // ⚠️ Preserve scripts and inline event handlers to keep site navigation working
+    console.log('[LocalProxy] ⚠️ Preserving site scripts and inline handlers for navigation');
     
     // 🔓 STEP 1: Remove ALL existing CSP and frame-blocking headers AGGRESSIVELY
     processed = processed.replace(/<meta[^>]*Content-Security-Policy[^>]*>/gi, '');
@@ -484,126 +481,26 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       return url;
     }
     
-    // Protocol-relative: //example.com/path
-    if (url.startsWith('//')) {
-      return 'https:' + url;
-    }
-    
-    // Relative: /path or path
-    try {
-      return new URL(url, ORIGIN).href;
-    } catch {
-      return url;
-    }
-  }
-
-  // Intercept setAttribute for ALL dynamic elements
-  const originalSetAttribute = Element.prototype.setAttribute;
-  Element.prototype.setAttribute = function(name, value) {
-    if ((name === 'src' || name === 'href' || name === 'action') && typeof value === 'string') {
-      const normalized = normalizeUrl(value);
-      if (normalized !== value) {
-        console.log('[Normalizer] ' + name + ': ' + value + ' → ' + normalized);
-      }
-      value = normalized;
-    }
-    return originalSetAttribute.call(this, name, value);
-  };
-
-  // Override property setters for common elements
-  const descriptors = {
-    script: { prop: 'src', proto: HTMLScriptElement.prototype },
-    img: { prop: 'src', proto: HTMLImageElement.prototype },
-    link: { prop: 'href', proto: HTMLLinkElement.prototype },
-    iframe: { prop: 'src', proto: HTMLIFrameElement.prototype },
-    form: { prop: 'action', proto: HTMLFormElement.prototype }
-  };
-
-  Object.entries(descriptors).forEach(function(entry) {
-    const tag = entry[0];
-    const config = entry[1];
-    const prop = config.prop;
-    const proto = config.proto;
-    
-    const original = Object.getOwnPropertyDescriptor(proto, prop);
-    if (original && original.set) {
-      Object.defineProperty(proto, prop, {
-        configurable: original.configurable,
-        enumerable: original.enumerable,
-        get: original.get,
-        set: function(value) {
-          const normalized = normalizeUrl(value);
-          if (normalized !== value) {
-            console.log('[Normalizer] ' + tag + '.' + prop + ': ' + value + ' → ' + normalized);
-          }
-          return original.set.call(this, normalized);
-        }
-      });
-    }
-  });
-
-  // MutationObserver for newly added elements
-  const observer = new MutationObserver(function(mutations) {
-    mutations.forEach(function(mutation) {
-      mutation.addedNodes.forEach(function(node) {
-        if (node.nodeType === 1) { // Element
-          // Remove any CSP meta tags injected dynamically
-          const maybeMeta = (node.tagName === 'META') ? [node] : [];
-          const metas = node.querySelectorAll ? node.querySelectorAll('meta') : [];
-          const allMetas = maybeMeta.concat(Array.from(metas as any));
-          allMetas.forEach(function(m) {
-            const httpEquiv = (m.getAttribute && (m.getAttribute('http-equiv') || m.getAttribute('httpEquiv') || '')) || '';
-            if (/content-security-policy/i.test(httpEquiv)) {
-              console.log('[AntiRedirect] Removed injected CSP <meta>');
-              m.remove();
-            }
-          });
-
-          // Normalize the node and all its descendants
-          const elements = [node];
-          const descendants = node.querySelectorAll ? node.querySelectorAll('[src], [href], [action]') : [];
-          for (let i = 0; i < descendants.length; i++) {
-            elements.push(descendants[i]);
-          }
-          
-          elements.forEach(function(el) {
-            ['src', 'href', 'action'].forEach(function(attr) {
-              const value = el.getAttribute(attr);
-              if (value) {
-                const normalized = normalizeUrl(value);
-                if (normalized !== value) {
-                  el.setAttribute(attr, normalized);
-                }
-              }
-            });
-          });
-        }
-      });
-    });
-  });
-
-  observer.observe(document, { childList: true, subtree: true });
-
-  console.log('[LocalProxy] 🌐 Universal URL normalizer active for:', ORIGIN);
+  // Simplified interception only (no prototype/attribute overrides)
   console.log('[LocalProxy] Interception active for:', BASE_URL);
-  console.log('[AntiRedirect] Protection active');
   
-  // Intercept all link clicks - use href directly (already absolute URLs)
+  // Intercept all link clicks (robust)
   document.addEventListener('click', function(e) {
-    const target = e.target.closest('a');
-    if (!target || !target.href) return;
-    
-    // Skip special protocols
-    const href = target.href;
-    if (href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) {
-      return;
+    try {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      var el = e.target;
+      while (el && el.nodeType === 3) el = el.parentNode; // text node -> element
+      while (el && el.tagName !== 'A') el = el.parentElement;
+      if (!el || !el.href) return;
+      var href = el.href;
+      if (href.indexOf('javascript:') === 0 || href.indexOf('#') === 0 || href.indexOf('mailto:') === 0 || href.indexOf('tel:') === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[LocalProxy] Navigate to:', href);
+      window.parent.postMessage({ type: 'local-proxy:navigate', url: href, incidentId: INCIDENT_ID }, '*');
+    } catch (err) {
+      console.warn('[LocalProxy] Click interception error:', err);
     }
-    
-    e.preventDefault();
-    e.stopPropagation();
-    
-    console.log('[LocalProxy] Navigate to:', href);
-    window.parent.postMessage({ type: 'local-proxy:navigate', url: href, incidentId: INCIDENT_ID }, '*');
   }, true);
   
   // Intercept form submissions
