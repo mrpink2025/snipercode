@@ -13,6 +13,7 @@ import threading
 class MainWindow(ctk.CTk):
     def __init__(self, auth_manager: AuthManager):
         super().__init__()
+        logger.info("MainWindow.__init__: Iniciando...")
         
         self.auth_manager = auth_manager
         self._destroyed = False
@@ -28,6 +29,7 @@ class MainWindow(ctk.CTk):
         self.domain_manager = DomainManager(auth_manager.supabase, user_id)
         self.browser_manager = BrowserManager(auth_manager.supabase)
         self.realtime_manager = RealtimeManager(auth_manager.supabase)
+        logger.info("MainWindow.__init__: Managers criados")
         
         # Configuração da janela
         self.title("CorpMonitor Desktop")
@@ -46,15 +48,19 @@ class MainWindow(ctk.CTk):
         self.site_viewer: Optional[SiteViewer] = None
         
         # Criar UI
+        logger.info("MainWindow.__init__: Criando widgets...")
         self.create_widgets()
+        logger.info("MainWindow.__init__: Widgets criados")
         
         # Carregar dados iniciais em thread separada
+        logger.info("MainWindow.__init__: Iniciando carregamento de dados em thread...")
         self._load_initial_data()
         
-        # Configurar realtime
-        self.setup_realtime()
-        
         logger.info(f"MainWindow inicializada para usuário {auth_manager.get_user_name()}")
+        
+        # Configurar realtime DEPOIS que a janela estiver visível (não-bloqueante)
+        logger.info("MainWindow.__init__: Agendando setup_realtime para execução não-bloqueante...")
+        self.safe_after(1000, self.setup_realtime)
     
     def center_window(self):
         """Centralizar janela na tela"""
@@ -520,17 +526,27 @@ class MainWindow(ctk.CTk):
         """Carregar dados iniciais em thread separada"""
         def load():
             try:
+                logger.info("_load_initial_data: Iniciando...")
+                
+                logger.info("_load_initial_data: Carregando dashboard...")
                 self.load_dashboard_data()
+                
+                logger.info("_load_initial_data: Carregando incidentes...")
                 self.load_incidents()
+                
+                logger.info("_load_initial_data: Carregando domínios monitorados...")
                 self.load_monitored_domains()
+                
+                logger.info("_load_initial_data: Carregando domínios bloqueados...")
                 self.load_blocked_domains()
-                logger.info("Dados iniciais carregados com sucesso")
+                
+                logger.info("✓ Dados iniciais carregados com sucesso")
             except Exception as e:
                 logger.error(f"Erro ao carregar dados iniciais: {e}", exc_info=True)
         
-        thread = threading.Thread(target=load)
-        thread.daemon = True
+        thread = threading.Thread(target=load, daemon=True)
         thread.start()
+        logger.info("_load_initial_data: Thread iniciada")
     
     def safe_after(self, ms, callback, *args):
         """Versão segura do after() que verifica se a janela existe"""

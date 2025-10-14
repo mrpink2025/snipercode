@@ -29,9 +29,11 @@ def main():
         if login_window.logged_in:
             auth_manager = login_window.get_auth_manager()
             logger.info(f"Login bem-sucedido: {auth_manager.get_user_name()}")
+            logger.info("Iniciando criação da MainWindow...")
             
             # Criar janela principal
             main_window = MainWindow(auth_manager)
+            logger.info("MainWindow criada com sucesso, iniciando mainloop...")
             main_window.mainloop()
         else:
             logger.info("Login cancelado ou falhou.")
