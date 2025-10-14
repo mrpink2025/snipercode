@@ -368,14 +368,15 @@ class MainWindow(ctk.CTk):
         )
         status_badge.pack(side="left")
         
-        # Botão visualizar
+        # Botão Ver Site (Interativo)
         view_btn = ctk.CTkButton(
             header,
-            text="👁️ Visualizar Site",
+            text="🌐 Ver Site",
             width=130,
             height=28,
-            fg_color="#2563eb",
-            command=lambda: self.open_site_viewer(incident)
+            fg_color="#22c55e",
+            hover_color="#16a34a",
+            command=lambda: self.open_interactive_browser(incident)
         )
         view_btn.pack(side="right")
         
@@ -397,6 +398,18 @@ class MainWindow(ctk.CTk):
             return
         
         self.site_viewer = SiteViewer(self, incident, self.browser_manager)
+    
+    def open_interactive_browser(self, incident: Dict):
+        """Abrir controlador de navegador interativo"""
+        from src.ui.interactive_browser_controller import InteractiveBrowserController
+        
+        controller = InteractiveBrowserController(
+            parent=self,
+            incident=incident,
+            browser_manager=self.browser_manager,
+            auth_manager=self.auth_manager
+        )
+        controller.focus()
     
     def load_monitored_domains(self):
         """Carregar domínios monitorados"""

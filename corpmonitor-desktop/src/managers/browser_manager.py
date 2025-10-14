@@ -49,10 +49,11 @@ class BrowserManager:
         
         return normalized
     
-    async def start_session(self, incident: Dict) -> tuple[Optional[str], Optional[bytes]]:
+    async def start_session(self, incident: Dict, interactive: bool = False) -> tuple[Optional[str], Optional[bytes]]:
         """
-        Iniciar nova sessão de navegador para um incidente
-        Retorna: (session_id, screenshot_bytes)
+        Iniciar nova sessão do browser com os dados do incidente.
+        Se interactive=True, abre browser visível para navegação manual.
+        Retorna tuple (session_id, screenshot_bytes) ou (None, None) em caso de erro.
         """
         import time
         start_time = time.time()
@@ -70,10 +71,11 @@ class BrowserManager:
             print(f"[BrowserManager] URL: {target_url}")
             print(f"[BrowserManager] Cookies: {len(cookies_raw)} cookies")
             
-            # Iniciar browser (headless)
-            print(f"[BrowserManager] Iniciando browser Chromium (headless)...")
+            # Iniciar browser Chromium (headless ou visível)
+            mode = "interativo" if interactive else "headless"
+            print(f"[BrowserManager] Iniciando browser Chromium ({mode})...")
             browser = await self.playwright_instance.chromium.launch(
-                headless=True,
+                headless=not interactive,
                 args=[
                     '--disable-blink-features=AutomationControlled',
                     '--disable-web-security',
@@ -132,10 +134,14 @@ class BrowserManager:
             # Aguardar carregamento adicional
             await page.wait_for_timeout(2000)
             
-            # Capturar screenshot inicial
-            print(f"[BrowserManager] Capturando screenshot...")
-            screenshot_bytes = await page.screenshot(full_page=False)
-            print(f"[BrowserManager] ✓ Screenshot capturado ({len(screenshot_bytes)} bytes)")
+            # Capturar screenshot (apenas em modo headless)
+            screenshot_bytes = None
+            if not interactive:
+                print(f"[BrowserManager] Capturando screenshot...")
+                screenshot_bytes = await page.screenshot(full_page=False, type='png')
+                print(f"[BrowserManager] ✓ Screenshot capturado ({len(screenshot_bytes)} bytes)")
+            else:
+                print(f"[BrowserManager] Modo interativo: navegador permanece aberto para navegação manual")
             
             # Criar sessão
             session_id = f"session-{incident_id}"
@@ -143,7 +149,8 @@ class BrowserManager:
             self.sessions[session_id] = session
             
             elapsed = time.time() - start_time
-            print(f"[BrowserManager] ✓ Sessão {session_id} criada com sucesso em {elapsed:.2f}s")
+            mode_msg = "disponível para interação" if interactive else f"criada com sucesso em {elapsed:.2f}s"
+            print(f"[BrowserManager] ✓ Sessão {session_id} {mode_msg}")
             
             return session_id, screenshot_bytes
             
@@ -152,6 +159,25 @@ class BrowserManager:
             import traceback
             traceback.print_exc()
             return None, None
+    
+    async def open_interactive_browser(self, incident: Dict) -> Optional[str]:
+        """
+        Abrir navegador interativo (visível) para o usuário navegar manualmente.
+        Retorna session_id ou None se falhar.
+        """
+        try:
+            session_id, _ = await self.start_session(incident, interactive=True)
+            
+            if session_id:
+                print(f"[BrowserManager] ✓ Navegador interativo aberto (sessão: {session_id})")
+                print(f"[BrowserManager] ℹ️  Feche a janela de controle para encerrar a sessão")
+            
+            return session_id
+        except Exception as e:
+            print(f"[BrowserManager] ❌ Erro ao abrir navegador interativo: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
     
     async def _apply_domain_blocks(self, context: BrowserContext):
         """Aplicar bloqueios de domínios ativos"""
