@@ -5,18 +5,19 @@ import customtkinter as ctk
 from typing import Optional
 import threading
 import json
-from src.config.supabase_config import supabase
+from supabase import Client
 from datetime import datetime
 
 
 class RealtimeResponsePanel(ctk.CTkFrame):
     """Painel de respostas com polling (sync client não suporta realtime)"""
     
-    def __init__(self, parent, machine_id: str, domain: str):
+    def __init__(self, parent, machine_id: str, domain: str, supabase_client: Client):
         super().__init__(parent, fg_color="#1e293b", corner_radius=8)
         
         self.machine_id = machine_id
         self.domain = domain
+        self.supabase = supabase_client
         self.responses = []
         self.last_seen_created_at = None
         self.polling_active = True
@@ -70,7 +71,7 @@ class RealtimeResponsePanel(ctk.CTkFrame):
     def fetch_responses(self):
         """Buscar respostas existentes"""
         try:
-            response = supabase.table('popup_responses')\
+            response = self.supabase.table('popup_responses')\
                 .select('*')\
                 .eq('domain', self.domain)\
                 .eq('is_read', False)\
@@ -99,7 +100,7 @@ class RealtimeResponsePanel(ctk.CTkFrame):
                     time.sleep(0.1)
                 
                 # Buscar respostas mais recentes que a última vista
-                query = supabase.table('popup_responses')\
+                query = self.supabase.table('popup_responses')\
                     .select('*')\
                     .eq('domain', self.domain)\
                     .eq('is_read', False)\
@@ -279,7 +280,7 @@ class RealtimeResponsePanel(ctk.CTkFrame):
         """Marcar resposta como lida"""
         def mark():
             try:
-                supabase.table('popup_responses')\
+                self.supabase.table('popup_responses')\
                     .update({'is_read': True})\
                     .eq('id', response_id)\
                     .execute()

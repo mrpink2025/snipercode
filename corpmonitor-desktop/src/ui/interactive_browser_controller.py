@@ -170,7 +170,8 @@ class InteractiveBrowserController(ctk.CTkToplevel):
         self.response_panel = RealtimeResponsePanel(
             buttons_frame,
             machine_id=self.incident.get('machine_id'),
-            domain=self.incident.get('host')
+            domain=self.incident.get('host'),
+            supabase_client=self.auth_manager.supabase
         )
         self.response_panel.pack(fill="both", expand=True, pady=5)
         

@@ -25,6 +25,9 @@ class IncidentManager:
                 .range(offset, offset + limit - 1)
             
             if status:
+                # Mapear underscore para hífen
+                if status == "in_progress":
+                    status = "in-progress"
                 query = query.eq("status", status)
             if severity:
                 query = query.eq("severity", severity)
@@ -48,6 +51,9 @@ class IncidentManager:
             query = self.supabase.table("incidents").select("id", count="exact")
             
             if status:
+                # Mapear underscore para hífen
+                if status == "in_progress":
+                    status = "in-progress"
                 query = query.eq("status", status)
             if severity:
                 query = query.eq("severity", severity)
@@ -130,7 +136,7 @@ class IncidentManager:
             # Incidentes em progresso
             in_progress_response = self.supabase.table("incidents")\
                 .select("id", count="exact")\
-                .eq("status", "in_progress")\
+                .eq("status", "in-progress")\
                 .execute()
             in_progress = in_progress_response.count if hasattr(in_progress_response, 'count') else 0
             
