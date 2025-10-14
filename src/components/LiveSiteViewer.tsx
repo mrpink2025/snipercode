@@ -305,7 +305,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     console.log('[LocalProxy] 🧹 Removed inline CSP definitions (aggressive)');
     
     // 🔗 STEP 2 & 3: Inject CSP INSIDE <head> only (avoid <base> to prevent base-uri CSP violations)
-    const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *; base-uri *;">`;
+    const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data: blob:; connect-src * data: blob:; frame-src * data: blob: about:; child-src * data: blob: about:; base-uri *;">`;
     
     if (processed.includes('<head>')) {
       processed = processed.replace('<head>', `<head>\n${permissiveCSP}`);
@@ -432,6 +432,47 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const BASE_URL = ${JSON.stringify(baseUrl)};
   const INCIDENT_ID = ${JSON.stringify(proxyIncidentId)};
   const PROXY_BASE = ${JSON.stringify(PROXY_BASE)};
+  
+  // Silently ignore document.domain errors (common in legacy sites)
+  try {
+    if (window.location.protocol === 'about:') {
+      Object.defineProperty(document, 'domain', {
+        get: function() { return ''; },
+        set: function() { /* ignore */ }
+      });
+    }
+  } catch (e) {
+    // Ignore - some browsers don't allow this
+  }
+  
+  // Monitor dynamic iframe creation for debugging
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      mutation.addedNodes.forEach(node => {
+        if (node.nodeName === 'IFRAME') {
+          console.log('[LocalProxy] 🖼️ New iframe detected:', {
+            src: node.src || '(no src)',
+            sandbox: node.sandbox || '(no sandbox)',
+            id: node.id || '(no id)'
+          });
+        }
+      });
+    });
+  });
+  
+  if (document.body) {
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  } else {
+    document.addEventListener('DOMContentLoaded', () => {
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    });
+  }
   
   // 🎨 CSS FALLBACK: If CSS fails to load, fetch and inject inline
   setTimeout(() => {
@@ -637,8 +678,19 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       }
     };
     
+    const handleError = (event: ErrorEvent) => {
+      if (event.message?.includes('Refused to frame')) {
+        console.warn('[LocalProxy] ⚠️ CSP frame error detected (expected for some legacy sites)');
+        // Não exibir erro ao usuário - é comportamento esperado para alguns iframes internos
+      }
+    };
+    
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener('error', handleError, true);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('error', handleError, true);
+    };
   }, [incident.id, cookies]);
 
   const loadSiteWithCookies = async () => {
@@ -919,7 +971,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
                 key={iframeKey}
                 srcDoc={srcDoc}
                 className="w-full h-full border-0"
-                sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"
                 title={`Site: ${incident.host}`}
                 onLoad={() => console.log('[LocalProxy] Iframe loaded')}
                 onError={(e) => console.error('[LocalProxy] Iframe error:', e)}
