@@ -522,7 +522,7 @@ class MainWindow(ctk.CTk):
             # Recarregar dashboard quando houver novos alertas (usar safe_after)
             self.safe_after(0, self.load_dashboard_data)
         
-        self.realtime_manager.subscribe_to_alerts(on_alert)
+        self.realtime_manager.start(on_alert=on_alert)
     
     def handle_logout(self):
         """Processar logout"""
@@ -530,7 +530,7 @@ class MainWindow(ctk.CTk):
             logger.info("Iniciando logout...")
             
             # Limpar subscriptions realtime
-            self.realtime_manager.unsubscribe_all()
+            self.realtime_manager.stop()
             
             # Fechar todas as sessões do browser em thread separada
             def close_browsers():
@@ -566,7 +566,7 @@ class MainWindow(ctk.CTk):
         
         # Limpar recursos
         try:
-            self.realtime_manager.unsubscribe_all()
+            self.realtime_manager.stop()
         except:
             pass
         

@@ -6,3 +6,4 @@ python-dotenv==1.0.1
 pyinstaller==6.5.0
 plyer==2.1.0
 nest-asyncio==1.6.0
+websockets>=13.0

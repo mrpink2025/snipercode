@@ -163,7 +163,18 @@ class LoginWindow(ctk.CTk):
     def _on_login_success(self):
         """Callback executado na thread principal após login bem-sucedido"""
         self.logged_in = True
-        self.destroy()
+        # Ocultar janela primeiro para reduzir callbacks pendentes
+        self.withdraw()
+        # Aguardar um pouco antes de destruir completamente
+        self.safe_after(50, self._final_destroy)
+    
+    def _final_destroy(self):
+        """Destruição final da janela após aguardar callbacks"""
+        try:
+            super().destroy()
+        except Exception as e:
+            from src.utils.logger import logger
+            logger.error(f"Erro ao destruir janela de login: {e}")
     
     def _on_login_error(self, message: str):
         """Callback executado na thread principal após erro de login"""
