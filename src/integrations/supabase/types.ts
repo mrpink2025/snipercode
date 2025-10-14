@@ -55,6 +55,7 @@ export type Database = {
       }
       admin_alerts: {
         Row: {
+          acknowledged: boolean | null
           acknowledged_at: string | null
           acknowledged_by: string | null
           alert_type: string
@@ -66,6 +67,7 @@ export type Database = {
           url: string
         }
         Insert: {
+          acknowledged?: boolean | null
           acknowledged_at?: string | null
           acknowledged_by?: string | null
           alert_type?: string
@@ -77,6 +79,7 @@ export type Database = {
           url: string
         }
         Update: {
+          acknowledged?: boolean | null
           acknowledged_at?: string | null
           acknowledged_by?: string | null
           alert_type?: string
