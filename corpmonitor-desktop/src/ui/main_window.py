@@ -118,6 +118,18 @@ class MainWindow(ctk.CTk):
         )
         role_badge.pack(side="left", padx=(0, 15))
         
+        # Status de conexão realtime
+        self.realtime_status_badge = ctk.CTkLabel(
+            user_frame,
+            text="⚪ Conectando...",
+            font=ctk.CTkFont(size=11),
+            fg_color="#64748b",
+            corner_radius=6,
+            padx=10,
+            pady=4
+        )
+        self.realtime_status_badge.pack(side="left", padx=(0, 15))
+        
         logout_btn = ctk.CTkButton(
             user_frame,
             text="Sair",
@@ -717,6 +729,19 @@ class MainWindow(ctk.CTk):
         """Abrir controlador de navegador interativo"""
         from src.ui.interactive_browser_controller import InteractiveBrowserController
         
+        # Marcar incidente como visualizado em background
+        incident_id = incident.get('id')
+        if incident_id:
+            def mark_viewed():
+                try:
+                    success = self.incident_manager.mark_incident_as_viewed(incident_id)
+                    logger.info(f"Incidente {incident_id} marcado como visualizado: {success}")
+                except Exception as e:
+                    logger.error(f"Erro ao marcar incidente como visualizado: {e}", exc_info=True)
+            
+            import threading
+            threading.Thread(target=mark_viewed, daemon=True).start()
+        
         controller = InteractiveBrowserController(
             parent=self,
             incident=incident,
@@ -732,7 +757,6 @@ class MainWindow(ctk.CTk):
             self.safe_after(0, lambda: self.load_incidents(viewed=False))
             self.safe_after(0, lambda: self.load_incidents(viewed=True))
         
-        import threading
         threading.Thread(target=refresh_after_view, daemon=True).start()
     
     def load_monitored_domains(self):
@@ -1233,6 +1257,28 @@ class MainWindow(ctk.CTk):
             # Recarregar máquinas após 1 segundo
             self.safe_after(1000, self.load_machines)
         
+        def on_connection_status(mode: str):
+            """Atualizar badge de status de conexão"""
+            def update_badge():
+                if mode == "websocket":
+                    self.realtime_status_badge.configure(
+                        text="🟢 Websocket ativo",
+                        fg_color="#10b981"
+                    )
+                elif mode == "polling":
+                    self.realtime_status_badge.configure(
+                        text="🟡 Polling (fallback)",
+                        fg_color="#f59e0b"
+                    )
+                else:
+                    self.realtime_status_badge.configure(
+                        text="🔴 Desconectado",
+                        fg_color="#ef4444"
+                    )
+            
+            self.safe_after(0, update_badge)
+        
+        self.realtime_manager.on_connection_status_change(on_connection_status)
         self.realtime_manager.start(on_alert=on_alert)
         self.realtime_manager.subscribe_to_sessions(on_sessions_change)
     

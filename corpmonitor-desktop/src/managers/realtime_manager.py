@@ -16,6 +16,7 @@ class RealtimeManager:
     def __init__(self, supabase: Client):
         self.supabase = supabase
         self.alert_callbacks: List[Callable[[Dict], None]] = []
+        self.connection_status_callbacks: List[Callable[[str], None]] = []
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -26,6 +27,7 @@ class RealtimeManager:
         self._supabase_key = os.getenv("SUPABASE_ANON_KEY", os.getenv("SUPABASE_KEY", ""))
         
         self._ws_url = self._build_ws_url(self._supabase_url)
+        self._connection_mode = "disconnected"  # "websocket", "polling", "disconnected"
     
     def _build_ws_url(self, supabase_url: str) -> Optional[str]:
         """Construir URL do websocket a partir da URL do Supabase"""
@@ -69,12 +71,26 @@ class RealtimeManager:
         self.alert_callbacks.clear()
         logger.info("RealtimeManager parado")
     
+    def _notify_connection_status(self, mode: str):
+        """Notificar callbacks sobre mudança de status de conexão"""
+        self._connection_mode = mode
+        for cb in list(self.connection_status_callbacks):
+            try:
+                cb(mode)
+            except Exception as e:
+                logger.warning(f"Erro ao executar callback de status: {e}")
+    
+    def on_connection_status_change(self, callback: Callable[[str], None]):
+        """Registrar callback para mudanças de status de conexão"""
+        self.connection_status_callbacks.append(callback)
+    
     def _run(self):
         """Thread principal do realtime"""
         if self._ws_url and self._supabase_key:
             try:
                 self._loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(self._loop)
+                self._notify_connection_status("websocket")
                 self._loop.run_until_complete(self._run_async_realtime())
                 return
             except Exception as e:
@@ -83,6 +99,7 @@ class RealtimeManager:
             logger.warning("Configuração de websocket incompleta, usando polling")
         
         # Fallback para polling
+        self._notify_connection_status("polling")
         self._run_polling_loop()
     
     async def _run_async_realtime(self):
@@ -196,17 +213,30 @@ class RealtimeManager:
                 "is_critical": is_critical
             }
             
-            logger.info(f"🚨 Alerta recebido: {alert_type} - {alert['domain']} (crítico: {is_critical})")
+            # Log detalhado do alerta e metadata
+            logger.info("=" * 60)
+            logger.info(f"🚨 ALERTA RECEBIDO")
+            logger.info(f"   Tipo: {alert_type}")
+            logger.info(f"   Domínio: {alert['domain']}")
+            logger.info(f"   Machine: {alert['machine_id']}")
+            logger.info(f"   URL: {alert['url']}")
+            logger.info(f"   Crítico: {is_critical}")
+            logger.info(f"   Metadata completa: {metadata}")
+            logger.info("=" * 60)
             
             # Notificação e som apropriado
+            logger.info(f"🔔 Exibindo notificação do sistema...")
             self._show_system_notification(alert)
             
             if is_critical:
+                logger.info(f"🔊 Reproduzindo som de alerta CRÍTICO")
                 self._play_critical_alert_sound()
             else:
+                logger.info(f"🔊 Reproduzindo som de alerta padrão")
                 self._play_alert_sound()
             
             # Chamar callbacks registrados
+            logger.info(f"📞 Executando {len(self.alert_callbacks)} callback(s) registrado(s)")
             for cb in list(self.alert_callbacks):
                 try:
                     cb(alert)
