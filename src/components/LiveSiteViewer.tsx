@@ -305,7 +305,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     console.log('[LocalProxy] 🧹 Removed inline CSP definitions (aggressive)');
     
     // 🔗 STEP 2 & 3: Inject CSP INSIDE <head> only (avoid <base> to prevent base-uri CSP violations)
-    const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data: blob:; connect-src * data: blob:; frame-src * data: blob:; base-uri *;">`;
+    const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *; base-uri *;">`;
     
     if (processed.includes('<head>')) {
       processed = processed.replace('<head>', `<head>\n${permissiveCSP}`);
@@ -425,16 +425,32 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       }
     );
     
-    // Remove manifest links and integrity attributes to reduce CSP blocks
-    processed = processed.replace(/<link[^>]*rel=["']manifest["'][^>]*>/gi, '');
-    processed = processed.replace(/(\s)integrity=["'][^"']+["']/gi, '');
-    
     // 📍 STEP 5: Inject anti-redirect and interception scripts
     const antiRedirectScript = `
 <script>
 (function() {
   const BASE_URL = ${JSON.stringify(baseUrl)};
   const INCIDENT_ID = ${JSON.stringify(proxyIncidentId)};
+  const PROXY_BASE = ${JSON.stringify(PROXY_BASE)};
+  
+  // 🎨 CSS FALLBACK: If CSS fails to load, fetch and inject inline
+  setTimeout(() => {
+    document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+      link.addEventListener('error', async () => {
+        console.log('[LocalProxy] ⚠️ CSS failed to load:', link.href);
+        try {
+          const response = await fetch(link.href);
+          const css = await response.text();
+          const style = document.createElement('style');
+          style.textContent = css;
+          document.head.appendChild(style);
+          console.log('[LocalProxy] ✅ CSS injected inline:', link.href);
+        } catch (e) {
+          console.error('[LocalProxy] ❌ Failed to fetch CSS:', e);
+        }
+      });
+    });
+  }, 1000);
   
   // 🚫 Block all redirects
   const originalAssign = window.location.assign;
@@ -450,12 +466,30 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     return false;
   };
   
-  // Intercept all link clicks
+  // Block top-level navigation (href setter removed - causes syntax errors)
+  
+  // 🔗 UNIVERSAL URL NORMALIZER (for dynamically added elements)
+  const ORIGIN = new URL(BASE_URL).origin;
+
+  function normalizeUrl(url) {
+    if (!url || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('javascript:') || url.startsWith('#')) {
+      return url;
+    }
+    
+    // Already absolute
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    
+  // Simplified interception only (no prototype/attribute overrides)
+  console.log('[LocalProxy] Interception active for:', BASE_URL);
+  
+  // Intercept all link clicks (robust)
   document.addEventListener('click', function(e) {
     try {
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       var el = e.target;
-      while (el && el.nodeType === 3) el = el.parentNode;
+      while (el && el.nodeType === 3) el = el.parentNode; // text node -> element
       while (el && el.tagName !== 'A') el = el.parentElement;
       if (!el || !el.href) return;
       var href = el.href;
@@ -465,18 +499,19 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       console.log('[LocalProxy] Navigate to:', href);
       window.parent.postMessage({ type: 'local-proxy:navigate', url: href, incidentId: INCIDENT_ID }, '*');
     } catch (err) {
-      console.warn('[LocalProxy] Click error:', err);
+      console.warn('[LocalProxy] Click interception error:', err);
     }
   }, true);
   
-  // Intercept form submissions (GET only)
+  // Intercept form submissions
   document.addEventListener('submit', function(e) {
     const form = e.target;
     if (form.method.toUpperCase() === 'GET') {
       e.preventDefault();
       const formData = new FormData(form);
       const params = new URLSearchParams(formData);
-      const destination = form.action + '?' + params.toString();
+      const action = form.action;
+      const destination = action + '?' + params.toString();
       console.log('[LocalProxy] Form navigate to:', destination);
       window.parent.postMessage({ type: 'local-proxy:navigate', url: destination, incidentId: INCIDENT_ID }, '*');
     }
@@ -485,7 +520,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   // Override window.open
   const originalOpen = window.open;
   window.open = function(url) {
-    if (url) window.parent.postMessage({ type: 'local-proxy:navigate', url: url, incidentId: INCIDENT_ID }, '*');
+    if (url) {
+      window.parent.postMessage({ type: 'local-proxy:navigate', url: url, incidentId: INCIDENT_ID }, '*');
+    }
     return null;
   };
   
@@ -506,7 +543,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     return processed;
   };
 
-  // Inlines external stylesheets and converts fonts to data: URIs
+  // Inlines external stylesheets by fetching via site-proxy and embedding as <style>
   const inlineStylesheets = async (html: string, baseUrl: string, proxyIncidentId: string): Promise<string> => {
     try {
       const linkRegex = /<link([^>]*rel=["']stylesheet["'][^>]*)>/gi;
@@ -523,6 +560,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       let result = html;
       for (const { full, href } of links) {
         try {
+          // Determine original CSS URL (unwrapped from our proxy, if applicable)
           let originalCssUrl = href;
           try {
             const u = new URL(href);
@@ -533,72 +571,16 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           const resp = await fetch(href);
           const cssText = await resp.text();
 
-          // Rewrite url(...) inside CSS - inline fonts as data:, proxy images
-          const rewritten = await (async () => {
-            let css = cssText;
-            const urlMatches = Array.from(css.matchAll(/url\(([^)]+)\)/gi));
-            
-            for (const match of urlMatches) {
-              const original = match[0];
-              let url = (match[1] || '').trim().replace(/^['"]|['"]$/g, '');
-              if (!url || url.startsWith('data:') || url.startsWith('blob:')) continue;
-              
-              try {
-                const abs = new URL(url, originalCssUrl).href;
-                
-                 // Check if it's a font
-                 if (/\.(woff2|woff|ttf|otf|eot)(\?.*)?$/i.test(abs)) {
-                   try {
-                     const proxyUrl = `${PROXY_BASE}?url=${encodeURIComponent(abs)}&incident=${proxyIncidentId}&rawContent=true`;
-                     
-                     // Check size first with HEAD request
-                     const headResp = await fetch(proxyUrl, { method: 'HEAD' });
-                     const contentLength = parseInt(headResp.headers.get('content-length') || '0');
-                     
-                     // Skip fonts larger than 200KB
-                     if (contentLength > 200000) {
-                       console.warn('[LocalProxy] Font too large, skipping:', abs, `${Math.round(contentLength/1024)}KB`);
-                       css = css.replace(original, 'url("")');
-                       continue;
-                     }
-                     
-                     const fontResp = await fetch(proxyUrl);
-                     const fontBuffer = await fontResp.arrayBuffer();
-                     
-                     // Use chunked conversion for large fonts
-                     const bytes = new Uint8Array(fontBuffer);
-                     let binary = '';
-                     const chunkSize = 8192;
-                     for (let i = 0; i < bytes.length; i += chunkSize) {
-                       const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-                       binary += String.fromCharCode.apply(null, Array.from(chunk));
-                     }
-                     const base64 = btoa(binary);
-                    
-                    let mimeType = 'font/woff2';
-                    if (abs.endsWith('.woff')) mimeType = 'font/woff';
-                    else if (abs.endsWith('.ttf')) mimeType = 'font/ttf';
-                    else if (abs.endsWith('.otf')) mimeType = 'font/otf';
-                    else if (abs.endsWith('.eot')) mimeType = 'application/vnd.ms-fontobject';
-                    
-                    const dataUri = `url("data:${mimeType};base64,${base64}")`;
-                    css = css.replace(original, dataUri);
-                    console.log('[LocalProxy] ✅ Font inlined:', abs);
-                   } catch (fontErr) {
-                     console.warn('[LocalProxy] Skipping font (too large or failed):', abs, fontErr);
-                     // Remove the entire url(...) declaration to avoid CSP errors
-                     css = css.replace(original, 'url("")');
-                   }
-                } else {
-                  // Images and other assets: proxy them
-                  const proxied = `${PROXY_BASE}?url=${encodeURIComponent(abs)}&incident=${proxyIncidentId}&rawContent=true`;
-                  css = css.replace(original, `url("${proxied}")`);
-                }
-              } catch {}
-            }
-            
-            return css;
-          })();
+          // Rewrite url(...) inside CSS to absolute and proxied
+          const rewritten = cssText.replace(/url\(([^)]+)\)/gi, (m, p1) => {
+            let url = (p1 || '').trim().replace(/^['"]|['"]$/g, '');
+            if (!url || url.startsWith('data:') || url.startsWith('blob:')) return m;
+            try {
+              const abs = new URL(url, originalCssUrl).href;
+              const proxied = `${PROXY_BASE}?url=${encodeURIComponent(abs)}&incident=${proxyIncidentId}&rawContent=true`;
+              return `url("${proxied}")`;
+            } catch { return m; }
+          });
 
           const styleTag = `<style data-href="${href}">\n${rewritten}\n</style>`;
           result = result.replace(full, styleTag);
@@ -614,56 +596,6 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     }
   };
 
-  // Inlines external scripts by fetching and embedding content
-  const inlineScripts = async (html: string, baseUrl: string, proxyIncidentId: string): Promise<string> => {
-    try {
-      const scriptRegex = /<script([^>]*)\ssrc=["']([^"']+)["']([^>]*)><\/script>/gi;
-      const scripts: { full: string; src: string; attrs: string }[] = [];
-      let match: RegExpExecArray | null;
-      
-      while ((match = scriptRegex.exec(html)) !== null) {
-        const full = match[0];
-        const attrs = (match[1] || '') + (match[3] || '');
-        const src = match[2];
-        if (src) scripts.push({ full, src, attrs });
-      }
-
-      let result = html;
-      
-      for (const { full, src, attrs } of scripts) {
-        try {
-          // Determine original URL
-          let originalUrl = src;
-          try {
-            const u = new URL(src);
-            const original = u.searchParams.get('url');
-            if (original) originalUrl = original;
-          } catch {}
-
-          console.log('[LocalProxy] Inlining script:', originalUrl);
-          
-          // Always use proxy for fetching external scripts to avoid CSP connect-src violations
-          const fetchUrl = src.includes('site-proxy') 
-            ? src 
-            : `${PROXY_BASE}?url=${encodeURIComponent(originalUrl)}&incident=${proxyIncidentId}&rawContent=true`;
-          
-          const resp = await fetch(fetchUrl);
-          const scriptContent = await resp.text();
-
-          const inlineTag = `<script${attrs} data-original-src="${originalUrl}">\n${scriptContent}\n</script>`;
-          result = result.replace(full, inlineTag);
-        } catch (e) {
-          console.warn('[LocalProxy] Failed to inline script:', src, e);
-        }
-      }
-
-      return result;
-    } catch (e) {
-      console.warn('[LocalProxy] Script inlining failed:', e);
-      return html;
-    }
-  };
-
   // Handle navigation within the proxied site
   const handleNavigation = async (targetUrl: string, overrideCookies?: any[]) => {
     console.log('[LocalProxy] Navigating to:', targetUrl);
@@ -672,14 +604,13 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     
     try {
       const rawHtml = await fetchRawContent(targetUrl, overrideCookies);
+      // Force proxy mode for all assets to fix 404s and MIME errors
       const processedHtml = processContent(rawHtml, targetUrl, 'proxy');
 
-      // Inline stylesheets (with fonts as data: URIs)
-      const withInlineCss = await inlineStylesheets(processedHtml, targetUrl, incidentIdForProxy || incident.id);
+      // Inline stylesheets to bypass CSP style-src restrictions
+      const finalHtml = await inlineStylesheets(processedHtml, targetUrl, incidentIdForProxy || incident.id);
       
-      // Inline scripts to bypass CSP script-src restrictions
-      const finalHtml = await inlineScripts(withInlineCss, targetUrl, incidentIdForProxy || incident.id);
-      
+      // Update iframe with new content
       setIframeKey(k => k + 1);
       setSrcDoc(finalHtml);
       
@@ -701,7 +632,6 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       
       if (event.data?.type === 'local-proxy:navigate') {
         const { url } = event.data;
-        console.log('[LocalProxy] 📨 Navigation message received:', url);
         // Accept navigation from any incident - only one viewer is open at a time
         handleNavigation(url);
       }
