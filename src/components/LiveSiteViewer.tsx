@@ -273,7 +273,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   };
 
   // Process HTML content locally: rewrite URLs and inject interception script
-  const processContent = (html: string, baseUrl: string, assetsMode: 'direct' | 'proxy' = 'direct'): string => {
+  const processContent = (html: string, baseUrl: string, assetsMode: 'direct' | 'proxy' = 'proxy'): string => {
     console.log('[LocalProxy] Processing content for:', baseUrl);
     console.log('[LocalProxy] Assets mode:', assetsMode);
     
@@ -282,6 +282,12 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     const proxyIncidentId = incidentIdForProxy || incident.id;
     
     let processed = html;
+    
+    // 🧹 SHADOW CLEANUP: Remove all scripts and inline event handlers
+    console.log('[LocalProxy] 🧹 Removing inline scripts and event handlers...');
+    processed = processed.replace(/<script[\s\S]*?<\/script>/gi, '');
+    processed = processed.replace(/\son[a-z]+\s*=\s*["'][\s\S]*?["']/gi, '');
+    console.log('[LocalProxy] ✅ Shadow cleanup complete');
     
     // 🔓 STEP 1: Remove ALL existing CSP and frame-blocking headers AGGRESSIVELY
     processed = processed.replace(/<meta[^>]+http-equiv=["']Content-Security-Policy(-Report-Only)?["'][^>]*>/gi, '');
@@ -623,8 +629,8 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     
     try {
       const rawHtml = await fetchRawContent(targetUrl, overrideCookies);
-      // Always use 'direct' mode since we're forcing extension tunnel
-      const processedHtml = processContent(rawHtml, targetUrl, 'direct');
+      // Force proxy mode for all assets to fix 404s and MIME errors
+      const processedHtml = processContent(rawHtml, targetUrl, 'proxy');
       
       // Update iframe with new content
       setIframeKey(k => k + 1);

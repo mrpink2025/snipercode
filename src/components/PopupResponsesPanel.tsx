@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
   const [selectedResponse, setSelectedResponse] = useState<PopupResponse | null>(null);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
   const [showOnlyUnread, setShowOnlyUnread] = useState(true);
+  const channelRef = useRef<any>(null);
 
   useEffect(() => {
     // Initialize audio context
@@ -39,9 +40,15 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
     setAudioContext(context);
 
     fetchResponses();
-    const cleanup = setupRealtimeSubscription();
+    setupRealtimeSubscription();
     
-    return cleanup;
+    return () => {
+      if (channelRef.current) {
+        console.log('🔌 Removendo subscription...');
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
   }, []);
 
   const fetchResponses = async () => {
@@ -64,6 +71,13 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
 
   const setupRealtimeSubscription = () => {
     console.log('🔌 Configurando subscription para popup_responses...');
+    
+    // Clean up existing channel before creating new one
+    if (channelRef.current) {
+      console.log('🧹 Limpando channel anterior...');
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
     
     const channel = supabase
       .channel('popup-responses-changes')
@@ -132,19 +146,20 @@ const PopupResponsesPanel = ({ onNewResponse }: PopupResponsesPanelProps) => {
         
         if (status === 'SUBSCRIBED') {
           console.log('✅ Subscription ativa para popup_responses');
+          channelRef.current = channel;
         } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Erro na subscription, tentando reconectar...');
+          console.error('❌ Erro na subscription, limpando e reconectando...');
+          // Clean up before retry
+          if (channelRef.current) {
+            supabase.removeChannel(channelRef.current);
+            channelRef.current = null;
+          }
           setTimeout(() => {
             console.log('🔄 Reconectando subscription...');
             setupRealtimeSubscription();
           }, 3000);
         }
       });
-
-    return () => {
-      console.log('🔌 Removendo subscription...');
-      supabase.removeChannel(channel);
-    };
   };
 
   const playAlertSound = () => {
