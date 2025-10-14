@@ -9,6 +9,9 @@ import time
 from datetime import datetime, timedelta
 from src.utils.logger import logger
 
+# Constantes de configuração
+REALTIME_CLOSE_TIMEOUT = 5  # segundos para aguardar fechamento
+
 class RealtimeManager:
     def __init__(self, supabase: Client):
         self.supabase = supabase
@@ -56,7 +59,7 @@ class RealtimeManager:
             if self._async_client and self._loop and self._loop.is_running():
                 fut = asyncio.run_coroutine_threadsafe(self._async_client.close(), self._loop)
                 try:
-                    fut.result(timeout=2)
+                    fut.result(timeout=REALTIME_CLOSE_TIMEOUT)
                 except Exception as e:
                     logger.warning(f"Timeout ao fechar cliente realtime: {e}")
         except Exception as e:

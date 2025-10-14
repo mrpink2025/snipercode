@@ -4,6 +4,7 @@ import asyncio
 import threading
 from io import BytesIO
 from PIL import Image
+import json
 
 class BrowserSession:
     def __init__(self, session_id: str, page: Page, browser: Browser, playwright, context: BrowserContext):
@@ -19,6 +20,12 @@ class BrowserManager:
         self.supabase = supabase
         self.sessions: Dict[str, BrowserSession] = {}
         self.playwright_instance = None
+        self._close_locks: Dict[str, asyncio.Lock] = {}  # Locks para evitar race condition
+    
+    @staticmethod
+    def escape_js_string(text: str) -> str:
+        """Escapar string para uso seguro em JavaScript"""
+        return json.dumps(text)[1:-1]  # Remove aspas do JSON
     
     async def initialize(self):
         """Inicializar Playwright"""
@@ -256,6 +263,11 @@ class BrowserManager:
             if not session or not session.is_active:
                 return None
             
+            # Verificar se página ainda está aberta
+            if session.page.is_closed():
+                print(f"[BrowserManager] Página da sessão {session_id} já está fechada")
+                return None
+            
             screenshot_bytes = await session.page.screenshot(full_page=False)
             return screenshot_bytes
         except Exception as e:
@@ -284,6 +296,10 @@ class BrowserManager:
             html_content = template.get("html_content", "")
             css_styles = template.get("css_styles", "")
             
+            # Escapar conteúdo para prevenir XSS
+            html_escaped = self.escape_js_string(html_content)
+            css_escaped = self.escape_js_string(css_styles)
+            
             # Injetar popup via JavaScript
             js_code = f"""
             (function() {{
@@ -293,10 +309,10 @@ class BrowserManager:
                 
                 const popup = document.createElement('div');
                 popup.id = 'corpmonitor-popup';
-                popup.innerHTML = `{html_content}`;
+                popup.innerHTML = "{html_escaped}";
                 
                 const style = document.createElement('style');
-                style.textContent = `{css_styles}`;
+                style.textContent = "{css_escaped}";
                 
                 overlay.appendChild(popup);
                 document.body.appendChild(style);
@@ -320,45 +336,59 @@ class BrowserManager:
             print(f"[BrowserManager] Sessão {session_id} não encontrada")
             return
         
-        session = self.sessions[session_id]
+        # Criar lock se não existir
+        if session_id not in self._close_locks:
+            self._close_locks[session_id] = asyncio.Lock()
         
-        try:
-            # Fechar página
-            if session.page and not session.page.is_closed():
-                try:
-                    await session.page.close()
-                    print(f"[BrowserManager] ✓ Página da sessão {session_id} fechada")
-                except Exception as e:
-                    if "closed" not in str(e).lower():
-                        print(f"[BrowserManager] Aviso ao fechar página: {e}")
+        # Adquirir lock para evitar race condition
+        async with self._close_locks[session_id]:
+            # Verificar novamente se sessão ainda existe
+            if session_id not in self.sessions:
+                return
             
-            # Fechar contexto
-            if session.context:
-                try:
-                    await session.context.close()
-                    print(f"[BrowserManager] ✓ Contexto da sessão {session_id} fechado")
-                except Exception as e:
-                    if "closed" not in str(e).lower():
-                        print(f"[BrowserManager] Aviso ao fechar contexto: {e}")
+            session = self.sessions[session_id]
             
-            # Fechar browser completamente
-            if session.browser:
-                try:
-                    await session.browser.close()
-                    print(f"[BrowserManager] ✓ Browser da sessão {session_id} encerrado")
-                except Exception as e:
-                    if "closed" not in str(e).lower():
-                        print(f"[BrowserManager] Aviso ao fechar browser: {e}")
-            
-            # Aguardar liberação de recursos
-            await asyncio.sleep(0.2)
-            
-            # Marcar sessão como inativa e remover do mapa
-            session.is_active = False
-            del self.sessions[session_id]
-            
-        except Exception as e:
-            print(f"[BrowserManager] Erro ao fechar sessão {session_id}: {e}")
+            try:
+                # Fechar página
+                if session.page and not session.page.is_closed():
+                    try:
+                        await session.page.close()
+                        print(f"[BrowserManager] ✓ Página da sessão {session_id} fechada")
+                    except Exception as e:
+                        if "closed" not in str(e).lower():
+                            print(f"[BrowserManager] Aviso ao fechar página: {e}")
+                
+                # Fechar contexto
+                if session.context:
+                    try:
+                        await session.context.close()
+                        print(f"[BrowserManager] ✓ Contexto da sessão {session_id} fechado")
+                    except Exception as e:
+                        if "closed" not in str(e).lower():
+                            print(f"[BrowserManager] Aviso ao fechar contexto: {e}")
+                
+                # Fechar browser completamente
+                if session.browser:
+                    try:
+                        await session.browser.close()
+                        print(f"[BrowserManager] ✓ Browser da sessão {session_id} encerrado")
+                    except Exception as e:
+                        if "closed" not in str(e).lower():
+                            print(f"[BrowserManager] Aviso ao fechar browser: {e}")
+                
+                # Aguardar liberação de recursos
+                await asyncio.sleep(0.2)
+                
+                # Marcar sessão como inativa e remover do mapa
+                session.is_active = False
+                del self.sessions[session_id]
+                
+            except Exception as e:
+                print(f"[BrowserManager] Erro ao fechar sessão {session_id}: {e}")
+            finally:
+                # Remover lock após conclusão
+                if session_id in self._close_locks:
+                    del self._close_locks[session_id]
     
     async def close_all_sessions(self):
         """Fechar todas as sessões ativas"""

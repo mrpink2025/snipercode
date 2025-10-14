@@ -1,11 +1,22 @@
 from supabase import Client
 from typing import List, Dict, Optional
 from datetime import datetime
+import re
 
 class DomainManager:
     def __init__(self, supabase: Client, user_id: str):
         self.supabase = supabase
         self.user_id = user_id
+    
+    @staticmethod
+    def validate_domain(domain: str) -> bool:
+        """Validar formato de domínio"""
+        if not domain or len(domain) < 3 or len(domain) > 255:
+            return False
+        
+        # Regex básico para validar domínio
+        pattern = r'^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+        return bool(re.match(pattern, domain.strip().lower()))
     
     def get_monitored_domains(self) -> List[Dict]:
         """Buscar todos os domínios monitorados ativos"""
@@ -89,10 +100,17 @@ class DomainManager:
         """Bloquear um domínio"""
         try:
             from src.utils.logger import logger
-            logger.info(f"Bloqueando domínio: {domain}")
+            
+            # Validar formato do domínio
+            domain_clean = domain.strip().lower()
+            if not self.validate_domain(domain_clean):
+                logger.error(f"Domínio inválido: {domain}")
+                return False
+            
+            logger.info(f"Bloqueando domínio: {domain_clean}")
             
             data = {
-                "domain": domain,
+                "domain": domain_clean,
                 "reason": reason,
                 "blocked_by": self.user_id,
                 "is_active": True

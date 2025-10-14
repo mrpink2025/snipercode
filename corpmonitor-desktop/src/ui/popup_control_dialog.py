@@ -24,8 +24,17 @@ class PopupControlDialog(ctk.CTkToplevel):
         self.custom_css = ""
         self.is_sending = False
         
-        # Cliente Supabase autenticado
-        self.supabase_client = get_supabase_client(access_token)
+        # Cliente Supabase autenticado (obter refresh_token também)
+        # Nota: Assumindo que access_token vem do auth_manager que tem a sessão
+        refresh_token = None
+        try:
+            from src.managers.auth_manager import AuthManager
+            # Se houver uma forma de obter refresh_token do auth_manager, usar aqui
+            # Por ora, usaremos apenas access_token
+        except:
+            pass
+        
+        self.supabase_client = get_supabase_client(access_token, refresh_token)
         
         # Configurar janela
         self.title("📨 Solicitar Popup")
@@ -36,7 +45,8 @@ class PopupControlDialog(ctk.CTkToplevel):
         self.create_widgets()
         
         # Carregar templates
-        threading.Thread(target=self.fetch_templates, daemon=True).start()
+        self._fetch_thread = threading.Thread(target=self.fetch_templates, daemon=False)
+        self._fetch_thread.start()
     
     def center_window(self):
         """Centralizar janela na tela"""
@@ -405,3 +415,11 @@ class PopupControlDialog(ctk.CTkToplevel):
         )
         toast.place(relx=0.5, rely=0.95, anchor="center")
         self.after(3000, toast.destroy)
+    
+    def destroy(self):
+        """Cleanup ao fechar dialog"""
+        # Aguardar thread de fetch se ainda rodando
+        if hasattr(self, '_fetch_thread') and self._fetch_thread.is_alive():
+            self._fetch_thread.join(timeout=1.0)
+        
+        super().destroy()

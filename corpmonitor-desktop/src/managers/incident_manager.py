@@ -35,8 +35,13 @@ class IncidentManager:
             response = self.supabase.table("incidents")\
                 .select("*")\
                 .eq("id", incident_id)\
-                .single()\
+                .maybeSingle()\
                 .execute()
+            
+            if not response.data:
+                logger.warning(f"Incidente {incident_id} não encontrado")
+                return None
+            
             return response.data
         except Exception as e:
             from src.utils.logger import logger

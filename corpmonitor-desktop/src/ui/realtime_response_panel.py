@@ -90,7 +90,11 @@ class RealtimeResponsePanel(ctk.CTkFrame):
         
         while self.polling_active:
             try:
-                time.sleep(2)
+                # Verificar a cada 0.1s se deve parar (resposta rápida)
+                for _ in range(20):  # 20 * 0.1s = 2s
+                    if not self.polling_active:
+                        return
+                    time.sleep(0.1)
                 
                 # Buscar respostas mais recentes que a última vista
                 query = supabase.table('popup_responses')\

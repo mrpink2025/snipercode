@@ -568,18 +568,29 @@ class MainWindow(ctk.CTk):
     
     def destroy(self):
         """Sobrescrever destroy para limpar recursos"""
+        if self._destroyed:
+            return
+        
         self._destroyed = True
         
-        # Cancelar callbacks pendentes
+        # Cancelar todos os callbacks agendados
         for after_id in self._after_ids:
             try:
                 self.after_cancel(after_id)
             except:
                 pass
+        self._after_ids.clear()
         
-        # Limpar recursos
+        # Fechar managers
         try:
             self.realtime_manager.stop()
+        except:
+            pass
+        
+        try:
+            import asyncio
+            from src.utils.async_helper import run_async
+            run_async(self.browser_manager.close_all_sessions())
         except:
             pass
         
