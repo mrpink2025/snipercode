@@ -68,23 +68,18 @@ class RealtimeManager:
     
     def _run(self):
         """Thread principal do realtime"""
-        logger.info("RealtimeManager._run: Iniciando...")
-        
         if self._ws_url and self._supabase_key:
             try:
-                logger.info(f"RealtimeManager: Tentando conectar websocket em {self._ws_url}")
                 self._loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(self._loop)
                 self._loop.run_until_complete(self._run_async_realtime())
                 return
             except Exception as e:
-                logger.warning(f"Falha no websocket, caindo para polling: {e}")
-                # Continua para o fallback abaixo
+                logger.error(f"Falha no websocket Realtime, caindo para polling: {e}", exc_info=True)
         else:
             logger.warning("Configuração de websocket incompleta, usando polling")
         
         # Fallback para polling
-        logger.info("RealtimeManager: Usando fallback de polling")
         self._run_polling_loop()
     
     async def _run_async_realtime(self):
@@ -99,12 +94,7 @@ class RealtimeManager:
         self._async_client = AsyncRealtimeClient(self._ws_url, self._supabase_key)
         
         try:
-            # Adicionar timeout de 5 segundos para conexão
-            await asyncio.wait_for(
-                self._async_client.connect(),
-                timeout=5.0
-            )
-            logger.info("✓ Websocket conectado com sucesso")
+            await self._async_client.connect()
             
             ch_alerts = self._async_client.channel("db-changes-alerts")
             ch_alerts.on_postgres_changes(
@@ -124,13 +114,6 @@ class RealtimeManager:
             # Loop de escuta até pedirmos stop()
             while not self._stop_event.is_set():
                 await asyncio.sleep(0.5)
-        
-        except asyncio.TimeoutError:
-            logger.error("Timeout ao conectar ao websocket (5s), caindo para polling")
-            raise
-        except Exception as e:
-            logger.error(f"Erro ao conectar websocket: {e}", exc_info=True)
-            raise
                 
         finally:
             try:

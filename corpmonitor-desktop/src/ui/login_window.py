@@ -35,31 +35,6 @@ class LoginWindow(ctk.CTk):
         y = (self.winfo_screenheight() // 2) - (height // 2)
         self.geometry(f'{width}x{height}+{x}+{y}')
     
-    def withdraw(self):
-        """Ocultar janela e cancelar updates pendentes"""
-        self._destroyed = True
-        
-        # Cancelar todos os afters conhecidos
-        for after_id in self._after_ids:
-            try:
-                self.after_cancel(after_id)
-            except:
-                pass
-        
-        # Tentar cancelar afters internos do CustomTkinter
-        try:
-            # Obter todos os IDs de after pendentes
-            pending = self.tk.call('after', 'info')
-            for after_id in pending:
-                try:
-                    self.after_cancel(after_id)
-                except:
-                    pass
-        except:
-            pass
-        
-        super().withdraw()
-    
     def create_widgets(self):
         """Criar elementos da interface"""
         # Container principal
@@ -190,8 +165,8 @@ class LoginWindow(ctk.CTk):
         self.logged_in = True
         # Ocultar janela primeiro para reduzir callbacks pendentes
         self.withdraw()
-        # Aguardar mais tempo antes de destruir completamente
-        self.safe_after(200, self._final_destroy)
+        # Aguardar um pouco antes de destruir completamente
+        self.safe_after(50, self._final_destroy)
     
     def _final_destroy(self):
         """Destruição final da janela após aguardar callbacks"""

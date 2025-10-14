@@ -7,19 +7,6 @@ class IncidentManager:
         self.supabase = supabase
         self.user_id = user_id
     
-    @staticmethod
-    def normalize_status(status: str) -> str:
-        """Normalizar status para formato do banco (com hífen)"""
-        status_map = {
-            "in_progress": "in-progress",
-            "in progress": "in-progress",
-            "new": "new",
-            "resolved": "resolved",
-            "blocked": "blocked",
-            "approved": "approved"
-        }
-        return status_map.get(status.lower(), status)
-    
     def get_incidents(self, status: Optional[str] = None, severity: Optional[str] = None) -> List[Dict]:
         """Buscar incidentes com filtros opcionais"""
         try:
@@ -107,7 +94,7 @@ class IncidentManager:
             # Incidentes em progresso
             in_progress_response = self.supabase.table("incidents")\
                 .select("id", count="exact")\
-                .eq("status", "in-progress")\
+                .eq("status", "in_progress")\
                 .execute()
             in_progress = in_progress_response.count if hasattr(in_progress_response, 'count') else 0
             

@@ -13,7 +13,6 @@ import threading
 class MainWindow(ctk.CTk):
     def __init__(self, auth_manager: AuthManager):
         super().__init__()
-        logger.info("MainWindow.__init__: Iniciando...")
         
         self.auth_manager = auth_manager
         self._destroyed = False
@@ -29,7 +28,6 @@ class MainWindow(ctk.CTk):
         self.domain_manager = DomainManager(auth_manager.supabase, user_id)
         self.browser_manager = BrowserManager(auth_manager.supabase)
         self.realtime_manager = RealtimeManager(auth_manager.supabase)
-        logger.info("MainWindow.__init__: Managers criados")
         
         # Configuração da janela
         self.title("CorpMonitor Desktop")
@@ -48,19 +46,15 @@ class MainWindow(ctk.CTk):
         self.site_viewer: Optional[SiteViewer] = None
         
         # Criar UI
-        logger.info("MainWindow.__init__: Criando widgets...")
         self.create_widgets()
-        logger.info("MainWindow.__init__: Widgets criados")
         
         # Carregar dados iniciais em thread separada
-        logger.info("MainWindow.__init__: Iniciando carregamento de dados em thread...")
         self._load_initial_data()
         
-        logger.info(f"MainWindow inicializada para usuário {auth_manager.get_user_name()}")
+        # Configurar realtime
+        self.setup_realtime()
         
-        # Configurar realtime DEPOIS que a janela estiver visível (não-bloqueante)
-        logger.info("MainWindow.__init__: Agendando setup_realtime para execução não-bloqueante...")
-        self.safe_after(1000, self.setup_realtime)
+        logger.info(f"MainWindow inicializada para usuário {auth_manager.get_user_name()}")
     
     def center_window(self):
         """Centralizar janela na tela"""
@@ -206,7 +200,7 @@ class MainWindow(ctk.CTk):
         
         self.status_filter = ctk.CTkOptionMenu(
             filters_frame,
-            values=["Todos", "new", "in-progress", "resolved"],
+            values=["Todos", "new", "in_progress", "resolved"],
             command=self.filter_incidents,
             width=150
         )
@@ -299,62 +293,30 @@ class MainWindow(ctk.CTk):
             value = kpis.get(key, 0)
             card.value_label.configure(text=str(value))
     
-    def load_incidents(self, *args):
-        """Carregar lista de incidentes com debounce"""
-        # Cancelar carregamento anterior se pendente
-        if hasattr(self, '_load_incidents_after_id'):
-            try:
-                self.after_cancel(self._load_incidents_after_id)
-            except:
-                pass
+    def load_incidents(self):
+        """Carregar lista de incidentes"""
+        # Limpar lista atual
+        for widget in self.incidents_scroll.winfo_children():
+            widget.destroy()
         
-        # Agendar carregamento com debounce de 300ms
-        self._load_incidents_after_id = self.safe_after(300, self._do_load_incidents)
-    
-    def _do_load_incidents(self):
-        """Executar carregamento de incidentes"""
-        try:
-            import time
-            start_time = time.time()
-            
-            # Limpar widgets antigos de forma segura
-            for widget in self.incidents_scroll.winfo_children():
-                try:
-                    widget.destroy()
-                except:
-                    pass
-            
-            # Forçar atualização do Tkinter
-            self.incidents_scroll.update_idletasks()
-            
-            # Buscar incidentes
-            status = None if self.status_filter.get() == "Todos" else self.status_filter.get()
-            severity = None if self.severity_filter.get() == "Todas" else self.severity_filter.get()
-            
-            self.incidents_list = self.incident_manager.get_incidents(status, severity)
-            
-            if not self.incidents_list:
-                no_data = ctk.CTkLabel(
-                    self.incidents_scroll,
-                    text="Nenhum incidente encontrado",
-                    text_color="gray"
-                )
-                no_data.pack(pady=20)
-                return
-            
-            # Criar cards de incidentes com tratamento de erro
-            for incident in self.incidents_list:
-                try:
-                    self.create_incident_card(incident)
-                except Exception as e:
-                    logger.warning(f"Erro ao criar card de incidente {incident.get('id')}: {e}")
-                    continue
-            
-            elapsed = time.time() - start_time
-            logger.info(f"✓ Lista de incidentes renderizada: {len(self.incidents_list)} itens em {elapsed:.2f}s")
-            
-        except Exception as e:
-            logger.error(f"Erro ao carregar incidentes: {e}", exc_info=True)
+        # Buscar incidentes
+        status = None if self.status_filter.get() == "Todos" else self.status_filter.get()
+        severity = None if self.severity_filter.get() == "Todas" else self.severity_filter.get()
+        
+        self.incidents_list = self.incident_manager.get_incidents(status, severity)
+        
+        if not self.incidents_list:
+            no_data = ctk.CTkLabel(
+                self.incidents_scroll,
+                text="Nenhum incidente encontrado",
+                text_color="gray"
+            )
+            no_data.pack(pady=20)
+            return
+        
+        # Criar cards de incidentes
+        for incident in self.incidents_list:
+            self.create_incident_card(incident)
     
     def filter_incidents(self, _=None):
         """Filtrar incidentes"""
@@ -526,27 +488,17 @@ class MainWindow(ctk.CTk):
         """Carregar dados iniciais em thread separada"""
         def load():
             try:
-                logger.info("_load_initial_data: Iniciando...")
-                
-                logger.info("_load_initial_data: Carregando dashboard...")
                 self.load_dashboard_data()
-                
-                logger.info("_load_initial_data: Carregando incidentes...")
                 self.load_incidents()
-                
-                logger.info("_load_initial_data: Carregando domínios monitorados...")
                 self.load_monitored_domains()
-                
-                logger.info("_load_initial_data: Carregando domínios bloqueados...")
                 self.load_blocked_domains()
-                
-                logger.info("✓ Dados iniciais carregados com sucesso")
+                logger.info("Dados iniciais carregados com sucesso")
             except Exception as e:
                 logger.error(f"Erro ao carregar dados iniciais: {e}", exc_info=True)
         
-        thread = threading.Thread(target=load, daemon=True)
+        thread = threading.Thread(target=load)
+        thread.daemon = True
         thread.start()
-        logger.info("_load_initial_data: Thread iniciada")
     
     def safe_after(self, ms, callback, *args):
         """Versão segura do after() que verifica se a janela existe"""
