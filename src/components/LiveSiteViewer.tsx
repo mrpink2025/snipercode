@@ -290,27 +290,26 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     console.log('[LocalProxy] ✅ Shadow cleanup complete');
     
     // 🔓 STEP 1: Remove ALL existing CSP and frame-blocking headers AGGRESSIVELY
+    processed = processed.replace(/<meta[^>]*Content-Security-Policy[^>]*>/gi, '');
     processed = processed.replace(/<meta[^>]+http-equiv=["']Content-Security-Policy(-Report-Only)?["'][^>]*>/gi, '');
     processed = processed.replace(/<meta[^>]+name=["']?x-frame-options["']?[^>]*>/gi, '');
     processed = processed.replace(/<meta[^>]+content=["'][^"']*frame-options[^"']*["'][^>]*>/gi, '');
+    processed = processed.replace(/<meta[^>]*http-equiv[^>]*>/gi, (match) => {
+      if (/Content-Security-Policy/i.test(match)) return '';
+      return match;
+    });
     
     // Remove CSP defined in inline scripts (common in Gmail)
     processed = processed.replace(/<script[^>]*>[\s\S]*?Content-Security-Policy[\s\S]*?<\/script>/gi, '');
-    console.log('[LocalProxy] 🧹 Removed inline CSP definitions');
+    console.log('[LocalProxy] 🧹 Removed inline CSP definitions (aggressive)');
     
-    // 🔗 STEP 2: Inject <base href> FIRST (at top of <head>)
+    // 🔗 STEP 2 & 3: Inject <base href> + CSP TOGETHER inside <head>
     const baseTag = `<base href="${origin}">`;
-    if (processed.includes('<head>')) {
-      processed = processed.replace('<head>', `<head>\n${baseTag}`);
-      console.log('[LocalProxy] ✅ Injected <base href> at top of <head>');
-    }
-    
-    // 🔓 STEP 3: Inject ULTRA-PERMISSIVE CSP AFTER base href (with base-uri)
     const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *; base-uri *;">`;
     
-    if (processed.includes('</head>')) {
-      processed = processed.replace('</head>', `${permissiveCSP}\n</head>`);
-      console.log('[LocalProxy] ✅ Injected permissive CSP with base-uri');
+    if (processed.includes('<head>')) {
+      processed = processed.replace('<head>', `<head>\n${baseTag}\n${permissiveCSP}`);
+      console.log('[LocalProxy] ✅ Injected <base> and permissive CSP inside <head>');
     }
     
     // 🔗 STEP 4: Convert relative script src to absolute URLs
@@ -342,6 +341,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           
           if (assetsMode === 'proxy') {
             const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
+            console.log(`[LocalProxy] 🔗 CSS proxied: ${url} → ${proxied}`);
             return `${prefix}${proxied}${suffix}`;
           }
           return `${prefix}${absolute}${suffix}`;
@@ -431,6 +431,26 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 (function() {
   const BASE_URL = ${JSON.stringify(baseUrl)};
   const INCIDENT_ID = ${JSON.stringify(proxyIncidentId)};
+  const PROXY_BASE = ${JSON.stringify(PROXY_BASE)};
+  
+  // 🎨 CSS FALLBACK: If CSS fails to load, fetch and inject inline
+  setTimeout(() => {
+    document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+      link.addEventListener('error', async () => {
+        console.log('[LocalProxy] ⚠️ CSS failed to load:', link.href);
+        try {
+          const response = await fetch(link.href);
+          const css = await response.text();
+          const style = document.createElement('style');
+          style.textContent = css;
+          document.head.appendChild(style);
+          console.log('[LocalProxy] ✅ CSS injected inline:', link.href);
+        } catch (e) {
+          console.error('[LocalProxy] ❌ Failed to fetch CSS:', e);
+        }
+      });
+    });
+  }, 1000);
   
   // 🚫 Block all redirects
   const originalAssign = window.location.assign;
