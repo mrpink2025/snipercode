@@ -194,6 +194,7 @@ class MainWindow(ctk.CTk):
         self.tabview.add("🖥️ Máquinas Monitoradas")
         self.tabview.add("🌐 Domínios Monitorados")
         self.tabview.add("🚫 Domínios Bloqueados")
+        self.tabview.add("🚨 Alertas Monitorados")
         
         # Tab Incidentes (não lidos)
         self.create_incidents_tab(viewed=False)
@@ -209,6 +210,9 @@ class MainWindow(ctk.CTk):
         
         # Tab Domínios Bloqueados
         self.create_blocked_domains_tab()
+        
+        # Tab Alertas Monitorados
+        self.create_alerts_tab()
     
     def create_kpi_card(self, parent, title: str, value: str, icon: str):
         """Criar card de KPI"""
@@ -780,6 +784,42 @@ class MainWindow(ctk.CTk):
         
         threading.Thread(target=refresh_after_view, daemon=True).start()
     
+    def create_alerts_tab(self):
+        """Criar aba de alertas monitorados"""
+        alerts_tab = self.tabview.tab("🚨 Alertas Monitorados")
+        
+        # Frame de controles
+        controls = ctk.CTkFrame(alerts_tab, fg_color="transparent")
+        controls.pack(fill="x", pady=(0, 10))
+        
+        # Filtros
+        filter_frame = ctk.CTkFrame(controls, fg_color="transparent")
+        filter_frame.pack(side="left", fill="x", expand=True)
+        
+        ctk.CTkLabel(filter_frame, text="Status:", font=("Segoe UI", 12)).pack(side="left", padx=5)
+        
+        self.alert_status_filter = ctk.CTkComboBox(
+            filter_frame,
+            values=["Todos", "Pendentes", "Reconhecidos"],
+            width=150,
+            command=lambda _: self.load_alerts()
+        )
+        self.alert_status_filter.set("Pendentes")
+        self.alert_status_filter.pack(side="left", padx=5)
+        
+        # Botão atualizar
+        refresh_btn = ctk.CTkButton(
+            controls,
+            text="🔄 Atualizar",
+            width=100,
+            command=self.load_alerts
+        )
+        refresh_btn.pack(side="right", padx=5)
+        
+        # Lista de alertas (scrollable)
+        self.alerts_list_frame = ctk.CTkScrollableFrame(alerts_tab)
+        self.alerts_list_frame.pack(fill="both", expand=True)
+    
     def load_monitored_domains(self):
         """Carregar domínios monitorados"""
         for widget in self.monitored_scroll.winfo_children():
@@ -938,6 +978,157 @@ class MainWindow(ctk.CTk):
         # Criar cards de máquinas
         for machine in self.machines_list:
             self.create_machine_card(machine)
+    
+    def load_alerts(self):
+        """Carregar alertas do backend"""
+        def fetch():
+            try:
+                # Buscar admin_alerts da API
+                status_filter = self.alert_status_filter.get()
+                
+                query = self.auth_manager.supabase.table("admin_alerts").select("*")
+                
+                if status_filter == "Pendentes":
+                    query = query.is_("acknowledged_by", "null")
+                elif status_filter == "Reconhecidos":
+                    query = query.not_.is_("acknowledged_by", "null")
+                
+                response = query.order("triggered_at", desc=True).limit(100).execute()
+                
+                alerts = response.data if response.data else []
+                
+                # Atualizar UI
+                self.safe_after(0, lambda: self._update_alerts_ui(alerts))
+                
+            except Exception as e:
+                logger.error(f"Erro ao carregar alertas: {e}", exc_info=True)
+        
+        threading.Thread(target=fetch, daemon=True).start()
+    
+    def _update_alerts_ui(self, alerts: List[Dict]):
+        """Atualizar interface com lista de alertas"""
+        # Limpar lista
+        for widget in self.alerts_list_frame.winfo_children():
+            widget.destroy()
+        
+        if not alerts:
+            no_data = ctk.CTkLabel(
+                self.alerts_list_frame,
+                text="Nenhum alerta encontrado",
+                font=("Segoe UI", 14)
+            )
+            no_data.pack(pady=20)
+            return
+        
+        # Criar card para cada alerta
+        for alert in alerts:
+            self._create_alert_card(alert)
+    
+    def _create_alert_card(self, alert: Dict):
+        """Criar card visual para um alerta"""
+        metadata = alert.get("metadata", {})
+        is_critical = metadata.get("is_critical", False) or metadata.get("alert_type") == "critical"
+        acknowledged = alert.get("acknowledged_by") is not None
+        
+        # Card frame
+        card = ctk.CTkFrame(
+            self.alerts_list_frame,
+            fg_color="#1a1a1a" if not is_critical else "#3a1010",
+            corner_radius=8,
+            border_width=2,
+            border_color="#ef4444" if is_critical else "#64748b"
+        )
+        card.pack(fill="x", pady=5, padx=5)
+        
+        # Header
+        header = ctk.CTkFrame(card, fg_color="transparent")
+        header.pack(fill="x", padx=10, pady=(10, 5))
+        
+        # Criticidade badge
+        criticality_badge = ctk.CTkLabel(
+            header,
+            text="🚨 CRÍTICO" if is_critical else "⚠️ Alerta",
+            font=("Segoe UI", 11, "bold"),
+            fg_color="#dc2626" if is_critical else "#f59e0b",
+            corner_radius=4,
+            padx=8,
+            pady=4
+        )
+        criticality_badge.pack(side="left", padx=(0, 10))
+        
+        # Domínio
+        domain_label = ctk.CTkLabel(
+            header,
+            text=f"🌐 {alert.get('domain', 'N/A')}",
+            font=("Segoe UI", 13, "bold")
+        )
+        domain_label.pack(side="left")
+        
+        # Status badge
+        if acknowledged:
+            status_badge = ctk.CTkLabel(
+                header,
+                text="✓ Reconhecido",
+                font=("Segoe UI", 10),
+                fg_color="#16a34a",
+                corner_radius=4,
+                padx=6,
+                pady=2
+            )
+            status_badge.pack(side="right")
+        
+        # Detalhes
+        details = ctk.CTkFrame(card, fg_color="transparent")
+        details.pack(fill="x", padx=10, pady=5)
+        
+        info_text = f"💻 Máquina: {alert.get('machine_id', 'N/A')}\n"
+        info_text += f"🔗 URL: {alert.get('url', 'N/A')}\n"
+        info_text += f"🕐 {alert.get('triggered_at', 'N/A')}"
+        
+        info_label = ctk.CTkLabel(
+            details,
+            text=info_text,
+            font=("Consolas", 10),
+            justify="left"
+        )
+        info_label.pack(side="left", anchor="w")
+        
+        # Botão reconhecer (se não reconhecido)
+        if not acknowledged:
+            ack_btn = ctk.CTkButton(
+                details,
+                text="✓ Reconhecer",
+                width=120,
+                height=28,
+                fg_color="#16a34a",
+                hover_color="#15803d",
+                command=lambda: self.acknowledge_alert(alert['id'])
+            )
+            ack_btn.pack(side="right", padx=10)
+    
+    def acknowledge_alert(self, alert_id: str):
+        """Marcar alerta como reconhecido"""
+        def update():
+            try:
+                user_id = self.auth_manager.get_user_id()
+                
+                self.auth_manager.supabase.table("admin_alerts") \
+                    .update({
+                        "acknowledged_by": user_id,
+                        "acknowledged_at": datetime.now().isoformat()
+                    }) \
+                    .eq("id", alert_id) \
+                    .execute()
+                
+                logger.info(f"✅ Alerta {alert_id} reconhecido")
+                
+                # Recarregar lista
+                self.safe_after(0, self.load_alerts)
+                
+            except Exception as e:
+                logger.error(f"Erro ao reconhecer alerta: {e}", exc_info=True)
+        
+        threading.Thread(target=update, daemon=True).start()
     
     def update_machines_kpis(self):
         """Atualizar KPIs de máquinas"""
@@ -1230,6 +1421,7 @@ class MainWindow(ctk.CTk):
                 self.load_incidents()
                 self.load_monitored_domains()
                 self.load_blocked_domains()
+                self.load_alerts()
                 logger.info("Dados iniciais carregados com sucesso")
                 
                 # Iniciar auto-refresh após carregar

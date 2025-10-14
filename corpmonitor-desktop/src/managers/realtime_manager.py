@@ -279,18 +279,16 @@ class RealtimeManager:
             logger.warning(f"Erro ao tocar som: {e}")
     
     def _play_critical_alert_sound(self):
-        """Tocar som de alerta CRÍTICO (repetido e alto)"""
+        """Tocar som de alerta CRÍTICO (beeps repetidos e ALTOS)"""
         try:
-            logger.info("🔊 Playing critical alert sound...")
+            logger.info("🔊 Playing CRITICAL alert sound (LOUD)...")
             def play():
                 try:
-                    # Use MessageBeep for reliability
-                    winsound.MessageBeep(winsound.MB_ICONHAND)
-                    time.sleep(0.3)
-                    winsound.MessageBeep(winsound.MB_ICONHAND)
-                    time.sleep(0.3)
-                    winsound.MessageBeep(winsound.MB_ICONHAND)
-                    logger.info("✅ Alert sound played successfully")
+                    # Beeps ALTOS e perceptíveis: 2000Hz por 300ms
+                    for i in range(5):  # 5 beeps ao invés de 3
+                        winsound.Beep(2000, 300)  # Frequência mais alta (2000Hz)
+                        time.sleep(0.2)
+                    logger.info("✅ Critical alert sound played successfully (5 beeps)")
                 except Exception as e:
                     logger.error(f"❌ Error playing sound: {e}", exc_info=True)
             
