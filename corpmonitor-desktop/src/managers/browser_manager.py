@@ -399,6 +399,20 @@ class BrowserManager:
         
         except asyncio.TimeoutError:
             print(f"[BrowserManager] ⚠️ Timeout geral ao fechar sessão {session_id}")
+            
+            # Reiniciar Playwright após timeout (estado corrompido)
+            try:
+                print(f"[BrowserManager] ⚠️ Reiniciando Playwright após timeout...")
+                if self.playwright_instance:
+                    try:
+                        await self.playwright_instance.stop()
+                    except:
+                        pass
+                    self.playwright_instance = None
+                print(f"[BrowserManager] ✓ Playwright reiniciado para próxima sessão")
+            except Exception as reinit_error:
+                print(f"[BrowserManager] Erro ao reiniciar Playwright: {reinit_error}")
+        
         except Exception as e:
             print(f"[BrowserManager] Erro ao fechar sessão {session_id}: {e}")
         finally:
