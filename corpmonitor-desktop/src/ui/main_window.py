@@ -118,7 +118,7 @@ class MainWindow(ctk.CTk):
         user_name = self.auth_manager.get_user_name()
         user_role = self.auth_manager.get_user_role().upper()
         
-        user_frame = ctk.CTkFrame(header, fg_color="transparent")
+        user_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
         user_frame.pack(side="right", padx=20)
         
         user_label = ctk.CTkLabel(
@@ -1277,10 +1277,19 @@ class MainWindow(ctk.CTk):
     def safe_after(self, ms: int, callback, *args):
         """Agendar callback de forma segura"""
         if self._destroyed:
+            logger.debug("safe_after: janela já destruída, callback ignorado")
+            return None
+        
+        # Verificar se a janela ainda existe
+        try:
+            if not self.winfo_exists():
+                logger.debug("safe_after: janela não existe mais, callback ignorado")
+                return None
+        except:
             return None
         
         def safe_callback():
-            if not self._destroyed:
+            if not self._destroyed and self.winfo_exists():
                 try:
                     callback(*args)
                 except Exception as e:
@@ -1293,6 +1302,15 @@ class MainWindow(ctk.CTk):
         except Exception as e:
             logger.error(f"Erro ao agendar callback: {e}")
             return None
+    
+    def cancel_after(self, after_id):
+        """Cancelar callback agendado de forma segura"""
+        if after_id and after_id in self._after_ids:
+            try:
+                self.after_cancel(after_id)
+                self._after_ids.remove(after_id)
+            except Exception as e:
+                logger.debug(f"Erro ao cancelar callback {after_id}: {e}")
     
     def _safe_callback(self, callback, *args):
         """Wrapper para callbacks agendados"""
@@ -1310,18 +1328,25 @@ class MainWindow(ctk.CTk):
     def setup_realtime(self):
         """Configurar subscriptions realtime"""
         def on_alert(alert: Dict):
+            if self._destroyed or not self.winfo_exists():
+                logger.debug("on_alert: janela destruída, callback ignorado")
+                return
             logger.info(f"🔔 Novo alerta recebido: {alert}")
             # Recarregar dashboard quando houver novos alertas (usar safe_after)
             self.safe_after(0, self.load_dashboard_data)
         
         def on_sessions_change(event):
+            if self._destroyed or not self.winfo_exists():
+                logger.debug("on_sessions_change: janela destruída, callback ignorado")
+                return
             logger.info(f"📡 Sessão alterada: {event.get('eventType')}")
             # Recarregar máquinas após 1 segundo
             self.safe_after(1000, self.load_machines)
         
         def on_connection_status(status: str):
             """Callback de mudança de status da conexão realtime"""
-            if self._destroyed:
+            if self._destroyed or not self.winfo_exists():
+                logger.debug("on_connection_status: janela destruída, callback ignorado")
                 return
                 
             def update_ui():
@@ -1390,18 +1415,21 @@ class MainWindow(ctk.CTk):
         if self._destroyed:
             return
         
-        self._destroyed = True
+        logger.info("Cancelando callbacks pendentes...")
         
-        # Parar auto-refresh
-        self.stop_auto_refresh()
-        
-        # Cancelar todos os callbacks agendados
-        for after_id in self._after_ids:
+        # Cancelar TODOS os callbacks pendentes ANTES de marcar como destruído
+        for after_id in list(self._after_ids):
             try:
                 self.after_cancel(after_id)
             except:
                 pass
         self._after_ids.clear()
+        
+        # AGORA marcar como destruído
+        self._destroyed = True
+        
+        # Parar auto-refresh
+        self.stop_auto_refresh()
         
         # Fechar managers
         try:
