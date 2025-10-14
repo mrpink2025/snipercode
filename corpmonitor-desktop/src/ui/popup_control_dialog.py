@@ -333,6 +333,13 @@ class PopupControlDialog(ctk.CTkToplevel):
                 
                 command_id = command_response.data[0]['id']
                 
+                # Log ANTES do dispatcher
+                print(f"[PopupDialog] 🚀 Enviando comando popup")
+                print(f"[PopupDialog] Command ID: {command_id}")
+                print(f"[PopupDialog] Machine ID: {self.session_data['machine_id']}")
+                print(f"[PopupDialog] Tab ID: {self.session_data['tab_id']}")
+                print(f"[PopupDialog] Domain: {self.session_data['domain']}")
+                
                 # 2. Chamar command-dispatcher (usando cliente autenticado)
                 dispatcher_response = self.supabase_client.functions.invoke('command-dispatcher', {
                     'body': {
@@ -347,7 +354,37 @@ class PopupControlDialog(ctk.CTkToplevel):
                     }
                 })
                 
-                result = json.loads(dispatcher_response.decode('utf-8'))
+                # Log DEPOIS do dispatcher
+                print(f"[PopupDialog] 📥 Resposta do dispatcher recebida")
+                print(f"[PopupDialog] Tipo da resposta: {type(dispatcher_response)}")
+                print(f"[PopupDialog] Resposta raw: {dispatcher_response}")
+                
+                # Tratamento robusto de diferentes formatos de resposta
+                try:
+                    if isinstance(dispatcher_response, bytes):
+                        # Se retornou bytes, decodificar
+                        result = json.loads(dispatcher_response.decode('utf-8'))
+                        print(f"[PopupDialog] ✅ Parseado como bytes")
+                    elif hasattr(dispatcher_response, 'data'):
+                        # Se retornou FunctionResponse com .data
+                        result = dispatcher_response.data
+                        print(f"[PopupDialog] ✅ Parseado via .data")
+                    elif hasattr(dispatcher_response, 'json'):
+                        # Se retornou Response com .json()
+                        result = dispatcher_response.json()
+                        print(f"[PopupDialog] ✅ Parseado via .json()")
+                    else:
+                        # Fallback: converter para string e fazer parse
+                        result = json.loads(str(dispatcher_response))
+                        print(f"[PopupDialog] ✅ Parseado via str()")
+                except Exception as parse_error:
+                    print(f"[PopupDialog] ❌ Erro ao parsear resposta: {parse_error}")
+                    print(f"[PopupDialog] Tipo: {type(dispatcher_response)}")
+                    print(f"[PopupDialog] Conteúdo: {dispatcher_response}")
+                    raise
+                
+                print(f"[PopupDialog] 📊 Resultado parseado: {result}")
+                print(f"[PopupDialog] 📊 Status extraído: {result.get('status')}")
                 
                 # 3. Processar resultado
                 self.after(0, lambda: self.on_send_complete(result))
