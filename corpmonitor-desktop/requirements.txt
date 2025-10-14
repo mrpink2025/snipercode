@@ -7,3 +7,4 @@ pyinstaller==6.5.0
 plyer==2.1.0
 nest-asyncio==1.6.0
 websockets==14.1
+psutil>=5.9.0

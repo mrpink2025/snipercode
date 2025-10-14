@@ -293,46 +293,48 @@ class InteractiveBrowserController(ctk.CTkToplevel):
         self.after(2000, msg_label.destroy)
     
     def on_closing(self):
-        """Fechar janela e sessão do navegador"""
+        """Fechar janela e sessão do navegador com timeout"""
         if self._destroyed:
             return
         
-        # Desabilitar botões imediatamente
+        # Marcar como destruído IMEDIATAMENTE
+        self._destroyed = True
+        
+        # Desabilitar botões
         self.btn_refresh.configure(state="disabled")
         self.btn_popup.configure(state="disabled")
         self.btn_block.configure(state="disabled")
         self.status_label.configure(text="🔄 Encerrando...", text_color="#f59e0b")
         
-        # Fechar sessão do browser em thread NON-DAEMON
+        # Fechar sessão em thread DAEMON com timeout
         if self.session_id:
-            def close_session():
+            def close_session_with_timeout():
                 try:
                     run_async(self.browser_manager.close_session(self.session_id))
                     print(f"[Controller] ✓ Sessão {self.session_id} encerrada")
                 except Exception as e:
                     print(f"[Controller] Aviso ao fechar sessão: {e}")
                 finally:
-                    # Destruir janela na thread principal do Tkinter
-                    self.after(0, self.destroy)
+                    try:
+                        self.after(0, self.force_destroy)
+                    except:
+                        pass
             
-            # Thread NÃO-DAEMON para garantir que termine antes do programa
-            threading.Thread(target=close_session, daemon=False).start()
+            # Thread DAEMON (não bloqueia fechamento do app)
+            threading.Thread(target=close_session_with_timeout, daemon=True).start()
+            
+            # Garantir que janela fecha após 4 segundos no máximo
+            self.after(4000, self.force_destroy)
         else:
-            # Destruir imediatamente se não há sessão
-            self.destroy()
+            self.force_destroy()
     
-    def destroy(self):
-        """Override de destroy para garantir cleanup completo"""
-        if self._destroyed:
+    def force_destroy(self):
+        """Forçar destruição da janela (mesmo se close_session falhar)"""
+        if not self.winfo_exists():
             return
         
-        self._destroyed = True
-        
-        # Log de destruição
-        print(f"[Controller] Destruindo janela do controle de navegação")
-        
-        # Chamar destroy do pai
         try:
             super().destroy()
+            print(f"[Controller] Janela destruída")
         except Exception as e:
             print(f"[Controller] Aviso ao destruir: {e}")

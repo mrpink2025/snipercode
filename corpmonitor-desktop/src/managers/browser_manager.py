@@ -331,64 +331,85 @@ class BrowserManager:
             return False
     
     async def close_session(self, session_id: str):
-        """Fechar uma sessão específica completamente (page, context e browser)"""
+        """Fechar uma sessão específica com timeout e cleanup de processos"""
         if session_id not in self.sessions:
             print(f"[BrowserManager] Sessão {session_id} não encontrada")
             return
         
-        # Criar lock se não existir
-        if session_id not in self._close_locks:
-            self._close_locks[session_id] = asyncio.Lock()
+        session = self.sessions[session_id]
         
-        # Adquirir lock para evitar race condition
-        async with self._close_locks[session_id]:
-            # Verificar novamente se sessão ainda existe
-            if session_id not in self.sessions:
-                return
-            
-            session = self.sessions[session_id]
-            
-            try:
-                # Fechar página
+        try:
+            # Timeout geral de 5 segundos
+            async with asyncio.timeout(5):
+                # Fechar página (timeout 2s)
                 if session.page and not session.page.is_closed():
                     try:
-                        await session.page.close()
-                        print(f"[BrowserManager] ✓ Página da sessão {session_id} fechada")
+                        async with asyncio.timeout(2):
+                            await session.page.close()
+                            print(f"[BrowserManager] ✓ Página da sessão {session_id} fechada")
+                    except asyncio.TimeoutError:
+                        print(f"[BrowserManager] ⚠️ Timeout ao fechar página")
                     except Exception as e:
                         if "closed" not in str(e).lower():
                             print(f"[BrowserManager] Aviso ao fechar página: {e}")
                 
-                # Fechar contexto
+                # Fechar contexto (timeout 2s)
                 if session.context:
                     try:
-                        await session.context.close()
-                        print(f"[BrowserManager] ✓ Contexto da sessão {session_id} fechado")
+                        async with asyncio.timeout(2):
+                            await session.context.close()
+                            print(f"[BrowserManager] ✓ Contexto da sessão {session_id} fechado")
+                    except asyncio.TimeoutError:
+                        print(f"[BrowserManager] ⚠️ Timeout ao fechar contexto")
                     except Exception as e:
                         if "closed" not in str(e).lower():
                             print(f"[BrowserManager] Aviso ao fechar contexto: {e}")
                 
-                # Fechar browser completamente
+                # Fechar browser (timeout 2s)
                 if session.browser:
                     try:
-                        await session.browser.close()
-                        print(f"[BrowserManager] ✓ Browser da sessão {session_id} encerrado")
+                        async with asyncio.timeout(2):
+                            await session.browser.close()
+                            print(f"[BrowserManager] ✓ Browser da sessão {session_id} encerrado")
+                    except asyncio.TimeoutError:
+                        print(f"[BrowserManager] ⚠️ Timeout ao fechar browser - matando processos")
+                        # Matar processos Chromium se timeout
+                        try:
+                            import psutil
+                            import os
+                            current_pid = os.getpid()
+                            
+                            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                                try:
+                                    if proc.info['name'] and 'chrome' in proc.info['name'].lower():
+                                        cmdline = proc.info.get('cmdline', [])
+                                        if cmdline and any('playwright' in str(arg).lower() for arg in cmdline):
+                                            if proc.pid != current_pid:
+                                                proc.kill()
+                                                print(f"[BrowserManager] ✓ Processo {proc.pid} eliminado")
+                                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                    pass
+                        except ImportError:
+                            print(f"[BrowserManager] ⚠️ psutil não instalado")
+                        except Exception as e:
+                            print(f"[BrowserManager] Erro ao matar processos: {e}")
                     except Exception as e:
                         if "closed" not in str(e).lower():
                             print(f"[BrowserManager] Aviso ao fechar browser: {e}")
-                
-                # Aguardar liberação de recursos
-                await asyncio.sleep(0.2)
-                
-                # Marcar sessão como inativa e remover do mapa
+        
+        except asyncio.TimeoutError:
+            print(f"[BrowserManager] ⚠️ Timeout geral ao fechar sessão {session_id}")
+        except Exception as e:
+            print(f"[BrowserManager] Erro ao fechar sessão {session_id}: {e}")
+        finally:
+            # SEMPRE remover do mapa (mesmo com erro/timeout)
+            try:
                 session.is_active = False
-                del self.sessions[session_id]
-                
+                if session_id in self.sessions:
+                    del self.sessions[session_id]
+                    print(f"[BrowserManager] ✓ Sessão {session_id} removida do mapa")
             except Exception as e:
-                print(f"[BrowserManager] Erro ao fechar sessão {session_id}: {e}")
-            finally:
-                # Remover lock após conclusão
-                if session_id in self._close_locks:
-                    del self._close_locks[session_id]
+                print(f"[BrowserManager] Erro ao limpar sessão: {e}")
     
     async def close_all_sessions(self):
         """Fechar todas as sessões ativas"""
