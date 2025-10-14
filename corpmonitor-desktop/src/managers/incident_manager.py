@@ -11,13 +11,19 @@ class IncidentManager:
         self, 
         status: Optional[str] = None, 
         severity: Optional[str] = None,
+        viewed: Optional[bool] = None,
         limit: int = 50,
         offset: int = 0
     ) -> List[Dict]:
-        """Buscar incidentes com filtros opcionais e paginação"""
+        """
+        Buscar incidentes com filtros opcionais e paginação
+        
+        Args:
+            viewed: None = todos, False = não visualizados, True = visualizados
+        """
         try:
             from src.utils.logger import logger
-            logger.info(f"Buscando incidentes (status={status}, severity={severity}, limit={limit}, offset={offset})")
+            logger.info(f"Buscando incidentes (status={status}, severity={severity}, viewed={viewed}, limit={limit}, offset={offset})")
             
             query = self.supabase.table("incidents")\
                 .select("*")\
@@ -32,6 +38,13 @@ class IncidentManager:
             if severity:
                 query = query.eq("severity", severity)
             
+            # Filtro de visualização
+            if viewed is not None:
+                if viewed:
+                    query = query.not_.is_("viewed_at", "null")
+                else:
+                    query = query.is_("viewed_at", "null")
+            
             response = query.execute()
             logger.info(f"✓ Encontrados {len(response.data) if response.data else 0} incidentes")
             return response.data if response.data else []
@@ -43,9 +56,15 @@ class IncidentManager:
     def get_incidents_count(
         self, 
         status: Optional[str] = None, 
-        severity: Optional[str] = None
+        severity: Optional[str] = None,
+        viewed: Optional[bool] = None
     ) -> int:
-        """Contar total de incidentes (para paginação)"""
+        """
+        Contar total de incidentes (para paginação)
+        
+        Args:
+            viewed: None = todos, False = não visualizados, True = visualizados
+        """
         try:
             from src.utils.logger import logger
             query = self.supabase.table("incidents").select("id", count="exact")
@@ -57,6 +76,13 @@ class IncidentManager:
                 query = query.eq("status", status)
             if severity:
                 query = query.eq("severity", severity)
+            
+            # Filtro de visualização
+            if viewed is not None:
+                if viewed:
+                    query = query.not_.is_("viewed_at", "null")
+                else:
+                    query = query.is_("viewed_at", "null")
             
             response = query.execute()
             return response.count if hasattr(response, 'count') else 0
@@ -152,3 +178,21 @@ class IncidentManager:
             from src.utils.logger import logger
             logger.error(f"Erro ao calcular KPIs: {e}", exc_info=True)
             return {"total": 0, "critical": 0, "resolved_today": 0, "in_progress": 0}
+    
+    def mark_incident_as_viewed(self, incident_id: str) -> bool:
+        """Marcar incidente como visualizado"""
+        try:
+            from src.utils.logger import logger
+            logger.info(f"Marcando incidente {incident_id} como visualizado")
+            
+            response = self.supabase.table("incidents")\
+                .update({"viewed_at": datetime.now().isoformat()})\
+                .eq("id", incident_id)\
+                .execute()
+            
+            logger.info(f"✓ Incidente {incident_id} marcado como visualizado")
+            return bool(response.data)
+        except Exception as e:
+            from src.utils.logger import logger
+            logger.error(f"Erro ao marcar incidente como visualizado: {e}", exc_info=True)
+            return False

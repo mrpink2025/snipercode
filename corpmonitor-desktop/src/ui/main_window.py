@@ -154,11 +154,15 @@ class MainWindow(ctk.CTk):
         
         # Criar abas
         self.tabview.add("📋 Incidentes")
+        self.tabview.add("📖 Incidentes Lidos")
         self.tabview.add("🌐 Domínios Monitorados")
         self.tabview.add("🚫 Domínios Bloqueados")
         
-        # Tab Incidentes
-        self.create_incidents_tab()
+        # Tab Incidentes (não lidos)
+        self.create_incidents_tab(viewed=False)
+        
+        # Tab Incidentes Lidos
+        self.create_incidents_tab(viewed=True)
         
         # Tab Domínios Monitorados
         self.create_monitored_domains_tab()
@@ -198,9 +202,22 @@ class MainWindow(ctk.CTk):
         
         return card
     
-    def create_incidents_tab(self):
-        """Criar aba de incidentes"""
-        incidents_tab = self.tabview.tab("📋 Incidentes")
+    def create_incidents_tab(self, viewed: bool = False):
+        """
+        Criar aba de incidentes
+        
+        Args:
+            viewed: False = incidentes não visualizados, True = visualizados
+        """
+        tab_name = "📖 Incidentes Lidos" if viewed else "📋 Incidentes"
+        incidents_tab = self.tabview.tab(tab_name)
+        
+        # Inicializar variáveis específicas da aba
+        if viewed:
+            self.viewed_incidents_page = 0
+            self.viewed_incidents_per_page = 15
+            self.viewed_incidents_list = []
+            self.viewed_incidents_total = 0
         
         # Filtros
         filters_frame = ctk.CTkFrame(incidents_tab, fg_color="transparent")
@@ -208,45 +225,57 @@ class MainWindow(ctk.CTk):
         
         ctk.CTkLabel(filters_frame, text="Filtros:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=5)
         
-        self.status_filter = ctk.CTkOptionMenu(
-            filters_frame,
-            values=["Todos", "new", "in_progress", "resolved"],
-            command=self.filter_incidents,
-            width=150
-        )
-        self.status_filter.pack(side="left", padx=5)
+        # Para aba de não lidos, mostrar filtro de status
+        if not viewed:
+            self.status_filter = ctk.CTkOptionMenu(
+                filters_frame,
+                values=["Todos", "new", "in_progress", "resolved"],
+                command=lambda _: self.load_incidents(viewed=viewed),
+                width=150
+            )
+            self.status_filter.pack(side="left", padx=5)
         
-        self.severity_filter = ctk.CTkOptionMenu(
+        severity_filter = ctk.CTkOptionMenu(
             filters_frame,
             values=["Todas", "critical", "high", "medium", "low"],
-            command=self.filter_incidents,
+            command=lambda _: self.load_incidents(viewed=viewed),
             width=150
         )
-        self.severity_filter.pack(side="left", padx=5)
+        severity_filter.pack(side="left", padx=5)
+        
+        if viewed:
+            self.viewed_severity_filter = severity_filter
+        else:
+            self.severity_filter = severity_filter
         
         refresh_btn = ctk.CTkButton(
             filters_frame,
             text="🔄 Atualizar",
             width=100,
-            command=self.load_incidents
+            command=lambda: self.load_incidents(viewed=viewed)
         )
         refresh_btn.pack(side="left", padx=5)
         
         # Campo de busca
         ctk.CTkLabel(filters_frame, text="|", text_color="gray").pack(side="left", padx=10)
         
-        self.search_entry = ctk.CTkEntry(
+        search_entry = ctk.CTkEntry(
             filters_frame,
             placeholder_text="Buscar por email ou nome do computador...",
             width=300
         )
-        self.search_entry.pack(side="left", padx=5)
+        search_entry.pack(side="left", padx=5)
+        
+        if viewed:
+            self.viewed_search_entry = search_entry
+        else:
+            self.search_entry = search_entry
         
         search_btn = ctk.CTkButton(
             filters_frame,
             text="🔍",
             width=40,
-            command=self.apply_search_filter
+            command=lambda: self.apply_search_filter(viewed=viewed)
         )
         search_btn.pack(side="left", padx=2)
         
@@ -254,37 +283,51 @@ class MainWindow(ctk.CTk):
         pagination_frame = ctk.CTkFrame(incidents_tab, fg_color="transparent")
         pagination_frame.pack(fill="x", padx=10, pady=5)
         
-        self.prev_btn = ctk.CTkButton(
+        prev_btn = ctk.CTkButton(
             pagination_frame,
             text="◀ Anterior",
             width=100,
-            command=self.prev_page,
+            command=lambda: self.prev_page(viewed=viewed),
             state="disabled"
         )
-        self.prev_btn.pack(side="left", padx=5)
+        prev_btn.pack(side="left", padx=5)
         
-        self.page_label = ctk.CTkLabel(
+        page_label = ctk.CTkLabel(
             pagination_frame,
             text="Página 1 de 1 (0 incidentes)",
             font=ctk.CTkFont(size=12)
         )
-        self.page_label.pack(side="left", padx=10)
+        page_label.pack(side="left", padx=10)
         
-        self.next_btn = ctk.CTkButton(
+        next_btn = ctk.CTkButton(
             pagination_frame,
             text="Próxima ▶",
             width=100,
-            command=self.next_page,
+            command=lambda: self.next_page(viewed=viewed),
             state="disabled"
         )
-        self.next_btn.pack(side="left", padx=5)
+        next_btn.pack(side="left", padx=5)
+        
+        if viewed:
+            self.viewed_prev_btn = prev_btn
+            self.viewed_page_label = page_label
+            self.viewed_next_btn = next_btn
+        else:
+            self.prev_btn = prev_btn
+            self.page_label = page_label
+            self.next_btn = next_btn
         
         # Lista de incidentes (ScrollableFrame)
-        self.incidents_scroll = ctk.CTkScrollableFrame(incidents_tab)
-        self.incidents_scroll.pack(fill="both", expand=True, padx=10, pady=10)
+        incidents_scroll = ctk.CTkScrollableFrame(incidents_tab)
+        incidents_scroll.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        if viewed:
+            self.viewed_incidents_scroll = incidents_scroll
+        else:
+            self.incidents_scroll = incidents_scroll
         
         # Carregar incidentes
-        self.load_incidents()
+        self.load_incidents(viewed=viewed)
     
     def create_monitored_domains_tab(self):
         """Criar aba de domínios monitorados"""
@@ -350,95 +393,153 @@ class MainWindow(ctk.CTk):
             value = kpis.get(key, 0)
             card.value_label.configure(text=str(value))
     
-    def load_incidents(self):
+    def load_incidents(self, viewed: bool = False):
         """Carregar lista de incidentes com paginação"""
+        # Selecionar widgets corretos baseado na aba
+        if viewed:
+            scroll = self.viewed_incidents_scroll
+            page = self.viewed_incidents_page
+            per_page = self.viewed_incidents_per_page
+            severity_filter = self.viewed_severity_filter
+            status_filter_value = None
+        else:
+            scroll = self.incidents_scroll
+            page = self.incidents_page
+            per_page = self.incidents_per_page
+            severity_filter = self.severity_filter
+            status_filter_value = None if self.status_filter.get() == "Todos" else self.status_filter.get()
+        
         # Limpar lista atual
-        for widget in self.incidents_scroll.winfo_children():
+        for widget in scroll.winfo_children():
             widget.destroy()
         
         # Buscar incidentes
-        status = None if self.status_filter.get() == "Todos" else self.status_filter.get()
-        severity = None if self.severity_filter.get() == "Todas" else self.severity_filter.get()
+        severity = None if severity_filter.get() == "Todas" else severity_filter.get()
         
-        # Buscar com paginação
-        offset = self.incidents_page * self.incidents_per_page
-        self.incidents_list = self.incident_manager.get_incidents(
-            status, 
-            severity, 
-            limit=self.incidents_per_page, 
+        # Buscar com paginação e filtro de visualização
+        offset = page * per_page
+        incidents_list = self.incident_manager.get_incidents(
+            status=status_filter_value,
+            severity=severity,
+            viewed=viewed,
+            limit=per_page,
             offset=offset
         )
         
         # Buscar total para paginação
-        self.incidents_total = self.incident_manager.get_incidents_count(status, severity)
+        total = self.incident_manager.get_incidents_count(
+            status=status_filter_value,
+            severity=severity,
+            viewed=viewed
+        )
+        
+        # Armazenar referências
+        if viewed:
+            self.viewed_incidents_list = incidents_list
+            self.viewed_incidents_total = total
+        else:
+            self.incidents_list = incidents_list
+            self.incidents_total = total
         
         # Atualizar controles de paginação
-        self.update_pagination_controls()
+        self.update_pagination_controls(viewed=viewed)
         
-        if not self.incidents_list:
-            no_data = ctk.CTkLabel(
-                self.incidents_scroll,
-                text="Nenhum incidente encontrado",
-                text_color="gray"
-            )
+        if not incidents_list:
+            msg = "Nenhum incidente lido" if viewed else "Nenhum incidente encontrado"
+            no_data = ctk.CTkLabel(scroll, text=msg, text_color="gray")
             no_data.pack(pady=20)
             return
         
         # Criar cards de incidentes
-        for incident in self.incidents_list:
-            self.create_incident_card(incident)
+        for incident in incidents_list:
+            self.create_incident_card(incident, parent_scroll=scroll)
     
-    def update_pagination_controls(self):
+    def update_pagination_controls(self, viewed: bool = False):
         """Atualizar controles de paginação"""
-        total_pages = max(1, (self.incidents_total + self.incidents_per_page - 1) // self.incidents_per_page)
-        current_page = self.incidents_page + 1
+        if viewed:
+            total = self.viewed_incidents_total
+            per_page = self.viewed_incidents_per_page
+            page = self.viewed_incidents_page
+            page_label = self.viewed_page_label
+            prev_btn = self.viewed_prev_btn
+            next_btn = self.viewed_next_btn
+        else:
+            total = self.incidents_total
+            per_page = self.incidents_per_page
+            page = self.incidents_page
+            page_label = self.page_label
+            prev_btn = self.prev_btn
+            next_btn = self.next_btn
+        
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        current_page = page + 1
         
         # Atualizar label
-        self.page_label.configure(
-            text=f"Página {current_page} de {total_pages} ({self.incidents_total} incidentes)"
+        page_label.configure(
+            text=f"Página {current_page} de {total_pages} ({total} incidentes)"
         )
         
         # Atualizar botões
-        self.prev_btn.configure(state="normal" if self.incidents_page > 0 else "disabled")
-        self.next_btn.configure(state="normal" if current_page < total_pages else "disabled")
+        prev_btn.configure(state="normal" if page > 0 else "disabled")
+        next_btn.configure(state="normal" if current_page < total_pages else "disabled")
     
-    def prev_page(self):
+    def prev_page(self, viewed: bool = False):
         """Ir para página anterior"""
-        if self.incidents_page > 0:
-            self.incidents_page -= 1
-            self.load_incidents()
+        if viewed:
+            if self.viewed_incidents_page > 0:
+                self.viewed_incidents_page -= 1
+                self.load_incidents(viewed=True)
+        else:
+            if self.incidents_page > 0:
+                self.incidents_page -= 1
+                self.load_incidents(viewed=False)
     
-    def next_page(self):
+    def next_page(self, viewed: bool = False):
         """Ir para próxima página"""
-        total_pages = (self.incidents_total + self.incidents_per_page - 1) // self.incidents_per_page
-        if self.incidents_page < total_pages - 1:
-            self.incidents_page += 1
-            self.load_incidents()
+        if viewed:
+            total_pages = max(1, (self.viewed_incidents_total + self.viewed_incidents_per_page - 1) // self.viewed_incidents_per_page)
+            if self.viewed_incidents_page < total_pages - 1:
+                self.viewed_incidents_page += 1
+                self.load_incidents(viewed=True)
+        else:
+            total_pages = max(1, (self.incidents_total + self.incidents_per_page - 1) // self.incidents_per_page)
+            if self.incidents_page < total_pages - 1:
+                self.incidents_page += 1
+                self.load_incidents(viewed=False)
     
     def filter_incidents(self, _=None):
         """Filtrar incidentes"""
-        self.incidents_page = 0  # Resetar para primeira página
-        self.load_incidents()
+        self.incidents_page = 0
+        self.load_incidents(viewed=False)
     
-    def apply_search_filter(self):
+    def apply_search_filter(self, viewed: bool = False):
         """Aplicar filtro de busca"""
-        search_term = self.search_entry.get().strip().lower()
+        if viewed:
+            search_entry = self.viewed_search_entry
+            scroll = self.viewed_incidents_scroll
+            incidents_list = self.viewed_incidents_list
+        else:
+            search_entry = self.search_entry
+            scroll = self.incidents_scroll
+            incidents_list = self.incidents_list
+        
+        search_term = search_entry.get().strip().lower()
         
         # Limpar lista de incidentes
-        for widget in self.incidents_scroll.winfo_children():
+        for widget in scroll.winfo_children():
             widget.destroy()
         
         # Filtrar incidentes
-        filtered = self.incidents_list
+        filtered = incidents_list
         if search_term:
             filtered = [
-                inc for inc in self.incidents_list
+                inc for inc in incidents_list
                 if search_term in inc.get('machine_id', '').lower()
             ]
         
         if not filtered:
             no_data = ctk.CTkLabel(
-                self.incidents_scroll,
+                scroll,
                 text=f"Nenhum incidente encontrado para '{search_term}'",
                 text_color="gray"
             )
@@ -447,11 +548,14 @@ class MainWindow(ctk.CTk):
         
         # Recriar cards
         for incident in filtered:
-            self.create_incident_card(incident)
+            self.create_incident_card(incident, parent_scroll=scroll)
     
-    def create_incident_card(self, incident: Dict):
+    def create_incident_card(self, incident: Dict, parent_scroll=None):
         """Criar card de incidente"""
-        card = ctk.CTkFrame(self.incidents_scroll, fg_color="#1e293b", corner_radius=8)
+        if parent_scroll is None:
+            parent_scroll = self.incidents_scroll
+        
+        card = ctk.CTkFrame(parent_scroll, fg_color="#1e293b", corner_radius=8)
         card.pack(fill="x", pady=5, padx=5)
         
         # Header do card
@@ -537,6 +641,16 @@ class MainWindow(ctk.CTk):
             auth_manager=self.auth_manager
         )
         controller.focus()
+        
+        # Agendar atualização das abas após 2 segundos
+        def refresh_after_view():
+            import time
+            time.sleep(2)
+            self.safe_after(0, lambda: self.load_incidents(viewed=False))
+            self.safe_after(0, lambda: self.load_incidents(viewed=True))
+        
+        import threading
+        threading.Thread(target=refresh_after_view, daemon=True).start()
     
     def load_monitored_domains(self):
         """Carregar domínios monitorados"""

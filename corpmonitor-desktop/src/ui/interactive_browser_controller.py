@@ -21,6 +21,9 @@ class InteractiveBrowserController(ctk.CTkToplevel):
         self.session_id = None
         self._destroyed = False
         
+        # Marcar incidente como visualizado
+        self._mark_incident_viewed()
+        
         # Configurar janela
         self.title("🌐 Controle de Navegação")
         self.geometry("350x700")
@@ -341,3 +344,19 @@ class InteractiveBrowserController(ctk.CTkToplevel):
             print(f"[Controller] Janela destruída")
         except Exception as e:
             print(f"[Controller] Aviso ao destruir: {e}")
+    
+    def _mark_incident_viewed(self):
+        """Marcar incidente como visualizado em background"""
+        def mark():
+            try:
+                from src.managers.incident_manager import IncidentManager
+                incident_manager = IncidentManager(
+                    supabase=self.auth_manager.supabase,
+                    user_id=self.auth_manager.current_user.id
+                )
+                incident_manager.mark_incident_as_viewed(self.incident['id'])
+            except Exception as e:
+                print(f"[Controller] Erro ao marcar incidente como visualizado: {e}")
+        
+        import threading
+        threading.Thread(target=mark, daemon=True).start()

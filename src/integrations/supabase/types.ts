@@ -247,6 +247,7 @@ export type Database = {
           tab_url: string | null
           updated_at: string
           user_id: string | null
+          viewed_at: string | null
         }
         Insert: {
           assigned_to?: string | null
@@ -267,6 +268,7 @@ export type Database = {
           tab_url?: string | null
           updated_at?: string
           user_id?: string | null
+          viewed_at?: string | null
         }
         Update: {
           assigned_to?: string | null
@@ -287,6 +289,7 @@ export type Database = {
           tab_url?: string | null
           updated_at?: string
           user_id?: string | null
+          viewed_at?: string | null
         }
         Relationships: [
           {
