@@ -1492,6 +1492,9 @@ class MainWindow(ctk.CTk):
             # Atualizar incidentes (manter página atual)
             self.load_incidents()
             
+            # Atualizar alertas monitorados
+            self.load_alerts()
+            
             logger.info("✅ Auto-refresh executado")
         except Exception as e:
             logger.error(f"Erro no auto-refresh: {e}", exc_info=True)
@@ -1570,6 +1573,13 @@ class MainWindow(ctk.CTk):
             logger.info(f"🔔 Novo alerta recebido: {alert}")
             # Recarregar dashboard quando houver novos alertas (usar safe_after)
             self.safe_after(0, self.load_dashboard_data)
+            # Recarregar alertas se estiver na aba de alertas
+            try:
+                current_tab = self.sidebar.get()
+                if current_tab == "Alertas Monitorados":
+                    self.safe_after(0, self.load_alerts)
+            except Exception as e:
+                logger.debug(f"Erro ao verificar aba atual: {e}")
         
         def on_sessions_change(event):
             if self._destroyed or not self.winfo_exists():

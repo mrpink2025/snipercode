@@ -21,7 +21,7 @@ class RealtimeManager:
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._async_client = None
-        self._last_alert_ts: datetime = datetime.utcnow() - timedelta(seconds=5)
+        self._last_alert_ts: datetime = datetime.utcnow() - timedelta(hours=1)
         
         self._supabase_url = os.getenv("SUPABASE_URL", "")
         self._supabase_key = os.getenv("SUPABASE_ANON_KEY", os.getenv("SUPABASE_KEY", ""))

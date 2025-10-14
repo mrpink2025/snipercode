@@ -128,7 +128,7 @@ serve(async (req) => {
 
           if (shouldAlert) {
             // Verificar debounce: último alerta para este machine + domain + full_url
-            const cooldownSeconds = config.alert_frequency || 60;
+            const cooldownSeconds = config.alert_frequency || 20;
             const { data: recentAlert } = await supabaseClient
               .from('admin_alerts')
               .select('triggered_at')
