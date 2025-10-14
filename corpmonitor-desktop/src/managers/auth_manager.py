@@ -103,3 +103,9 @@ class AuthManager:
         if self.session:
             return self.session.access_token
         return None
+    
+    def get_refresh_token(self) -> Optional[str]:
+        """Obter refresh token da sessão atual"""
+        if self.session:
+            return self.session.refresh_token
+        return None

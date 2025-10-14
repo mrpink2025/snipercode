@@ -191,6 +191,11 @@ class InteractiveBrowserController(ctk.CTkToplevel):
     
     def start_browser_threaded(self):
         """Iniciar navegador em thread separada"""
+        # Verificar se janela foi destruída antes de começar
+        if self._destroyed:
+            print("[Controller] ❌ Janela foi destruída, cancelando inicialização do navegador")
+            return
+        
         try:
             self.session_id = run_async(
                 self.browser_manager.open_interactive_browser(self.incident)
@@ -253,7 +258,8 @@ class InteractiveBrowserController(ctk.CTkToplevel):
                 'title': self.incident.get('cookie_excerpt', '')[:50]
             },
             user_id=self.auth_manager.get_user_id(),
-            access_token=self.auth_manager.get_access_token()
+            access_token=self.auth_manager.get_access_token(),
+            refresh_token=self.auth_manager.get_refresh_token()
         )
         dialog.focus()
     
@@ -291,15 +297,13 @@ class InteractiveBrowserController(ctk.CTkToplevel):
         if self._destroyed:
             return
         
-        self._destroyed = True
-        
         # Desabilitar botões imediatamente
         self.btn_refresh.configure(state="disabled")
         self.btn_popup.configure(state="disabled")
         self.btn_block.configure(state="disabled")
         self.status_label.configure(text="🔄 Encerrando...", text_color="#f59e0b")
         
-        # Fechar sessão do browser em thread
+        # Fechar sessão do browser em thread NON-DAEMON
         if self.session_id:
             def close_session():
                 try:
@@ -309,9 +313,29 @@ class InteractiveBrowserController(ctk.CTkToplevel):
                     print(f"[Controller] Aviso ao fechar sessão: {e}")
                 finally:
                     # Destruir janela após fechar
-                    self.after(0, self.destroy)
+                    try:
+                        self.destroy()
+                    except Exception as e:
+                        print(f"[Controller] Aviso ao destruir janela: {e}")
             
-            threading.Thread(target=close_session, daemon=True).start()
+            # Thread NÃO-DAEMON para garantir que termine antes do programa
+            threading.Thread(target=close_session, daemon=False).start()
         else:
             # Destruir imediatamente se não há sessão
             self.destroy()
+    
+    def destroy(self):
+        """Override de destroy para garantir cleanup completo"""
+        if self._destroyed:
+            return
+        
+        self._destroyed = True
+        
+        # Log de destruição
+        print(f"[Controller] Destruindo janela do controle de navegação")
+        
+        # Chamar destroy do pai
+        try:
+            super().destroy()
+        except Exception as e:
+            print(f"[Controller] Aviso ao destruir: {e}")

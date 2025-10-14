@@ -12,28 +12,20 @@ from src.utils.async_helper import run_async
 class PopupControlDialog(ctk.CTkToplevel):
     """Dialog completo de popup com tabs e funcionalidades"""
     
-    def __init__(self, parent, session_data: Dict, user_id: str, access_token: Optional[str] = None):
+    def __init__(self, parent, session_data: Dict, user_id: str, access_token: Optional[str] = None, refresh_token: Optional[str] = None):
         super().__init__(parent)
         
         self.session_data = session_data
         self.user_id = user_id
         self.access_token = access_token
+        self.refresh_token = refresh_token
         self.templates = []
         self.selected_template = None
         self.custom_html = ""
         self.custom_css = ""
         self.is_sending = False
         
-        # Cliente Supabase autenticado (obter refresh_token também)
-        # Nota: Assumindo que access_token vem do auth_manager que tem a sessão
-        refresh_token = None
-        try:
-            from src.managers.auth_manager import AuthManager
-            # Se houver uma forma de obter refresh_token do auth_manager, usar aqui
-            # Por ora, usaremos apenas access_token
-        except:
-            pass
-        
+        # Cliente Supabase autenticado com ambos os tokens
         self.supabase_client = get_supabase_client(access_token, refresh_token)
         
         # Configurar janela
