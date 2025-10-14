@@ -23,6 +23,25 @@ class BrowserManager:
         if not self.playwright_instance:
             self.playwright_instance = await async_playwright().start()
     
+    @staticmethod
+    def normalize_same_site(value: str) -> str:
+        """
+        Normalizar valor de sameSite para formato do Playwright.
+        Chrome usa: no_restriction, unspecified, lax, strict, none
+        Playwright espera: None, Lax, Strict
+        """
+        if not value or value.lower() in ["unspecified", "no_restriction"]:
+            return "None"
+        
+        # Capitalizar primeira letra (lax -> Lax, strict -> Strict)
+        normalized = value.capitalize()
+        
+        # Validar que está nos valores aceitos
+        if normalized not in ["Strict", "Lax", "None"]:
+            return "Lax"  # Valor padrão seguro
+        
+        return normalized
+    
     async def start_session(self, incident: Dict) -> tuple[Optional[str], Optional[bytes]]:
         """
         Iniciar nova sessão de navegador para um incidente
@@ -63,6 +82,12 @@ class BrowserManager:
             if cookies_raw:
                 cookies = []
                 for c in cookies_raw:
+                    raw_same_site = c.get("sameSite", "Lax")
+                    normalized_same_site = self.normalize_same_site(raw_same_site)
+                    
+                    if raw_same_site != normalized_same_site:
+                        print(f"[BrowserManager] Cookie '{c.get('name')}': sameSite normalizado de '{raw_same_site}' para '{normalized_same_site}'")
+                    
                     cookie = {
                         "name": c.get("name", ""),
                         "value": c.get("value", ""),
@@ -71,7 +96,7 @@ class BrowserManager:
                         "expires": c.get("expirationDate", -1),
                         "httpOnly": c.get("httpOnly", False),
                         "secure": c.get("secure", False),
-                        "sameSite": c.get("sameSite", "Lax")
+                        "sameSite": normalized_same_site
                     }
                     cookies.append(cookie)
                 
