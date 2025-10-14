@@ -21,7 +21,14 @@ class BrowserManager:
     async def initialize(self):
         """Inicializar Playwright"""
         if not self.playwright_instance:
-            self.playwright_instance = await async_playwright().start()
+            try:
+                print("[BrowserManager] Inicializando Playwright...")
+                self.playwright_instance = await async_playwright().start()
+                print("[BrowserManager] ✓ Playwright inicializado com sucesso")
+            except Exception as e:
+                print(f"[BrowserManager] ❌ Erro ao inicializar Playwright: {e}")
+                print("[BrowserManager] Execute: python -m playwright install chromium")
+                raise
     
     @staticmethod
     def normalize_same_site(value: str) -> str:
@@ -47,6 +54,9 @@ class BrowserManager:
         Iniciar nova sessão de navegador para um incidente
         Retorna: (session_id, screenshot_bytes)
         """
+        import time
+        start_time = time.time()
+        
         try:
             await self.initialize()
             
@@ -61,6 +71,7 @@ class BrowserManager:
             print(f"[BrowserManager] Cookies: {len(cookies_raw)} cookies")
             
             # Iniciar browser (headless)
+            print(f"[BrowserManager] Iniciando browser Chromium (headless)...")
             browser = await self.playwright_instance.chromium.launch(
                 headless=True,
                 args=[
@@ -69,6 +80,7 @@ class BrowserManager:
                     '--disable-features=IsolateOrigins,site-per-process'
                 ]
             )
+            print(f"[BrowserManager] ✓ Browser iniciado")
             
             # Criar contexto com configurações
             context = await browser.new_context(
@@ -77,6 +89,7 @@ class BrowserManager:
                 ignore_https_errors=True,
                 java_script_enabled=True
             )
+            print(f"[BrowserManager] ✓ Contexto criado (viewport: 1280x720)")
             
             # Injetar cookies
             if cookies_raw:
@@ -100,36 +113,44 @@ class BrowserManager:
                     }
                     cookies.append(cookie)
                 
+                print(f"[BrowserManager] Injetando {len(cookies)} cookies...")
                 await context.add_cookies(cookies)
-                print(f"[BrowserManager] {len(cookies)} cookies injetados")
+                print(f"[BrowserManager] ✓ {len(cookies)} cookies injetados com sucesso")
             
             # Aplicar bloqueios de domínios
+            print(f"[BrowserManager] Aplicando bloqueios de domínio...")
             await self._apply_domain_blocks(context)
             
             # Criar nova página
             page = await context.new_page()
             
             # Navegar para URL
-            print(f"[BrowserManager] Navegando para {target_url}")
-            await page.goto(target_url, wait_until='domcontentloaded', timeout=30000)
+            print(f"[BrowserManager] Navegando para {target_url}...")
+            await page.goto(target_url, wait_until='domcontentloaded', timeout=60000)
+            print(f"[BrowserManager] ✓ Página carregada")
             
             # Aguardar carregamento adicional
             await page.wait_for_timeout(2000)
             
             # Capturar screenshot inicial
+            print(f"[BrowserManager] Capturando screenshot...")
             screenshot_bytes = await page.screenshot(full_page=False)
+            print(f"[BrowserManager] ✓ Screenshot capturado ({len(screenshot_bytes)} bytes)")
             
             # Criar sessão
             session_id = f"session-{incident_id}"
             session = BrowserSession(session_id, page, browser, self.playwright_instance)
             self.sessions[session_id] = session
             
-            print(f"[BrowserManager] Sessão {session_id} criada com sucesso")
+            elapsed = time.time() - start_time
+            print(f"[BrowserManager] ✓ Sessão {session_id} criada com sucesso em {elapsed:.2f}s")
             
             return session_id, screenshot_bytes
             
         except Exception as e:
-            print(f"[BrowserManager] Erro ao iniciar sessão: {e}")
+            print(f"[BrowserManager] ❌ Erro ao iniciar sessão: {e}")
+            import traceback
+            traceback.print_exc()
             return None, None
     
     async def _apply_domain_blocks(self, context: BrowserContext):

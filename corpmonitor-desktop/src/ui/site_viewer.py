@@ -173,11 +173,16 @@ class SiteViewer(ctk.CTkToplevel):
                     # Iniciar auto-refresh
                     self.safe_after(0, self.auto_refresh)
                 else:
-                    self.safe_after(0, lambda: self.show_error_message("Erro ao iniciar sessão do navegador"))
+                    error_msg = "Erro ao iniciar sessão do navegador. Verifique os logs para detalhes."
+                    logger.error(f"[SiteViewer] {error_msg}")
+                    self.safe_after(0, lambda: self.show_error_message(error_msg))
+                    self.safe_after(0, lambda: self.update_status("❌ Falha ao conectar"))
                     
             except Exception as e:
                 logger.error(f"Erro ao iniciar browser session: {e}", exc_info=True)
-                self.safe_after(0, lambda: self.show_error_message(f"Erro: {str(e)}"))
+                error_msg = f"Erro: {type(e).__name__}: {str(e)}"
+                self.safe_after(0, lambda: self.show_error_message(error_msg))
+                self.safe_after(0, lambda: self.update_status(f"❌ {type(e).__name__}"))
         
         thread = threading.Thread(target=start_session)
         thread.daemon = True
