@@ -353,6 +353,7 @@ export type Database = {
           domain: string
           id: string
           is_active: boolean
+          metadata: Json | null
           updated_at: string
         }
         Insert: {
@@ -363,6 +364,7 @@ export type Database = {
           domain: string
           id?: string
           is_active?: boolean
+          metadata?: Json | null
           updated_at?: string
         }
         Update: {
@@ -373,6 +375,7 @@ export type Database = {
           domain?: string
           id?: string
           is_active?: boolean
+          metadata?: Json | null
           updated_at?: string
         }
         Relationships: []

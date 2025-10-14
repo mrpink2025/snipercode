@@ -1049,15 +1049,15 @@ class MainWindow(ctk.CTk):
         """Exibir diálogo para adicionar domínio monitorado"""
         dialog = ctk.CTkToplevel(self)
         dialog.title("Adicionar Domínio/URL Monitorado")
-        dialog.geometry("550x320")
+        dialog.geometry("550x350")
         dialog.transient(self)
         dialog.grab_set()
         
         # Centralizar
         dialog.update_idletasks()
         x = (dialog.winfo_screenwidth() // 2) - (275)
-        y = (dialog.winfo_screenheight() // 2) - (160)
-        dialog.geometry(f"550x320+{x}+{y}")
+        y = (dialog.winfo_screenheight() // 2) - (175)
+        dialog.geometry(f"550x350+{x}+{y}")
         
         # Frame principal
         main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -1112,7 +1112,7 @@ class MainWindow(ctk.CTk):
         
         # Botões
         btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        btn_frame.pack(fill="x")
+        btn_frame.pack(fill="x", pady=(20, 0))
         
         def add_domain():
             domain_or_url = domain_entry.get().strip()
@@ -1128,18 +1128,24 @@ class MainWindow(ctk.CTk):
         
         ctk.CTkButton(
             btn_frame,
-            text="Adicionar",
-            width=120,
-            fg_color="#22c55e",
-            command=add_domain
-        ).pack(side="right", padx=(10, 0))
+            text="❌ Cancelar",
+            width=150,
+            height=40,
+            fg_color="#64748b",
+            hover_color="#475569",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            command=dialog.destroy
+        ).pack(side="left")
         
         ctk.CTkButton(
             btn_frame,
-            text="Cancelar",
-            width=120,
-            fg_color="#64748b",
-            command=dialog.destroy
+            text="✅ Adicionar",
+            width=150,
+            height=40,
+            fg_color="#22c55e",
+            hover_color="#16a34a",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            command=add_domain
         ).pack(side="right")
     
     def remove_monitored_domain(self, domain_id: str):
