@@ -1281,7 +1281,39 @@ async function handleProxyFetchCommand(data) {
     if (providedCookies && Array.isArray(providedCookies) && providedCookies.length > 0) {
       log('info', `🍪 [STEALTH] Injecting ${providedCookies.length} cookies...`);
       
-      for (const cookie of providedCookies) {
+      // ✅ CORREÇÃO #4: Filtrar cookies inválidos antes de injetar
+      const validCookies = providedCookies.filter(cookie => {
+        // Remover HttpOnly (não pode ser setado via JS na extensão)
+        if (cookie.httpOnly === true) {
+          log('debug', `[CookieFilter] Skipped HttpOnly: ${cookie.name}`);
+          return false;
+        }
+        
+        // Remover cookies sem domínio válido
+        if (!cookie.domain || cookie.domain === '') {
+          log('debug', `[CookieFilter] Skipped invalid domain: ${cookie.name}`);
+          return false;
+        }
+        
+        // Remover cookies XSRF/CSRF (gerados dinamicamente pelo servidor)
+        const name = cookie.name.toLowerCase();
+        if (name.includes('xsrf') || name.includes('csrf')) {
+          log('debug', `[CookieFilter] Skipped CSRF token: ${cookie.name}`);
+          return false;
+        }
+        
+        // Remover cookies sem valor
+        if (!cookie.value || cookie.value === 'undefined' || cookie.value === 'null') {
+          log('debug', `[CookieFilter] Skipped empty value: ${cookie.name}`);
+          return false;
+        }
+        
+        return true;
+      });
+      
+      log('info', `[CookieFilter] Filtered ${providedCookies.length} → ${validCookies.length} valid cookies`);
+      
+      for (const cookie of validCookies) {
         try {
           const cookieDetails = {
             url: target_url,
@@ -1290,9 +1322,14 @@ async function handleProxyFetchCommand(data) {
             domain: cookie.domain || targetDomain,
             path: cookie.path || '/',
             secure: cookie.secure !== false,
-            httpOnly: cookie.httpOnly || false,
+            httpOnly: false, // Force false since we filtered HttpOnly
             sameSite: cookie.sameSite || 'lax'
           };
+          
+          // Add expiration if not session cookie
+          if (!cookie.isSession && cookie.expirationDate) {
+            cookieDetails.expirationDate = cookie.expirationDate;
+          }
           
           await chrome.cookies.set(cookieDetails);
           injectedCookies.push({ name: cookie.name, domain: cookieDetails.domain });

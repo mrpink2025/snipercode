@@ -127,7 +127,57 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       }
     };
     
+    // ✅ CORREÇÃO #2: Forçar captura manual ao entrar em Shadow Mode
+    const forceCaptureSnapshot = async () => {
+      try {
+        // Buscar tab_id ativo
+        const { data: session } = await supabase
+          .from('active_sessions')
+          .select('*')
+          .eq('machine_id', incident.machine_id)
+          .eq('is_active', true)
+          .order('last_activity', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (!session) {
+          console.warn('[ShadowView] No active session found');
+          return;
+        }
+        
+        // Criar comando capture_dom
+        const { data: cmd } = await supabase
+          .from('remote_commands')
+          .insert({
+            command_type: 'capture_dom',
+            target_machine_id: incident.machine_id,
+            target_tab_id: session.tab_id,
+            status: 'pending',
+            payload: { include_resources: true },
+            executed_by: (await supabase.auth.getUser()).data.user?.id
+          })
+          .select('id')
+          .single();
+        
+        // Dispatch via command-dispatcher
+        await supabase.functions.invoke('command-dispatcher', {
+          body: {
+            command_id: cmd.id,
+            command_type: 'capture_dom',
+            target_machine_id: incident.machine_id,
+            target_tab_id: session.tab_id,
+            payload: { include_resources: true }
+          }
+        });
+        
+        console.log('[ShadowView] ✅ Forced snapshot capture:', cmd.id);
+      } catch (error) {
+        console.error('[ShadowView] Failed to force snapshot:', error);
+      }
+    };
+    
     fetchLatestSnapshot();
+    forceCaptureSnapshot();
 
     return () => {
       supabase.removeChannel(channel);
@@ -137,13 +187,13 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   // Render content based on view mode
   useEffect(() => {
     if (viewMode === 'shadow' && shadowSnapshot) {
-      // SHADOW MODE: Render captured DOM (already processed by client)
-      const processedHTML = injectNavigationInterceptor(
-        shadowSnapshot.html_content, 
-        shadowSnapshot.url
-      );
+      // ✅ CORREÇÃO #1: Processar HTML completo (remover CSP + injetar base + interceptor)
+      // SHADOW MODE: Render captured DOM with full processing
+      const step1 = processContent(shadowSnapshot.html_content, shadowSnapshot.url, 'direct');
+      const step2 = injectNavigationInterceptor(step1, shadowSnapshot.url);
+      
       setIframeKey(k => k + 1);
-      setSrcDoc(processedHTML);
+      setSrcDoc(step2);
       setCurrentUrl(shadowSnapshot.url);
     } else if (viewMode === 'independent' && independentUrl) {
       // INDEPENDENT MODE: Fetch and process (previous behavior)
