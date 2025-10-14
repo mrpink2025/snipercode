@@ -97,3 +97,9 @@ class AuthManager:
         if self.current_user:
             return self.current_user.get("id")
         return None
+    
+    def get_access_token(self) -> Optional[str]:
+        """Obter access token da sessão atual"""
+        if self.session:
+            return self.session.access_token
+        return None

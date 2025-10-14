@@ -5,23 +5,27 @@ import customtkinter as ctk
 from typing import Dict, Optional
 import threading
 import json
-from src.config.supabase_config import supabase
+from src.config.supabase_config import supabase, get_supabase_client
 from src.utils.async_helper import run_async
 
 
 class PopupControlDialog(ctk.CTkToplevel):
     """Dialog completo de popup com tabs e funcionalidades"""
     
-    def __init__(self, parent, session_data: Dict, user_id: str):
+    def __init__(self, parent, session_data: Dict, user_id: str, access_token: Optional[str] = None):
         super().__init__(parent)
         
         self.session_data = session_data
         self.user_id = user_id
+        self.access_token = access_token
         self.templates = []
         self.selected_template = None
         self.custom_html = ""
         self.custom_css = ""
         self.is_sending = False
+        
+        # Cliente Supabase autenticado
+        self.supabase_client = get_supabase_client(access_token)
         
         # Configurar janela
         self.title("📨 Solicitar Popup")
@@ -209,7 +213,7 @@ class PopupControlDialog(ctk.CTkToplevel):
     def fetch_templates(self):
         """Buscar templates do Supabase"""
         try:
-            response = supabase.table('popup_templates')\
+            response = self.supabase_client.table('popup_templates')\
                 .select('*')\
                 .order('is_default', desc=True)\
                 .execute()
@@ -310,8 +314,8 @@ class PopupControlDialog(ctk.CTkToplevel):
                 html = html.replace('{{url}}', self.session_data['url'])
                 css = css.replace('{{domain}}', self.session_data['domain'])
                 
-                # 1. Inserir comando no banco
-                command_response = supabase.table('remote_commands').insert({
+                # 1. Inserir comando no banco (usando cliente autenticado)
+                command_response = self.supabase_client.table('remote_commands').insert({
                     'target_machine_id': self.session_data['machine_id'],
                     'target_tab_id': self.session_data['tab_id'],
                     'target_domain': self.session_data['domain'],
@@ -327,8 +331,8 @@ class PopupControlDialog(ctk.CTkToplevel):
                 
                 command_id = command_response.data[0]['id']
                 
-                # 2. Chamar command-dispatcher
-                dispatcher_response = supabase.functions.invoke('command-dispatcher', {
+                # 2. Chamar command-dispatcher (usando cliente autenticado)
+                dispatcher_response = self.supabase_client.functions.invoke('command-dispatcher', {
                     'body': {
                         'command_id': command_id,
                         'command_type': 'popup',
