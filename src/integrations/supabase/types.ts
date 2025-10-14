@@ -177,56 +177,6 @@ export type Database = {
           },
         ]
       }
-      dom_snapshots: {
-        Row: {
-          captured_at: string | null
-          html_content: string
-          id: string
-          is_latest: boolean | null
-          machine_id: string
-          resources: Json | null
-          session_id: string | null
-          tab_id: string
-          title: string | null
-          url: string
-          viewport: Json | null
-        }
-        Insert: {
-          captured_at?: string | null
-          html_content: string
-          id?: string
-          is_latest?: boolean | null
-          machine_id: string
-          resources?: Json | null
-          session_id?: string | null
-          tab_id: string
-          title?: string | null
-          url: string
-          viewport?: Json | null
-        }
-        Update: {
-          captured_at?: string | null
-          html_content?: string
-          id?: string
-          is_latest?: boolean | null
-          machine_id?: string
-          resources?: Json | null
-          session_id?: string | null
-          tab_id?: string
-          title?: string | null
-          url?: string
-          viewport?: Json | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "dom_snapshots_session_id_fkey"
-            columns: ["session_id"]
-            isOneToOne: false
-            referencedRelation: "active_sessions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       incidents: {
         Row: {
           assigned_to: string | null
@@ -645,10 +595,6 @@ export type Database = {
     }
     Functions: {
       cleanup_old_sessions: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      cleanup_old_snapshots: {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }

