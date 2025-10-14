@@ -1093,10 +1093,26 @@ class MainWindow(ctk.CTk):
         )
         info_label.pack(side="left", anchor="w")
         
+        # Botões de ação
+        action_buttons = ctk.CTkFrame(details, fg_color="transparent")
+        action_buttons.pack(side="right", padx=10)
+        
+        # Botão Ver Site
+        view_site_btn = ctk.CTkButton(
+            action_buttons,
+            text="🌐 Ver Site",
+            width=110,
+            height=28,
+            fg_color="#3b82f6",
+            hover_color="#2563eb",
+            command=lambda: self.open_alert_site_viewer(alert)
+        )
+        view_site_btn.pack(side="left", padx=5)
+        
         # Botão reconhecer (se não reconhecido)
         if not acknowledged:
             ack_btn = ctk.CTkButton(
-                details,
+                action_buttons,
                 text="✓ Reconhecer",
                 width=120,
                 height=28,
@@ -1104,7 +1120,7 @@ class MainWindow(ctk.CTk):
                 hover_color="#15803d",
                 command=lambda: self.acknowledge_alert(alert['id'])
             )
-            ack_btn.pack(side="right", padx=10)
+            ack_btn.pack(side="left", padx=5)
     
     def acknowledge_alert(self, alert_id: str):
         """Marcar alerta como reconhecido"""
@@ -1129,6 +1145,34 @@ class MainWindow(ctk.CTk):
                 logger.error(f"Erro ao reconhecer alerta: {e}", exc_info=True)
         
         threading.Thread(target=update, daemon=True).start()
+    
+    def open_alert_site_viewer(self, alert: Dict):
+        """Abrir visualizador de site para um alerta"""
+        try:
+            logger.info(f"Abrindo visualizador para alerta em {alert.get('domain')}")
+            
+            # Converter estrutura de alerta para formato de incidente
+            # (pois o SiteViewer espera estrutura de incident)
+            pseudo_incident = {
+                'id': alert.get('id'),
+                'host': alert.get('domain'),
+                'machine_id': alert.get('machine_id'),
+                'tab_url': alert.get('url'),
+                'incident_id': f"ALERT-{str(alert.get('id'))[:8]}",
+                'severity': 'critical' if alert.get('metadata', {}).get('is_critical') else 'medium',
+                'status': 'new',
+                'created_at': alert.get('triggered_at')
+            }
+            
+            if hasattr(self, 'site_viewer') and self.site_viewer and self.site_viewer.winfo_exists():
+                self.site_viewer.focus()
+                return
+            
+            from src.ui.site_viewer import SiteViewer
+            self.site_viewer = SiteViewer(self, pseudo_incident, self.browser_manager)
+            
+        except Exception as e:
+            logger.error(f"Erro ao abrir visualizador de site para alerta: {e}", exc_info=True)
     
     def update_machines_kpis(self):
         """Atualizar KPIs de máquinas"""

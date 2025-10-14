@@ -77,7 +77,7 @@ class DomainManager:
             existing = self.supabase.table("monitored_domains")\
                 .select("*")\
                 .eq("domain", domain)\
-                .maybeSingle()\
+                .maybe_single()\
                 .execute()
             
             if existing.data:
