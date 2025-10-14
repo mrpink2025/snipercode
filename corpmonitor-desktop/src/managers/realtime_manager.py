@@ -182,23 +182,29 @@ class RealtimeManager:
         """Emitir alerta para callbacks registrados"""
         try:
             alert_type = data.get("alert_type", "unknown")
-            domain = data.get("domain", "Desconhecido")
-            machine_id = data.get("machine_id", "Desconhecido")
-            url = data.get("url", "")
+            metadata = data.get("metadata", {})
+            
+            # Determinar se é crítico
+            is_critical = metadata.get("alert_type") == "critical" or metadata.get("is_critical", False)
             
             alert = {
                 "type": alert_type,
-                "domain": domain,
-                "machine_id": machine_id,
-                "url": url,
+                "domain": data.get("domain", "Desconhecido"),
+                "machine_id": data.get("machine_id", "Desconhecido"),
+                "url": data.get("url", ""),
                 "timestamp": data.get("triggered_at"),
+                "is_critical": is_critical
             }
             
-            logger.info(f"🚨 Alerta recebido: {alert_type} - {domain}")
+            logger.info(f"🚨 Alerta recebido: {alert_type} - {alert['domain']} (crítico: {is_critical})")
             
-            # Notificação e som
+            # Notificação e som apropriado
             self._show_system_notification(alert)
-            self._play_alert_sound()
+            
+            if is_critical:
+                self._play_critical_alert_sound()
+            else:
+                self._play_alert_sound()
             
             # Chamar callbacks registrados
             for cb in list(self.alert_callbacks):
@@ -213,8 +219,11 @@ class RealtimeManager:
     def _show_system_notification(self, alert: Dict):
         """Exibir notificação do sistema operacional"""
         try:
+            is_critical = alert.get("is_critical", False)
+            title = "🚨🚨🚨 ALERTA CRÍTICO - CorpMonitor" if is_critical else "🚨 Alerta CorpMonitor"
+            
             notification.notify(
-                title="🚨 Alerta CorpMonitor",
+                title=title,
                 message=f"Domínio Monitorado Acessado:\n{alert['domain']}\n\nMáquina: {alert['machine_id']}",
                 app_name="CorpMonitor Desktop",
                 timeout=10,
@@ -223,7 +232,7 @@ class RealtimeManager:
             logger.warning(f"Erro ao exibir notificação: {e}")
     
     def _play_alert_sound(self):
-        """Tocar som de alerta"""
+        """Tocar som de alerta normal"""
         try:
             def play():
                 try:
@@ -234,3 +243,19 @@ class RealtimeManager:
             threading.Thread(target=play, daemon=True).start()
         except Exception as e:
             logger.warning(f"Erro ao tocar som: {e}")
+    
+    def _play_critical_alert_sound(self):
+        """Tocar som de alerta CRÍTICO (repetido e alto)"""
+        try:
+            def play():
+                try:
+                    # 3 beeps longos e altos (1500Hz, 800ms cada)
+                    for _ in range(3):
+                        winsound.Beep(1500, 800)
+                        time.sleep(0.2)
+                except Exception:
+                    pass
+            
+            threading.Thread(target=play, daemon=True).start()
+        except Exception as e:
+            logger.warning(f"Erro ao tocar som crítico: {e}")

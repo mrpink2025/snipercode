@@ -232,6 +232,24 @@ class MainWindow(ctk.CTk):
         )
         refresh_btn.pack(side="left", padx=5)
         
+        # Campo de busca
+        ctk.CTkLabel(filters_frame, text="|", text_color="gray").pack(side="left", padx=10)
+        
+        self.search_entry = ctk.CTkEntry(
+            filters_frame,
+            placeholder_text="Buscar por email ou nome do computador...",
+            width=300
+        )
+        self.search_entry.pack(side="left", padx=5)
+        
+        search_btn = ctk.CTkButton(
+            filters_frame,
+            text="🔍",
+            width=40,
+            command=self.apply_search_filter
+        )
+        search_btn.pack(side="left", padx=2)
+        
         # Controles de paginação
         pagination_frame = ctk.CTkFrame(incidents_tab, fg_color="transparent")
         pagination_frame.pack(fill="x", padx=10, pady=5)
@@ -402,6 +420,35 @@ class MainWindow(ctk.CTk):
         self.incidents_page = 0  # Resetar para primeira página
         self.load_incidents()
     
+    def apply_search_filter(self):
+        """Aplicar filtro de busca"""
+        search_term = self.search_entry.get().strip().lower()
+        
+        # Limpar lista de incidentes
+        for widget in self.incidents_scroll.winfo_children():
+            widget.destroy()
+        
+        # Filtrar incidentes
+        filtered = self.incidents_list
+        if search_term:
+            filtered = [
+                inc for inc in self.incidents_list
+                if search_term in inc.get('machine_id', '').lower()
+            ]
+        
+        if not filtered:
+            no_data = ctk.CTkLabel(
+                self.incidents_scroll,
+                text=f"Nenhum incidente encontrado para '{search_term}'",
+                text_color="gray"
+            )
+            no_data.pack(pady=20)
+            return
+        
+        # Recriar cards
+        for incident in filtered:
+            self.create_incident_card(incident)
+    
     def create_incident_card(self, incident: Dict):
         """Criar card de incidente"""
         card = ctk.CTkFrame(self.incidents_scroll, fg_color="#1e293b", corner_radius=8)
@@ -514,12 +561,32 @@ class MainWindow(ctk.CTk):
         content = ctk.CTkFrame(card, fg_color="transparent")
         content.pack(fill="x", padx=15, pady=12)
         
-        domain_label = ctk.CTkLabel(content, text=f"🌐 {domain_data['domain']}", font=ctk.CTkFont(size=13, weight="bold"))
+        # Verificar se há URL completa
+        metadata = domain_data.get('metadata', {})
+        full_url = metadata.get('full_url') if isinstance(metadata, dict) else None
+        display_text = full_url if full_url else domain_data['domain']
+        
+        domain_label = ctk.CTkLabel(
+            content,
+            text=f"🌐 {display_text}",
+            font=ctk.CTkFont(size=13, weight="bold")
+        )
         domain_label.pack(side="left")
         
+        # Badge de tipo de alerta
         alert_type = domain_data.get('alert_type', 'sound')
-        type_label = ctk.CTkLabel(content, text=f"🔔 {alert_type}", text_color="gray", font=ctk.CTkFont(size=11))
-        type_label.pack(side="left", padx=15)
+        is_critical = alert_type == 'critical'
+        
+        alert_badge = ctk.CTkLabel(
+            content,
+            text="🚨 CRÍTICO" if is_critical else "🔔 Normal",
+            fg_color="#dc2626" if is_critical else "#3b82f6",
+            corner_radius=4,
+            padx=8,
+            pady=2,
+            font=ctk.CTkFont(size=10, weight="bold")
+        )
+        alert_badge.pack(side="left", padx=15)
         
         remove_btn = ctk.CTkButton(
             content,
@@ -563,13 +630,100 @@ class MainWindow(ctk.CTk):
     
     def show_add_monitored_domain_dialog(self):
         """Exibir diálogo para adicionar domínio monitorado"""
-        dialog = ctk.CTkInputDialog(text="Digite o domínio a ser monitorado:", title="Adicionar Domínio")
-        domain = dialog.get_input()
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Adicionar Domínio/URL Monitorado")
+        dialog.geometry("550x320")
+        dialog.transient(self)
+        dialog.grab_set()
         
-        if domain:
-            success = self.domain_manager.add_monitored_domain(domain)
+        # Centralizar
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (275)
+        y = (dialog.winfo_screenheight() // 2) - (160)
+        dialog.geometry(f"550x320+{x}+{y}")
+        
+        # Frame principal
+        main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Título
+        ctk.CTkLabel(
+            main_frame,
+            text="Adicionar Domínio/URL Monitorado",
+            font=ctk.CTkFont(size=16, weight="bold")
+        ).pack(pady=(0, 20))
+        
+        # Campo de domínio/URL
+        ctk.CTkLabel(main_frame, text="Domínio ou URL completa:", anchor="w").pack(anchor="w")
+        domain_entry = ctk.CTkEntry(
+            main_frame, 
+            width=510, 
+            placeholder_text="exemplo.com ou https://exemplo.com/pagina/especifica"
+        )
+        domain_entry.pack(pady=(5, 15))
+        
+        # Tipo de alerta
+        ctk.CTkLabel(main_frame, text="Tipo de Alerta:", anchor="w").pack(anchor="w")
+        alert_type_var = ctk.StringVar(value="critical")
+        
+        alert_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        alert_frame.pack(fill="x", pady=(5, 15))
+        
+        ctk.CTkRadioButton(
+            alert_frame,
+            text="🚨 Crítico (3 beeps altos e repetidos - 1500Hz)",
+            variable=alert_type_var,
+            value="critical"
+        ).pack(anchor="w", pady=2)
+        
+        ctk.CTkRadioButton(
+            alert_frame,
+            text="🔔 Normal (1 beep simples - 1200Hz)",
+            variable=alert_type_var,
+            value="sound"
+        ).pack(anchor="w", pady=2)
+        
+        # Label de exemplo
+        example_label = ctk.CTkLabel(
+            main_frame,
+            text="💡 Exemplo: https://pje1g.trf1.jus.br/pje/QuadroAviso/listViewQuadroAvisoMensagem.seam",
+            font=ctk.CTkFont(size=10),
+            text_color="gray",
+            wraplength=500
+        )
+        example_label.pack(pady=(0, 20))
+        
+        # Botões
+        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        btn_frame.pack(fill="x")
+        
+        def add_domain():
+            domain_or_url = domain_entry.get().strip()
+            if not domain_or_url:
+                return
+            
+            alert_type = alert_type_var.get()
+            success = self.domain_manager.add_monitored_domain(domain_or_url, alert_type=alert_type)
+            
             if success:
+                dialog.destroy()
                 self.load_monitored_domains()
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="Adicionar",
+            width=120,
+            fg_color="#22c55e",
+            command=add_domain
+        ).pack(side="right", padx=(10, 0))
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="Cancelar",
+            width=120,
+            fg_color="#64748b",
+            command=dialog.destroy
+        ).pack(side="right")
     
     def remove_monitored_domain(self, domain_id: str):
         """Remover domínio monitorado"""

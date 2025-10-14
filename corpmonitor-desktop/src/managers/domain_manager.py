@@ -1,6 +1,7 @@
 from supabase import Client
 from typing import List, Dict, Optional
 from datetime import datetime
+from urllib.parse import urlparse
 import re
 
 class DomainManager:
@@ -17,6 +18,15 @@ class DomainManager:
         # Regex básico para validar domínio
         pattern = r'^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
         return bool(re.match(pattern, domain.strip().lower()))
+    
+    @staticmethod
+    def validate_url(url: str) -> bool:
+        """Validar URL completa"""
+        try:
+            result = urlparse(url)
+            return all([result.scheme, result.netloc])
+        except:
+            return False
     
     def get_monitored_domains(self) -> List[Dict]:
         """Buscar todos os domínios monitorados ativos"""
@@ -37,26 +47,47 @@ class DomainManager:
             logger.error(f"Erro ao buscar domínios monitorados: {e}", exc_info=True)
             return []
     
-    def add_monitored_domain(self, domain: str, alert_type: str = "sound", alert_frequency: int = 60) -> bool:
-        """Adicionar novo domínio à lista de monitoramento"""
+    def add_monitored_domain(self, domain_or_url: str, alert_type: str = "critical", alert_frequency: int = 60) -> bool:
+        """Adicionar novo domínio ou URL completa à lista de monitoramento"""
         try:
             from src.utils.logger import logger
-            logger.info(f"Adicionando domínio monitorado: {domain}")
+            
+            # Determinar se é URL completa ou apenas domínio
+            domain_clean = domain_or_url.strip()
+            full_url = None
+            
+            if domain_clean.startswith('http://') or domain_clean.startswith('https://'):
+                # É uma URL completa
+                if not self.validate_url(domain_clean):
+                    logger.error(f"URL inválida: {domain_clean}")
+                    return False
+                parsed = urlparse(domain_clean)
+                domain = parsed.netloc
+                full_url = domain_clean
+                logger.info(f"Adicionando URL monitorada: {full_url} (domínio: {domain})")
+            else:
+                # É apenas um domínio
+                domain = domain_clean.lower()
+                if not self.validate_domain(domain):
+                    logger.error(f"Domínio inválido: {domain}")
+                    return False
+                logger.info(f"Adicionando domínio monitorado: {domain}")
             
             data = {
                 "domain": domain,
                 "alert_type": alert_type,
                 "alert_frequency": alert_frequency,
                 "added_by": self.user_id,
-                "is_active": True
+                "is_active": True,
+                "metadata": {"full_url": full_url} if full_url else None
             }
             
             response = self.supabase.table("monitored_domains").insert(data).execute()
-            logger.info(f"✓ Domínio {domain} adicionado com sucesso")
+            logger.info(f"✓ Domínio/URL adicionado com sucesso")
             return bool(response.data)
         except Exception as e:
             from src.utils.logger import logger
-            logger.error(f"Erro ao adicionar domínio monitorado {domain}: {e}", exc_info=True)
+            logger.error(f"Erro ao adicionar domínio monitorado: {e}", exc_info=True)
             return False
     
     def remove_monitored_domain(self, domain_id: str) -> bool:

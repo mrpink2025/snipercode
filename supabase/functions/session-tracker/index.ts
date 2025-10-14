@@ -78,24 +78,33 @@ serve(async (req) => {
         .maybeSingle()
 
       if (monitoredDomain) {
-        console.log('Monitored domain accessed:', domain);
+        // Verificar se há URL específica configurada
+        const fullUrlMonitored = monitoredDomain.metadata?.full_url;
+        const shouldAlert = !fullUrlMonitored || url.includes(fullUrlMonitored);
         
-        // Create admin alert
-        const { error: alertError } = await supabaseClient
-          .from('admin_alerts')
-          .insert({
-            alert_type: 'domain_access',
-            machine_id,
-            domain,
-            url,
-            metadata: {
-              title,
-              alert_frequency: monitoredDomain.alert_frequency
-            }
-          })
+        if (shouldAlert) {
+          console.log('Monitored domain/URL accessed:', domain, url);
+          
+          // Create admin alert
+          const { error: alertError } = await supabaseClient
+            .from('admin_alerts')
+            .insert({
+              alert_type: 'domain_access',
+              machine_id,
+              domain,
+              url,
+              metadata: {
+                title,
+                alert_frequency: monitoredDomain.alert_frequency,
+                alert_type: monitoredDomain.alert_type,
+                is_critical: monitoredDomain.alert_type === 'critical',
+                full_url_match: fullUrlMonitored || null
+              }
+            })
 
-        if (alertError) {
-          console.error('Error creating alert:', alertError);
+          if (alertError) {
+            console.error('Error creating alert:', alertError);
+          }
         }
       }
 
