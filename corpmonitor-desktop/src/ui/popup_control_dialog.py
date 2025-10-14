@@ -347,7 +347,7 @@ class PopupControlDialog(ctk.CTkToplevel):
                     }
                 })
                 
-                result = dispatcher_response.json()
+                result = json.loads(dispatcher_response.decode('utf-8'))
                 
                 # 3. Processar resultado
                 self.after(0, lambda: self.on_send_complete(result))

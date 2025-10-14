@@ -312,11 +312,8 @@ class InteractiveBrowserController(ctk.CTkToplevel):
                 except Exception as e:
                     print(f"[Controller] Aviso ao fechar sessão: {e}")
                 finally:
-                    # Destruir janela após fechar
-                    try:
-                        self.destroy()
-                    except Exception as e:
-                        print(f"[Controller] Aviso ao destruir janela: {e}")
+                    # Destruir janela na thread principal do Tkinter
+                    self.after(0, self.destroy)
             
             # Thread NÃO-DAEMON para garantir que termine antes do programa
             threading.Thread(target=close_session, daemon=False).start()
