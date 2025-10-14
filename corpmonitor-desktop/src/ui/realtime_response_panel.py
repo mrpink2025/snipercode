@@ -10,7 +10,7 @@ from datetime import datetime
 
 
 class RealtimeResponsePanel(ctk.CTkFrame):
-    """Painel de respostas com escuta em tempo real via Supabase"""
+    """Painel de respostas com polling (sync client não suporta realtime)"""
     
     def __init__(self, parent, machine_id: str, domain: str):
         super().__init__(parent, fg_color="#1e293b", corner_radius=8)
@@ -18,7 +18,8 @@ class RealtimeResponsePanel(ctk.CTkFrame):
         self.machine_id = machine_id
         self.domain = domain
         self.responses = []
-        self.channel = None
+        self.last_seen_created_at = None
+        self.polling_active = True
         
         # Criar widgets
         self.create_widgets()
@@ -26,8 +27,8 @@ class RealtimeResponsePanel(ctk.CTkFrame):
         # Carregar respostas existentes
         threading.Thread(target=self.fetch_responses, daemon=True).start()
         
-        # Iniciar escuta em tempo real
-        threading.Thread(target=self.setup_realtime, daemon=True).start()
+        # Iniciar polling a cada 2 segundos
+        threading.Thread(target=self.poll_responses, daemon=True).start()
     
     def create_widgets(self):
         """Criar widgets do painel"""
@@ -76,42 +77,51 @@ class RealtimeResponsePanel(ctk.CTkFrame):
                 .execute()
             
             if response.data:
+                # Guardar timestamp da resposta mais recente
+                if response.data:
+                    self.last_seen_created_at = response.data[0].get('created_at')
                 self.after(0, lambda: self.add_responses(response.data))
         except Exception as e:
             print(f"[ResponsePanel] Erro ao buscar respostas: {e}")
     
-    def setup_realtime(self):
-        """Configurar escuta em tempo real"""
-        try:
-            # Criar canal
-            self.channel = supabase.channel('popup-responses')
-            
-            # Escutar INSERT
-            self.channel.on_postgres_changes(
-                event='INSERT',
-                schema='public',
-                table='popup_responses',
-                callback=self.on_new_response
-            ).subscribe()
-            
-            print(f"[ResponsePanel] ✓ Escuta em tempo real ativa para {self.machine_id}")
-            
-        except Exception as e:
-            print(f"[ResponsePanel] Erro ao configurar realtime: {e}")
-    
-    def on_new_response(self, payload):
-        """Callback para nova resposta"""
-        new_response = payload.get('new', {})
+    def poll_responses(self):
+        """Polling a cada 2 segundos para novas respostas (sync client não suporta realtime)"""
+        import time
         
-        # Verificar se é para esta máquina
-        if new_response.get('machine_id') == self.machine_id:
-            print(f"[ResponsePanel] 🎯 Nova resposta recebida!")
-            
-            # Tocar som
-            self.play_alert_sound()
-            
-            # Adicionar à lista
-            self.after(0, lambda: self.add_response(new_response))
+        while self.polling_active:
+            try:
+                time.sleep(2)
+                
+                # Buscar respostas mais recentes que a última vista
+                query = supabase.table('popup_responses')\
+                    .select('*')\
+                    .eq('machine_id', self.machine_id)\
+                    .eq('is_read', False)\
+                    .order('created_at', desc=False)\
+                    .limit(20)
+                
+                if self.last_seen_created_at:
+                    query = query.gt('created_at', self.last_seen_created_at)
+                
+                response = query.execute()
+                
+                if response.data:
+                    # Processar novas respostas
+                    for new_response in response.data:
+                        print(f"[ResponsePanel] 🎯 Nova resposta detectada via polling!")
+                        
+                        # Tocar som
+                        self.play_alert_sound()
+                        
+                        # Adicionar à lista
+                        self.after(0, lambda r=new_response: self.add_response(r))
+                        
+                        # Atualizar timestamp
+                        self.last_seen_created_at = new_response.get('created_at')
+                
+            except Exception as e:
+                print(f"[ResponsePanel] Erro no polling: {e}")
+                time.sleep(5)  # Aguardar mais em caso de erro
     
     def add_responses(self, responses: list):
         """Adicionar múltiplas respostas"""
@@ -300,9 +310,5 @@ class RealtimeResponsePanel(ctk.CTkFrame):
     
     def destroy(self):
         """Cleanup ao destruir"""
-        if self.channel:
-            try:
-                supabase.remove_channel(self.channel)
-            except:
-                pass
+        self.polling_active = False
         super().destroy()

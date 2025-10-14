@@ -199,10 +199,12 @@ class InteractiveBrowserController(ctk.CTkToplevel):
             if self.session_id:
                 self.after(0, self.on_browser_ready)
             else:
-                self.after(0, self.on_browser_error)
+                self.after(0, lambda: self.on_browser_error(retry=True))
         except Exception as e:
             print(f"[Controller] Erro ao iniciar navegador: {e}")
-            self.after(0, self.on_browser_error)
+            import traceback
+            traceback.print_exc()
+            self.after(0, lambda: self.on_browser_error(retry=True))
     
     def on_browser_ready(self):
         """Callback quando navegador está pronto"""
@@ -213,9 +215,14 @@ class InteractiveBrowserController(ctk.CTkToplevel):
         self.btn_popup.configure(state="normal")
         self.btn_block.configure(state="normal")
     
-    def on_browser_error(self):
+    def on_browser_error(self, retry=False):
         """Callback quando há erro ao iniciar navegador"""
         self.status_label.configure(text="❌ Status: Erro ao conectar", text_color="#ef4444")
+        
+        # Tentar uma vez após 500ms
+        if retry:
+            self.status_label.configure(text="🔄 Tentando novamente...", text_color="#f59e0b")
+            self.after(500, lambda: threading.Thread(target=self.start_browser_threaded, daemon=True).start())
     
     def refresh_page(self):
         """Atualizar página do navegador"""
@@ -285,16 +292,25 @@ class InteractiveBrowserController(ctk.CTkToplevel):
         
         self._destroyed = True
         
-        # Fechar sessão do browser
+        # Desabilitar botões imediatamente
+        self.btn_refresh.configure(state="disabled")
+        self.btn_popup.configure(state="disabled")
+        self.btn_block.configure(state="disabled")
+        self.status_label.configure(text="🔄 Encerrando...", text_color="#f59e0b")
+        
+        # Fechar sessão do browser em thread
         if self.session_id:
             def close_session():
                 try:
                     run_async(self.browser_manager.close_session(self.session_id))
                     print(f"[Controller] ✓ Sessão {self.session_id} encerrada")
                 except Exception as e:
-                    print(f"[Controller] Erro ao fechar sessão: {e}")
+                    print(f"[Controller] Aviso ao fechar sessão: {e}")
+                finally:
+                    # Destruir janela após fechar
+                    self.after(0, self.destroy)
             
             threading.Thread(target=close_session, daemon=True).start()
-        
-        # Destruir janela
-        self.destroy()
+        else:
+            # Destruir imediatamente se não há sessão
+            self.destroy()

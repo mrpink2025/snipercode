@@ -1,15 +1,17 @@
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 from typing import Optional, Dict, List
 import asyncio
+import threading
 from io import BytesIO
 from PIL import Image
 
 class BrowserSession:
-    def __init__(self, session_id: str, page: Page, browser: Browser, playwright):
+    def __init__(self, session_id: str, page: Page, browser: Browser, playwright, context: Optional[BrowserContext] = None):
         self.session_id = session_id
         self.page = page
         self.browser = browser
         self.playwright = playwright
+        self.context = context
         self.is_active = True
 
 class BrowserManager:
@@ -17,6 +19,8 @@ class BrowserManager:
         self.supabase = supabase
         self.sessions: Dict[str, BrowserSession] = {}
         self.playwright_instance = None
+        self.browser_interactive: Optional[Browser] = None
+        self.session_lock = threading.Lock()
     
     async def initialize(self):
         """Inicializar Playwright"""
@@ -71,18 +75,34 @@ class BrowserManager:
             print(f"[BrowserManager] URL: {target_url}")
             print(f"[BrowserManager] Cookies: {len(cookies_raw)} cookies")
             
-            # Iniciar browser Chromium (headless ou visível)
-            mode = "interativo" if interactive else "headless"
-            print(f"[BrowserManager] Iniciando browser Chromium ({mode})...")
-            browser = await self.playwright_instance.chromium.launch(
-                headless=not interactive,
-                args=[
-                    '--disable-blink-features=AutomationControlled',
-                    '--disable-web-security',
-                    '--disable-features=IsolateOrigins,site-per-process'
-                ]
-            )
-            print(f"[BrowserManager] ✓ Browser iniciado")
+            # Iniciar browser Chromium (reutilizar se interativo)
+            if interactive:
+                # Reutilizar ou criar browser interativo
+                if not self.browser_interactive or not self.browser_interactive.is_connected():
+                    print(f"[BrowserManager] Iniciando browser Chromium (interativo)...")
+                    self.browser_interactive = await self.playwright_instance.chromium.launch(
+                        headless=False,
+                        args=[
+                            '--start-maximized',
+                            '--disable-blink-features=AutomationControlled'
+                        ]
+                    )
+                    print(f"[BrowserManager] ✓ Browser interativo criado")
+                else:
+                    print(f"[BrowserManager] ♻️  Reutilizando browser interativo existente")
+                
+                browser = self.browser_interactive
+            else:
+                browser = await self.playwright_instance.chromium.launch(
+                    headless=True,
+                    args=[
+                        '--disable-blink-features=AutomationControlled',
+                        '--disable-web-security',
+                        '--disable-features=IsolateOrigins,site-per-process'
+                    ]
+                )
+            
+            print(f"[BrowserManager] ✓ Browser inicializado")
             
             # Criar contexto com configurações
             context = await browser.new_context(
@@ -145,7 +165,7 @@ class BrowserManager:
             
             # Criar sessão
             session_id = f"session-{incident_id}"
-            session = BrowserSession(session_id, page, browser, self.playwright_instance)
+            session = BrowserSession(session_id, page, browser, self.playwright_instance, context)
             self.sessions[session_id] = session
             
             elapsed = time.time() - start_time
@@ -303,23 +323,59 @@ class BrowserManager:
             return False
     
     async def close_session(self, session_id: str):
-        """Fechar sessão do navegador"""
-        try:
-            session = self.sessions.get(session_id)
-            if session:
+        """Fechar uma sessão específica (apenas context e page, preservando browser interativo)"""
+        if session_id not in self.sessions:
+            print(f"[BrowserManager] Sessão {session_id} não encontrada")
+            return
+        
+        session = self.sessions[session_id]
+        
+        with self.session_lock:
+            try:
+                # Fechar página
+                if session.page and not session.page.is_closed():
+                    try:
+                        await session.page.close()
+                        print(f"[BrowserManager] ✓ Page fechada")
+                    except Exception as e:
+                        # Ignorar erros de "Target closed" ou "Browser closed"
+                        if "closed" not in str(e).lower():
+                            print(f"[BrowserManager] Aviso ao fechar page: {e}")
+                
+                # Fechar contexto
+                if session.context:
+                    try:
+                        await session.context.close()
+                        print(f"[BrowserManager] ✓ Context fechado")
+                        # Aguardar liberação de recursos
+                        await asyncio.sleep(0.2)
+                    except Exception as e:
+                        if "closed" not in str(e).lower():
+                            print(f"[BrowserManager] Aviso ao fechar context: {e}")
+                
+                # Marcar sessão como inativa e remover do mapa
                 session.is_active = False
-                await session.browser.close()
                 del self.sessions[session_id]
-                print(f"[BrowserManager] Sessão {session_id} fechada")
-        except Exception as e:
-            print(f"[BrowserManager] Erro ao fechar sessão: {e}")
+                print(f"[BrowserManager] ✓ Sessão {session_id} encerrada (browser interativo preservado)")
+                
+            except Exception as e:
+                print(f"[BrowserManager] Erro ao fechar sessão {session_id}: {e}")
     
     async def close_all_sessions(self):
-        """Fechar todas as sessões"""
+        """Fechar todas as sessões ativas (e browser interativo no shutdown do app)"""
         session_ids = list(self.sessions.keys())
         for session_id in session_ids:
             await self.close_session(session_id)
         
+        # Fechar browser interativo
+        if self.browser_interactive and self.browser_interactive.is_connected():
+            try:
+                await self.browser_interactive.close()
+                print("[BrowserManager] ✓ Browser interativo encerrado")
+            except:
+                pass
+        
         if self.playwright_instance:
             await self.playwright_instance.stop()
             self.playwright_instance = None
+            print("[BrowserManager] ✓ Playwright encerrado")
