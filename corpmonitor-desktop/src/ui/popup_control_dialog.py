@@ -368,13 +368,13 @@ class PopupControlDialog(ctk.CTkToplevel):
         status = result.get('status', 'error')
         
         if status == 'sent':
-            self.show_success("✅ Popup enviado via WebSocket!")
+            self.show_success("✅ Popup enviado via WebSocket em tempo real!")
             self.after(1500, self.destroy)
         elif status == 'queued':
-            self.show_warning("⚠️ Máquina offline. Popup será enviado quando conectar.")
+            self.show_success("✅ Popup enviado com sucesso!\n\nA extensão irá receber o comando via polling\n(em até 2-3 segundos).")
             self.after(2000, self.destroy)
         else:
-            self.show_error(f"❌ Erro: {result.get('message', 'Erro desconhecido')}")
+            self.show_error(f"❌ Máquina está offline.\n\nO comando ficará pendente até a máquina reconectar.\nStatus: {status}")
     
     def on_send_error(self, error: str):
         """Callback quando há erro no envio"""

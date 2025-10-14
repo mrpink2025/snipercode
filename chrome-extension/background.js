@@ -666,16 +666,22 @@ async function initializeRemoteControl() {
 }
 
 // Start polling command queue for pending commands (fallback for offline WebSocket)
+let pollingInterval = 3000; // Start with 3s, adjust dynamically
+
 function startCommandQueuePoller() {
   // Clear existing poller
   if (commandQueuePollerInterval) {
     clearInterval(commandQueuePollerInterval);
   }
   
-  log('info', '📋 Starting command queue poller (3s interval)');
+  log('info', '📋 Starting command queue poller (dynamic interval)');
   
-  commandQueuePollerInterval = setInterval(async () => {
-    if (!machineId) return;
+  async function poll() {
+    if (!machineId) {
+      // Retry in 3s if no machine ID yet
+      commandQueuePollerInterval = setTimeout(poll, 3000);
+      return;
+    }
     
     try {
       const response = await fetch(`${CONFIG.API_BASE}/command-queue`, {
@@ -696,6 +702,9 @@ function startCommandQueuePoller() {
       if (commands && commands.length > 0) {
         log('info', `📥 Received ${commands.length} queued commands`);
         
+        // Fast polling when commands are found
+        pollingInterval = 2000; // 2s when processing commands
+        
         for (const cmd of commands) {
           await handleRemoteCommand({
             type: 'remote_command',
@@ -706,11 +715,21 @@ function startCommandQueuePoller() {
             payload: cmd.payload
           });
         }
+      } else {
+        // Slower polling when idle
+        pollingInterval = 5000; // 5s when no commands
       }
     } catch (error) {
       log('debug', 'Queue poll error (normal if no commands):', error.message);
+      pollingInterval = 5000; // Back to 5s on error
     }
-  }, 3000); // Poll every 3 seconds
+    
+    // Schedule next poll with dynamic interval
+    commandQueuePollerInterval = setTimeout(poll, pollingInterval);
+  }
+  
+  // Start polling immediately
+  poll();
 }
 
 // Connect to command dispatcher WebSocket with improved reconnection and keep-alive

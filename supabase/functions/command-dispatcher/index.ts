@@ -44,16 +44,19 @@ serve(async (req) => {
         const isOnlineDB = dbConnection?.is_active && 
                            new Date(dbConnection.last_ping_at).getTime() > Date.now() - 60000; // 1min
         
+        const localConnection = activeConnections.get(target_machine_id);
         console.log(`🔍 Connection status for ${target_machine_id}:`, {
           found_in_db: !!dbConnection,
           is_active: dbConnection?.is_active,
-          last_ping_age: dbConnection ? Date.now() - new Date(dbConnection.last_ping_at).getTime() : null,
-          online: isOnlineDB,
-          local_connection: !!activeConnections.get(target_machine_id)
+          last_ping_at: dbConnection?.last_ping_at,
+          last_ping_age_ms: dbConnection ? Date.now() - new Date(dbConnection.last_ping_at).getTime() : null,
+          considered_online: isOnlineDB,
+          in_local_map: !!localConnection,
+          local_map_size: activeConnections.size,
+          websocket_ready: localConnection?.socket.readyState === WebSocket.OPEN
         });
         
         // ✅ Segundo: Tentar enviar via WebSocket local (se disponível)
-        const localConnection = activeConnections.get(target_machine_id);
         
         if (localConnection && localConnection.socket.readyState === WebSocket.OPEN) {
           // WebSocket disponível NESTA instância - enviar direto
