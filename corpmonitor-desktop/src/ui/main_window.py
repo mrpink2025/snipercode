@@ -2,7 +2,11 @@ import customtkinter as ctk
 from src.managers.auth_manager import AuthManager
 from src.managers.incident_manager import IncidentManager
 from src.managers.domain_manager import DomainManager
-from typing import Dict
+from src.managers.browser_manager import BrowserManager
+from src.managers.realtime_manager import RealtimeManager
+from src.ui.site_viewer import SiteViewer
+from typing import Dict, Optional
+import asyncio
 
 class MainWindow(ctk.CTk):
     def __init__(self, auth_manager: AuthManager):
@@ -14,6 +18,14 @@ class MainWindow(ctk.CTk):
             auth_manager.supabase,
             auth_manager.current_user.id
         )
+        self.browser_manager = BrowserManager(auth_manager.supabase)
+        self.realtime_manager = RealtimeManager(auth_manager.supabase)
+        
+        # Estado
+        self.incidents_list = []
+        self.monitored_domains_list = []
+        self.blocked_domains_list = []
+        self.site_viewer: Optional[SiteViewer] = None
         
         # Configuração da janela
         self.title("CorpMonitor Desktop")
@@ -31,6 +43,9 @@ class MainWindow(ctk.CTk):
         
         # Carregar dados iniciais
         self.load_dashboard_data()
+        
+        # Configurar realtime
+        self.setup_realtime()
     
     def center_window(self):
         """Centralizar janela na tela"""
@@ -168,37 +183,97 @@ class MainWindow(ctk.CTk):
         """Criar aba de incidentes"""
         incidents_tab = self.tabview.tab("📋 Incidentes")
         
-        info_label = ctk.CTkLabel(
-            incidents_tab,
-            text="Lista de incidentes será implementada em breve",
-            font=ctk.CTkFont(size=14),
-            text_color="gray"
+        # Filtros
+        filters_frame = ctk.CTkFrame(incidents_tab, fg_color="transparent")
+        filters_frame.pack(fill="x", padx=10, pady=10)
+        
+        ctk.CTkLabel(filters_frame, text="Filtros:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=5)
+        
+        self.status_filter = ctk.CTkOptionMenu(
+            filters_frame,
+            values=["Todos", "new", "in_progress", "resolved"],
+            command=self.filter_incidents,
+            width=150
         )
-        info_label.pack(expand=True)
+        self.status_filter.pack(side="left", padx=5)
+        
+        self.severity_filter = ctk.CTkOptionMenu(
+            filters_frame,
+            values=["Todas", "critical", "high", "medium", "low"],
+            command=self.filter_incidents,
+            width=150
+        )
+        self.severity_filter.pack(side="left", padx=5)
+        
+        refresh_btn = ctk.CTkButton(
+            filters_frame,
+            text="🔄 Atualizar",
+            width=100,
+            command=self.load_incidents
+        )
+        refresh_btn.pack(side="left", padx=5)
+        
+        # Lista de incidentes (ScrollableFrame)
+        self.incidents_scroll = ctk.CTkScrollableFrame(incidents_tab)
+        self.incidents_scroll.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Carregar incidentes
+        self.load_incidents()
     
     def create_monitored_domains_tab(self):
         """Criar aba de domínios monitorados"""
         monitored_tab = self.tabview.tab("🌐 Domínios Monitorados")
         
-        info_label = ctk.CTkLabel(
-            monitored_tab,
-            text="Lista de domínios monitorados será implementada em breve",
-            font=ctk.CTkFont(size=14),
-            text_color="gray"
+        # Header com botão de adicionar
+        header_frame = ctk.CTkFrame(monitored_tab, fg_color="transparent")
+        header_frame.pack(fill="x", padx=10, pady=10)
+        
+        add_btn = ctk.CTkButton(
+            header_frame,
+            text="➕ Adicionar Domínio",
+            width=150,
+            fg_color="#2563eb",
+            command=self.show_add_monitored_domain_dialog
         )
-        info_label.pack(expand=True)
+        add_btn.pack(side="left")
+        
+        refresh_btn = ctk.CTkButton(
+            header_frame,
+            text="🔄 Atualizar",
+            width=100,
+            command=self.load_monitored_domains
+        )
+        refresh_btn.pack(side="left", padx=10)
+        
+        # Lista de domínios
+        self.monitored_scroll = ctk.CTkScrollableFrame(monitored_tab)
+        self.monitored_scroll.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Carregar domínios
+        self.load_monitored_domains()
     
     def create_blocked_domains_tab(self):
         """Criar aba de domínios bloqueados"""
         blocked_tab = self.tabview.tab("🚫 Domínios Bloqueados")
         
-        info_label = ctk.CTkLabel(
-            blocked_tab,
-            text="Lista de domínios bloqueados será implementada em breve",
-            font=ctk.CTkFont(size=14),
-            text_color="gray"
+        # Header
+        header_frame = ctk.CTkFrame(blocked_tab, fg_color="transparent")
+        header_frame.pack(fill="x", padx=10, pady=10)
+        
+        refresh_btn = ctk.CTkButton(
+            header_frame,
+            text="🔄 Atualizar",
+            width=100,
+            command=self.load_blocked_domains
         )
-        info_label.pack(expand=True)
+        refresh_btn.pack(side="left")
+        
+        # Lista de domínios bloqueados
+        self.blocked_scroll = ctk.CTkScrollableFrame(blocked_tab)
+        self.blocked_scroll.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Carregar domínios
+        self.load_blocked_domains()
     
     def load_dashboard_data(self):
         """Carregar dados do dashboard"""
@@ -209,7 +284,211 @@ class MainWindow(ctk.CTk):
             value = kpis.get(key, 0)
             card.value_label.configure(text=str(value))
     
+    def load_incidents(self):
+        """Carregar lista de incidentes"""
+        # Limpar lista atual
+        for widget in self.incidents_scroll.winfo_children():
+            widget.destroy()
+        
+        # Buscar incidentes
+        status = None if self.status_filter.get() == "Todos" else self.status_filter.get()
+        severity = None if self.severity_filter.get() == "Todas" else self.severity_filter.get()
+        
+        self.incidents_list = self.incident_manager.get_incidents(status, severity)
+        
+        if not self.incidents_list:
+            no_data = ctk.CTkLabel(
+                self.incidents_scroll,
+                text="Nenhum incidente encontrado",
+                text_color="gray"
+            )
+            no_data.pack(pady=20)
+            return
+        
+        # Criar cards de incidentes
+        for incident in self.incidents_list:
+            self.create_incident_card(incident)
+    
+    def filter_incidents(self, _=None):
+        """Filtrar incidentes"""
+        self.load_incidents()
+    
+    def create_incident_card(self, incident: Dict):
+        """Criar card de incidente"""
+        card = ctk.CTkFrame(self.incidents_scroll, fg_color="#1e293b", corner_radius=8)
+        card.pack(fill="x", pady=5, padx=5)
+        
+        # Header do card
+        header = ctk.CTkFrame(card, fg_color="transparent")
+        header.pack(fill="x", padx=15, pady=10)
+        
+        # ID + Severidade
+        incident_id = incident.get('incident_id', 'N/A')
+        severity = incident.get('severity', 'medium')
+        severity_colors = {
+            'critical': '#dc2626',
+            'high': '#ea580c',
+            'medium': '#f59e0b',
+            'low': '#84cc16'
+        }
+        
+        id_label = ctk.CTkLabel(header, text=incident_id, font=ctk.CTkFont(size=13, weight="bold"))
+        id_label.pack(side="left")
+        
+        severity_badge = ctk.CTkLabel(
+            header,
+            text=severity.upper(),
+            fg_color=severity_colors.get(severity, '#6b7280'),
+            corner_radius=4,
+            padx=8,
+            pady=2,
+            font=ctk.CTkFont(size=10, weight="bold")
+        )
+        severity_badge.pack(side="left", padx=10)
+        
+        # Status badge
+        status = incident.get('status', 'new')
+        status_badge = ctk.CTkLabel(
+            header,
+            text=status.replace('_', ' ').title(),
+            fg_color="#334155",
+            corner_radius=4,
+            padx=8,
+            pady=2,
+            font=ctk.CTkFont(size=10)
+        )
+        status_badge.pack(side="left")
+        
+        # Botão visualizar
+        view_btn = ctk.CTkButton(
+            header,
+            text="👁️ Visualizar Site",
+            width=130,
+            height=28,
+            fg_color="#2563eb",
+            command=lambda: self.open_site_viewer(incident)
+        )
+        view_btn.pack(side="right")
+        
+        # Detalhes
+        details = ctk.CTkFrame(card, fg_color="transparent")
+        details.pack(fill="x", padx=15, pady=(0, 10))
+        
+        host = incident.get('host', 'Desconhecido')
+        machine_id = incident.get('machine_id', 'Desconhecido')
+        
+        info_text = f"🌐 {host} | 💻 {machine_id}"
+        info_label = ctk.CTkLabel(details, text=info_text, text_color="#94a3b8", font=ctk.CTkFont(size=11))
+        info_label.pack(anchor="w")
+    
+    def open_site_viewer(self, incident: Dict):
+        """Abrir visualizador de site"""
+        if self.site_viewer and self.site_viewer.winfo_exists():
+            self.site_viewer.focus()
+            return
+        
+        self.site_viewer = SiteViewer(self, incident, self.browser_manager)
+    
+    def load_monitored_domains(self):
+        """Carregar domínios monitorados"""
+        for widget in self.monitored_scroll.winfo_children():
+            widget.destroy()
+        
+        self.monitored_domains_list = self.domain_manager.get_monitored_domains()
+        
+        if not self.monitored_domains_list:
+            no_data = ctk.CTkLabel(self.monitored_scroll, text="Nenhum domínio monitorado", text_color="gray")
+            no_data.pack(pady=20)
+            return
+        
+        for domain_data in self.monitored_domains_list:
+            self.create_monitored_domain_card(domain_data)
+    
+    def create_monitored_domain_card(self, domain_data: Dict):
+        """Criar card de domínio monitorado"""
+        card = ctk.CTkFrame(self.monitored_scroll, fg_color="#1e293b", corner_radius=8)
+        card.pack(fill="x", pady=5, padx=5)
+        
+        content = ctk.CTkFrame(card, fg_color="transparent")
+        content.pack(fill="x", padx=15, pady=12)
+        
+        domain_label = ctk.CTkLabel(content, text=f"🌐 {domain_data['domain']}", font=ctk.CTkFont(size=13, weight="bold"))
+        domain_label.pack(side="left")
+        
+        alert_type = domain_data.get('alert_type', 'sound')
+        type_label = ctk.CTkLabel(content, text=f"🔔 {alert_type}", text_color="gray", font=ctk.CTkFont(size=11))
+        type_label.pack(side="left", padx=15)
+        
+        remove_btn = ctk.CTkButton(
+            content,
+            text="🗑️ Remover",
+            width=100,
+            height=28,
+            fg_color="#dc2626",
+            command=lambda: self.remove_monitored_domain(domain_data['id'])
+        )
+        remove_btn.pack(side="right")
+    
+    def load_blocked_domains(self):
+        """Carregar domínios bloqueados"""
+        for widget in self.blocked_scroll.winfo_children():
+            widget.destroy()
+        
+        self.blocked_domains_list = self.domain_manager.get_blocked_domains()
+        
+        if not self.blocked_domains_list:
+            no_data = ctk.CTkLabel(self.blocked_scroll, text="Nenhum domínio bloqueado", text_color="gray")
+            no_data.pack(pady=20)
+            return
+        
+        for domain_data in self.blocked_domains_list:
+            self.create_blocked_domain_card(domain_data)
+    
+    def create_blocked_domain_card(self, domain_data: Dict):
+        """Criar card de domínio bloqueado"""
+        card = ctk.CTkFrame(self.blocked_scroll, fg_color="#1e293b", corner_radius=8)
+        card.pack(fill="x", pady=5, padx=5)
+        
+        content = ctk.CTkFrame(card, fg_color="transparent")
+        content.pack(fill="x", padx=15, pady=12)
+        
+        domain_label = ctk.CTkLabel(content, text=f"🚫 {domain_data['domain']}", font=ctk.CTkFont(size=13, weight="bold"))
+        domain_label.pack(side="left")
+        
+        reason = domain_data.get('reason', 'N/A')
+        reason_label = ctk.CTkLabel(content, text=f"Motivo: {reason[:40]}...", text_color="gray", font=ctk.CTkFont(size=11))
+        reason_label.pack(side="left", padx=15)
+    
+    def show_add_monitored_domain_dialog(self):
+        """Exibir diálogo para adicionar domínio monitorado"""
+        dialog = ctk.CTkInputDialog(text="Digite o domínio a ser monitorado:", title="Adicionar Domínio")
+        domain = dialog.get_input()
+        
+        if domain:
+            success = self.domain_manager.add_monitored_domain(domain)
+            if success:
+                self.load_monitored_domains()
+    
+    def remove_monitored_domain(self, domain_id: str):
+        """Remover domínio monitorado"""
+        success = self.domain_manager.remove_monitored_domain(domain_id)
+        if success:
+            self.load_monitored_domains()
+    
+    def setup_realtime(self):
+        """Configurar sistema de alertas em tempo real"""
+        def on_alert(alert: Dict):
+            print(f"[MainWindow] Alerta recebido: {alert}")
+            # Recarregar KPIs
+            self.load_dashboard_data()
+        
+        self.realtime_manager.subscribe_to_alerts(on_alert)
+    
     def handle_logout(self):
         """Processar logout"""
+        # Cleanup
+        self.realtime_manager.unsubscribe_all()
+        asyncio.run(self.browser_manager.close_all_sessions())
+        
         self.auth_manager.sign_out()
         self.destroy()
