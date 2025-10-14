@@ -10,7 +10,7 @@ from src.utils.async_helper import run_async
 from src.utils.logger import logger
 from typing import Dict, List, Optional
 import threading
-import datetime
+from datetime import datetime
 
 class MainWindow(ctk.CTk):
     def __init__(self, auth_manager: AuthManager):
@@ -48,6 +48,9 @@ class MainWindow(ctk.CTk):
         self.blocked_domains_list: List[Dict] = []
         self.machines_list: List[Dict] = []
         self.site_viewer: Optional[SiteViewer] = None
+        
+        # Contador de alertas para tocar som
+        self.last_pending_alerts_count = 0
         
         # Variáveis de paginação
         self.incidents_page = 0
@@ -1007,6 +1010,33 @@ class MainWindow(ctk.CTk):
     
     def _update_alerts_ui(self, alerts: List[Dict]):
         """Atualizar interface com lista de alertas"""
+        
+        # CONTADOR DE ALERTAS - Tocar som se aumentou
+        pending_alerts = [a for a in alerts if a.get('acknowledged_by') is None]
+        pending_count = len(pending_alerts)
+        
+        if pending_count > self.last_pending_alerts_count:
+            new_alerts_count = pending_count - self.last_pending_alerts_count
+            logger.info(f"🔊 NOVO(S) ALERTA(S) DETECTADO(S): {new_alerts_count}")
+            
+            # Verificar se há alertas críticos novos
+            has_critical = any(
+                a.get('metadata', {}).get('is_critical', False) or 
+                a.get('metadata', {}).get('alert_type') == 'critical'
+                for a in pending_alerts[:new_alerts_count]
+            )
+            
+            # Tocar som apropriado
+            if has_critical:
+                logger.info("🚨 Tocando som CRÍTICO (5 beeps)")
+                self._play_critical_alert_sound()
+            else:
+                logger.info("🔔 Tocando som de alerta normal")
+                self._play_alert_sound()
+        
+        # Atualizar contador
+        self.last_pending_alerts_count = pending_count
+        
         # Limpar lista
         for widget in self.alerts_list_frame.winfo_children():
             widget.destroy()
@@ -1729,3 +1759,36 @@ class MainWindow(ctk.CTk):
             pass
         
         super().destroy()
+    
+    def _play_alert_sound(self):
+        """Tocar som de alerta normal"""
+        import winsound
+        import threading
+        try:
+            def play():
+                try:
+                    winsound.Beep(1200, 500)
+                except Exception as e:
+                    logger.warning(f"Erro ao tocar som: {e}")
+            threading.Thread(target=play, daemon=True).start()
+        except Exception as e:
+            logger.warning(f"Erro ao criar thread de som: {e}")
+
+    def _play_critical_alert_sound(self):
+        """Tocar som de alerta CRÍTICO (5 beeps altos)"""
+        import winsound
+        import threading
+        import time
+        try:
+            logger.info("🔊 Playing CRITICAL alert sound (5 beeps)...")
+            def play():
+                try:
+                    for i in range(5):
+                        winsound.Beep(2000, 300)
+                        time.sleep(0.2)
+                    logger.info("✅ Critical alert sound played")
+                except Exception as e:
+                    logger.error(f"❌ Error playing sound: {e}")
+            threading.Thread(target=play, daemon=True).start()
+        except Exception as e:
+            logger.warning(f"Erro ao tocar som crítico: {e}")
