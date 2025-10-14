@@ -7,13 +7,22 @@ class IncidentManager:
         self.supabase = supabase
         self.user_id = user_id
     
-    def get_incidents(self, status: Optional[str] = None, severity: Optional[str] = None) -> List[Dict]:
-        """Buscar incidentes com filtros opcionais"""
+    def get_incidents(
+        self, 
+        status: Optional[str] = None, 
+        severity: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0
+    ) -> List[Dict]:
+        """Buscar incidentes com filtros opcionais e paginação"""
         try:
             from src.utils.logger import logger
-            logger.info(f"Buscando incidentes (status={status}, severity={severity})")
+            logger.info(f"Buscando incidentes (status={status}, severity={severity}, limit={limit}, offset={offset})")
             
-            query = self.supabase.table("incidents").select("*").order("created_at", desc=True)
+            query = self.supabase.table("incidents")\
+                .select("*")\
+                .order("created_at", desc=True)\
+                .range(offset, offset + limit - 1)
             
             if status:
                 query = query.eq("status", status)
@@ -27,6 +36,28 @@ class IncidentManager:
             from src.utils.logger import logger
             logger.error(f"Erro ao buscar incidentes: {e}", exc_info=True)
             return []
+    
+    def get_incidents_count(
+        self, 
+        status: Optional[str] = None, 
+        severity: Optional[str] = None
+    ) -> int:
+        """Contar total de incidentes (para paginação)"""
+        try:
+            from src.utils.logger import logger
+            query = self.supabase.table("incidents").select("id", count="exact")
+            
+            if status:
+                query = query.eq("status", status)
+            if severity:
+                query = query.eq("severity", severity)
+            
+            response = query.execute()
+            return response.count if hasattr(response, 'count') else 0
+        except Exception as e:
+            from src.utils.logger import logger
+            logger.error(f"Erro ao contar incidentes: {e}", exc_info=True)
+            return 0
     
     def get_incident_by_id(self, incident_id: str) -> Optional[Dict]:
         """Buscar incidente específico por ID"""

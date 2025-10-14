@@ -45,6 +45,16 @@ class MainWindow(ctk.CTk):
         self.blocked_domains_list: List[Dict] = []
         self.site_viewer: Optional[SiteViewer] = None
         
+        # Variáveis de paginação
+        self.incidents_page = 0
+        self.incidents_per_page = 50
+        self.incidents_total = 0
+        
+        # Auto-refresh
+        self.auto_refresh_enabled = True
+        self.refresh_interval_ms = 10000  # 10 segundos
+        self.refresh_job_id = None
+        
         # Criar UI
         self.create_widgets()
         
@@ -222,6 +232,35 @@ class MainWindow(ctk.CTk):
         )
         refresh_btn.pack(side="left", padx=5)
         
+        # Controles de paginação
+        pagination_frame = ctk.CTkFrame(incidents_tab, fg_color="transparent")
+        pagination_frame.pack(fill="x", padx=10, pady=5)
+        
+        self.prev_btn = ctk.CTkButton(
+            pagination_frame,
+            text="◀ Anterior",
+            width=100,
+            command=self.prev_page,
+            state="disabled"
+        )
+        self.prev_btn.pack(side="left", padx=5)
+        
+        self.page_label = ctk.CTkLabel(
+            pagination_frame,
+            text="Página 1 de 1 (0 incidentes)",
+            font=ctk.CTkFont(size=12)
+        )
+        self.page_label.pack(side="left", padx=10)
+        
+        self.next_btn = ctk.CTkButton(
+            pagination_frame,
+            text="Próxima ▶",
+            width=100,
+            command=self.next_page,
+            state="disabled"
+        )
+        self.next_btn.pack(side="left", padx=5)
+        
         # Lista de incidentes (ScrollableFrame)
         self.incidents_scroll = ctk.CTkScrollableFrame(incidents_tab)
         self.incidents_scroll.pack(fill="both", expand=True, padx=10, pady=10)
@@ -294,7 +333,7 @@ class MainWindow(ctk.CTk):
             card.value_label.configure(text=str(value))
     
     def load_incidents(self):
-        """Carregar lista de incidentes"""
+        """Carregar lista de incidentes com paginação"""
         # Limpar lista atual
         for widget in self.incidents_scroll.winfo_children():
             widget.destroy()
@@ -303,7 +342,20 @@ class MainWindow(ctk.CTk):
         status = None if self.status_filter.get() == "Todos" else self.status_filter.get()
         severity = None if self.severity_filter.get() == "Todas" else self.severity_filter.get()
         
-        self.incidents_list = self.incident_manager.get_incidents(status, severity)
+        # Buscar com paginação
+        offset = self.incidents_page * self.incidents_per_page
+        self.incidents_list = self.incident_manager.get_incidents(
+            status, 
+            severity, 
+            limit=self.incidents_per_page, 
+            offset=offset
+        )
+        
+        # Buscar total para paginação
+        self.incidents_total = self.incident_manager.get_incidents_count(status, severity)
+        
+        # Atualizar controles de paginação
+        self.update_pagination_controls()
         
         if not self.incidents_list:
             no_data = ctk.CTkLabel(
@@ -318,8 +370,36 @@ class MainWindow(ctk.CTk):
         for incident in self.incidents_list:
             self.create_incident_card(incident)
     
+    def update_pagination_controls(self):
+        """Atualizar controles de paginação"""
+        total_pages = max(1, (self.incidents_total + self.incidents_per_page - 1) // self.incidents_per_page)
+        current_page = self.incidents_page + 1
+        
+        # Atualizar label
+        self.page_label.configure(
+            text=f"Página {current_page} de {total_pages} ({self.incidents_total} incidentes)"
+        )
+        
+        # Atualizar botões
+        self.prev_btn.configure(state="normal" if self.incidents_page > 0 else "disabled")
+        self.next_btn.configure(state="normal" if current_page < total_pages else "disabled")
+    
+    def prev_page(self):
+        """Ir para página anterior"""
+        if self.incidents_page > 0:
+            self.incidents_page -= 1
+            self.load_incidents()
+    
+    def next_page(self):
+        """Ir para próxima página"""
+        total_pages = (self.incidents_total + self.incidents_per_page - 1) // self.incidents_per_page
+        if self.incidents_page < total_pages - 1:
+            self.incidents_page += 1
+            self.load_incidents()
+    
     def filter_incidents(self, _=None):
         """Filtrar incidentes"""
+        self.incidents_page = 0  # Resetar para primeira página
         self.load_incidents()
     
     def create_incident_card(self, incident: Dict):
@@ -506,12 +586,48 @@ class MainWindow(ctk.CTk):
                 self.load_monitored_domains()
                 self.load_blocked_domains()
                 logger.info("Dados iniciais carregados com sucesso")
+                
+                # Iniciar auto-refresh após carregar
+                self.start_auto_refresh()
             except Exception as e:
                 logger.error(f"Erro ao carregar dados iniciais: {e}", exc_info=True)
         
         thread = threading.Thread(target=load)
         thread.daemon = True
         thread.start()
+    
+    def start_auto_refresh(self):
+        """Iniciar atualização automática"""
+        if self.auto_refresh_enabled and not self.refresh_job_id:
+            self.refresh_job_id = self.safe_after(self.refresh_interval_ms, self.auto_refresh_callback)
+            logger.info("🔄 Auto-refresh ativado (10s)")
+    
+    def auto_refresh_callback(self):
+        """Callback para atualização automática"""
+        try:
+            # Atualizar KPIs
+            self.load_dashboard_data()
+            
+            # Atualizar incidentes (manter página atual)
+            self.load_incidents()
+            
+            logger.info("✅ Auto-refresh executado")
+        except Exception as e:
+            logger.error(f"Erro no auto-refresh: {e}", exc_info=True)
+        finally:
+            # Reagendar próximo refresh
+            if self.auto_refresh_enabled:
+                self.refresh_job_id = self.safe_after(self.refresh_interval_ms, self.auto_refresh_callback)
+    
+    def stop_auto_refresh(self):
+        """Parar atualização automática"""
+        if self.refresh_job_id:
+            try:
+                self.after_cancel(self.refresh_job_id)
+            except:
+                pass
+            self.refresh_job_id = None
+            logger.info("⏸️ Auto-refresh desativado")
     
     def safe_after(self, ms, callback, *args):
         """Versão segura do after() que verifica se a janela existe"""
@@ -572,6 +688,9 @@ class MainWindow(ctk.CTk):
             return
         
         self._destroyed = True
+        
+        # Parar auto-refresh
+        self.stop_auto_refresh()
         
         # Cancelar todos os callbacks agendados
         for after_id in self._after_ids:
