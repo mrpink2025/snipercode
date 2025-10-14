@@ -208,6 +208,13 @@ class RealtimeManager:
             # Determinar se é crítico
             is_critical = metadata.get("alert_type") == "critical" or metadata.get("is_critical", False)
             
+            # LOG ADICIONAL PARA DEBUG DO SOM
+            logger.info("=" * 80)
+            logger.info(f"🔊 EMIT_ALERT CALLED - About to play sound!")
+            logger.info(f"   Is Critical: {is_critical}")
+            logger.info(f"   Will play: {'CRITICAL SOUND (5 beeps)' if is_critical else 'Normal sound (1 beep)'}")
+            logger.info("=" * 80)
+            
             alert = {
                 "type": alert_type,
                 "domain": data.get("domain", "Desconhecido"),

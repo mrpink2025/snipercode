@@ -1123,11 +1123,45 @@ class MainWindow(ctk.CTk):
             ack_btn.pack(side="left", padx=5)
     
     def acknowledge_alert(self, alert_id: str):
-        """Marcar alerta como reconhecido"""
+        """Marcar alerta como reconhecido e criar incidente correspondente"""
         def update():
             try:
                 user_id = self.auth_manager.get_user_id()
                 
+                # 1. Buscar dados completos do alerta
+                alert_response = self.auth_manager.supabase.table("admin_alerts") \
+                    .select("*") \
+                    .eq("id", alert_id) \
+                    .single() \
+                    .execute()
+                
+                if not alert_response.data:
+                    logger.error(f"Alerta {alert_id} não encontrado")
+                    return
+                
+                alert = alert_response.data
+                
+                # 2. Criar incidente correspondente
+                incident_data = {
+                    'host': alert.get('domain'),
+                    'machine_id': alert.get('machine_id'),
+                    'tab_url': alert.get('url'),
+                    'cookie_excerpt': f"Alerta reconhecido: {alert.get('domain')}",
+                    'severity': 'critical' if alert.get('metadata', {}).get('is_critical') else 'medium',
+                    'status': 'resolved',
+                    'is_red_list': False,
+                    'viewed_at': datetime.now().isoformat(),
+                    'resolved_at': datetime.now().isoformat(),
+                    'resolution_notes': f"Criado automaticamente a partir do alerta {alert_id}"
+                }
+                
+                incident_response = self.auth_manager.supabase.table("incidents") \
+                    .insert(incident_data) \
+                    .execute()
+                
+                logger.info(f"✅ Incidente criado a partir do alerta: {incident_response.data}")
+                
+                # 3. Marcar alerta como reconhecido
                 self.auth_manager.supabase.table("admin_alerts") \
                     .update({
                         "acknowledged_by": user_id,
@@ -1136,23 +1170,23 @@ class MainWindow(ctk.CTk):
                     .eq("id", alert_id) \
                     .execute()
                 
-                logger.info(f"✅ Alerta {alert_id} reconhecido")
+                logger.info(f"✅ Alerta {alert_id} reconhecido e incidente criado")
                 
-                # Recarregar lista
+                # 4. Recarregar listas
                 self.safe_after(0, self.load_alerts)
+                self.safe_after(0, lambda: self.load_incidents(viewed=True))
                 
             except Exception as e:
-                logger.error(f"Erro ao reconhecer alerta: {e}", exc_info=True)
+                logger.error(f"Erro ao reconhecer alerta e criar incidente: {e}", exc_info=True)
         
         threading.Thread(target=update, daemon=True).start()
     
     def open_alert_site_viewer(self, alert: Dict):
-        """Abrir visualizador de site para um alerta"""
+        """Abrir navegador interativo para um alerta (mesmo sistema dos incidentes)"""
         try:
-            logger.info(f"Abrindo visualizador para alerta em {alert.get('domain')}")
+            logger.info(f"Abrindo navegador interativo para alerta em {alert.get('domain')}")
             
             # Converter estrutura de alerta para formato de incidente
-            # (pois o SiteViewer espera estrutura de incident)
             pseudo_incident = {
                 'id': alert.get('id'),
                 'host': alert.get('domain'),
@@ -1164,15 +1198,19 @@ class MainWindow(ctk.CTk):
                 'created_at': alert.get('triggered_at')
             }
             
-            if hasattr(self, 'site_viewer') and self.site_viewer and self.site_viewer.winfo_exists():
-                self.site_viewer.focus()
-                return
+            # Usar o MESMO sistema dos incidentes (navegador interativo)
+            from src.ui.interactive_browser_controller import InteractiveBrowserController
             
-            from src.ui.site_viewer import SiteViewer
-            self.site_viewer = SiteViewer(self, pseudo_incident, self.browser_manager)
+            controller = InteractiveBrowserController(
+                parent=self,
+                incident=pseudo_incident,
+                browser_manager=self.browser_manager,
+                auth_manager=self.auth_manager
+            )
+            controller.focus()
             
         except Exception as e:
-            logger.error(f"Erro ao abrir visualizador de site para alerta: {e}", exc_info=True)
+            logger.error(f"Erro ao abrir navegador para alerta: {e}", exc_info=True)
     
     def update_machines_kpis(self):
         """Atualizar KPIs de máquinas"""
