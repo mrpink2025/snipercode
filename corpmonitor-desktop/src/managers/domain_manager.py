@@ -64,30 +64,67 @@ class DomainManager:
                 parsed = urlparse(domain_clean)
                 domain = parsed.netloc
                 full_url = domain_clean
-                logger.info(f"Adicionando URL monitorada: {full_url} (domínio: {domain})")
+                logger.info(f"Processando URL monitorada: {full_url} (domínio: {domain})")
             else:
                 # É apenas um domínio
                 domain = domain_clean.lower()
                 if not self.validate_domain(domain):
                     logger.error(f"Domínio inválido: {domain}")
                     return False
-                logger.info(f"Adicionando domínio monitorado: {domain}")
+                logger.info(f"Processando domínio monitorado: {domain}")
             
-            data = {
-                "domain": domain,
-                "alert_type": alert_type,
-                "alert_frequency": alert_frequency,
-                "added_by": self.user_id,
-                "is_active": True,
-                "metadata": {"full_url": full_url} if full_url else None
-            }
+            # VERIFICAR SE JÁ EXISTE
+            existing = self.supabase.table("monitored_domains")\
+                .select("*")\
+                .eq("domain", domain)\
+                .maybeSingle()\
+                .execute()
             
-            response = self.supabase.table("monitored_domains").insert(data).execute()
-            logger.info(f"✓ Domínio/URL adicionado com sucesso")
-            return bool(response.data)
+            if existing.data:
+                # Domínio já existe
+                if existing.data['is_active']:
+                    logger.warning(f"⚠️ Domínio {domain} já está ativo no monitoramento")
+                    return False
+                else:
+                    # REATIVAR domínio inativo
+                    logger.info(f"♻️ Reativando domínio {domain} que estava inativo")
+                    
+                    update_data = {
+                        "is_active": True,
+                        "alert_type": alert_type,
+                        "alert_frequency": alert_frequency
+                    }
+                    
+                    if full_url:
+                        update_data["metadata"] = {"full_url": full_url}
+                    
+                    response = self.supabase.table("monitored_domains")\
+                        .update(update_data)\
+                        .eq("domain", domain)\
+                        .execute()
+                    
+                    logger.info(f"✅ Domínio {domain} reativado com sucesso")
+                    return bool(response.data)
+            else:
+                # INSERIR NOVO domínio
+                logger.info(f"➕ Adicionando novo domínio: {domain}")
+                
+                data = {
+                    "domain": domain,
+                    "alert_type": alert_type,
+                    "alert_frequency": alert_frequency,
+                    "added_by": self.user_id,
+                    "is_active": True,
+                    "metadata": {"full_url": full_url} if full_url else None
+                }
+                
+                response = self.supabase.table("monitored_domains").insert(data).execute()
+                logger.info(f"✅ Domínio {domain} adicionado com sucesso")
+                return bool(response.data)
+                
         except Exception as e:
             from src.utils.logger import logger
-            logger.error(f"Erro ao adicionar domínio monitorado: {e}", exc_info=True)
+            logger.error(f"Erro ao adicionar/reativar domínio monitorado: {e}", exc_info=True)
             return False
     
     def remove_monitored_domain(self, domain_id: str) -> bool:
