@@ -44,6 +44,16 @@ serve(async (req) => {
       })
     }
 
+    // Função auxiliar para normalizar URLs (origin + pathname, sem query/hash)
+    const normalizeUrl = (urlString: string): string => {
+      try {
+        const urlObj = new URL(urlString);
+        return urlObj.origin + urlObj.pathname;
+      } catch {
+        return urlString;
+      }
+    };
+
     if (action === 'heartbeat') {
       // Update or insert session
       const { error: upsertError } = await supabaseClient
@@ -69,41 +79,100 @@ serve(async (req) => {
         })
       }
 
-      // Check if domain is monitored
-      const { data: monitoredDomain } = await supabaseClient
+      // Buscar TODOS os domínios monitorados ativos para este domínio
+      const { data: monitoredDomains, error: fetchError } = await supabaseClient
         .from('monitored_domains')
         .select('*')
         .eq('domain', domain)
-        .eq('is_active', true)
-        .maybeSingle()
+        .eq('is_active', true);
 
-      if (monitoredDomain) {
-        // Verificar se há URL específica configurada
-        const fullUrlMonitored = monitoredDomain.metadata?.full_url;
-        const shouldAlert = !fullUrlMonitored || url.includes(fullUrlMonitored);
-        
-        if (shouldAlert) {
-          console.log('Monitored domain/URL accessed:', domain, url);
-          
-          // Create admin alert
-          const { error: alertError } = await supabaseClient
-            .from('admin_alerts')
-            .insert({
-              alert_type: 'domain_access',
-              machine_id,
-              domain,
-              url,
-              metadata: {
-                title,
-                alert_frequency: monitoredDomain.alert_frequency,
-                alert_type: monitoredDomain.alert_type,
-                is_critical: monitoredDomain.alert_type === 'critical',
-                full_url_match: fullUrlMonitored || null
-              }
-            })
+      if (fetchError) {
+        console.error('Error fetching monitored domains:', fetchError);
+      } else if (monitoredDomains && monitoredDomains.length > 0) {
+        console.log(`📋 Found ${monitoredDomains.length} monitored config(s) for domain: ${domain}`);
 
-          if (alertError) {
-            console.error('Error creating alert:', alertError);
+        const visitedNorm = normalizeUrl(url);
+        console.log(`🔗 Visited URL normalized: ${visitedNorm}`);
+
+        // Iterar por todas as configurações de monitoramento
+        for (const config of monitoredDomains) {
+          const fullUrlMonitored = config.metadata?.full_url;
+          let shouldAlert = false;
+          let matchType = 'domain';
+
+          if (!fullUrlMonitored) {
+            // Sem URL específica = alerta por domínio inteiro
+            shouldAlert = true;
+            matchType = 'domain';
+            console.log(`✅ Match (domain-level) for config ID: ${config.id}`);
+          } else {
+            // Há URL específica configurada
+            const monitoredNorm = normalizeUrl(fullUrlMonitored);
+            console.log(`🎯 Monitored URL normalized: ${monitoredNorm}`);
+
+            // Matching flexível:
+            // 1) visitedNorm começa com monitoredNorm (ignora query params)
+            // 2) Fallback: url original inclui full_url configurada
+            if (visitedNorm.startsWith(monitoredNorm)) {
+              shouldAlert = true;
+              matchType = 'url_normalized';
+              console.log(`✅ Match (normalized startsWith) for config ID: ${config.id}`);
+            } else if (url.includes(fullUrlMonitored)) {
+              shouldAlert = true;
+              matchType = 'url_includes';
+              console.log(`✅ Match (url includes) for config ID: ${config.id}`);
+            } else {
+              console.log(`❌ No match for config ID: ${config.id}`);
+            }
+          }
+
+          if (shouldAlert) {
+            // Verificar debounce: último alerta para este machine + domain + full_url
+            const cooldownSeconds = config.alert_frequency || 60;
+            const { data: recentAlert } = await supabaseClient
+              .from('admin_alerts')
+              .select('triggered_at')
+              .eq('machine_id', machine_id)
+              .eq('domain', domain)
+              .gte('triggered_at', new Date(Date.now() - cooldownSeconds * 1000).toISOString())
+              .order('triggered_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (recentAlert) {
+              console.log(`⏳ Cooldown active for config ID: ${config.id}, skipping alert`);
+              continue;
+            }
+
+            console.log(`🚨 Creating alert for config ID: ${config.id}`);
+
+            // Criar alerta
+            const { error: alertError } = await supabaseClient
+              .from('admin_alerts')
+              .insert({
+                alert_type: 'domain_access',
+                machine_id,
+                domain,
+                url,
+                metadata: {
+                  title,
+                  alert_frequency: config.alert_frequency,
+                  alert_type: config.alert_type,
+                  is_critical: config.alert_type === 'critical',
+                  full_url_match: fullUrlMonitored || null,
+                  match_type: matchType,
+                  config_id: config.id
+                }
+              });
+
+            if (alertError) {
+              console.error('Error creating alert:', alertError);
+            } else {
+              console.log(`✅ Alert created successfully for config ID: ${config.id}`);
+            }
+
+            // Parar após primeiro match (evitar múltiplos alertas)
+            break;
           }
         }
       }
