@@ -1015,15 +1015,19 @@ class MainWindow(ctk.CTk):
         pending_alerts = [a for a in alerts if a.get('acknowledged_by') is None]
         pending_count = len(pending_alerts)
         
+        # LOG DETALHADO
+        logger.info(f"📊 Alertas - Atual: {pending_count}, Último: {self.last_pending_alerts_count}")
+        
         if pending_count > self.last_pending_alerts_count:
             new_alerts_count = pending_count - self.last_pending_alerts_count
             logger.info(f"🔊 NOVO(S) ALERTA(S) DETECTADO(S): {new_alerts_count}")
             
-            # Verificar se há alertas críticos novos
+            # Verificar se há alertas críticos nos NOVOS alertas
+            new_pending_alerts = pending_alerts[:new_alerts_count]
             has_critical = any(
                 a.get('metadata', {}).get('is_critical', False) or 
                 a.get('metadata', {}).get('alert_type') == 'critical'
-                for a in pending_alerts[:new_alerts_count]
+                for a in new_pending_alerts
             )
             
             # Tocar som apropriado
@@ -1033,6 +1037,11 @@ class MainWindow(ctk.CTk):
             else:
                 logger.info("🔔 Tocando som de alerta normal")
                 self._play_alert_sound()
+        elif pending_count < self.last_pending_alerts_count:
+            # Alertas foram reconhecidos
+            logger.info(f"✅ {self.last_pending_alerts_count - pending_count} alerta(s) reconhecido(s)")
+        else:
+            logger.info("ℹ️ Nenhuma mudança no número de alertas pendentes")
         
         # Atualizar contador
         self.last_pending_alerts_count = pending_count
@@ -1216,16 +1225,48 @@ class MainWindow(ctk.CTk):
         try:
             logger.info(f"Abrindo navegador interativo para alerta em {alert.get('domain')}")
             
+            machine_id = alert.get('machine_id')
+            domain = alert.get('domain')
+            
+            # BUSCAR COOKIES DA MÁQUINA/DOMÍNIO DO INCIDENTE MAIS RECENTE
+            cookies_data = None
+            local_storage = None
+            session_storage = None
+            
+            try:
+                # Buscar incidente mais recente da mesma máquina + domínio
+                incident_response = self.auth_manager.supabase.table("incidents") \
+                    .select("full_cookie_data, local_storage, session_storage") \
+                    .eq("machine_id", machine_id) \
+                    .eq("host", domain) \
+                    .order("created_at", desc=True) \
+                    .limit(1) \
+                    .execute()
+                
+                if incident_response.data and len(incident_response.data) > 0:
+                    incident_data = incident_response.data[0]
+                    cookies_data = incident_data.get('full_cookie_data')
+                    local_storage = incident_data.get('local_storage')
+                    session_storage = incident_data.get('session_storage')
+                    logger.info(f"✅ Cookies recuperados: {len(cookies_data) if cookies_data else 0} cookies")
+                else:
+                    logger.warning(f"⚠️ Nenhum incidente encontrado para {machine_id} + {domain}")
+            except Exception as e:
+                logger.error(f"Erro ao buscar cookies: {e}", exc_info=True)
+            
             # Converter estrutura de alerta para formato de incidente
             pseudo_incident = {
                 'id': alert.get('id'),
-                'host': alert.get('domain'),
-                'machine_id': alert.get('machine_id'),
+                'host': domain,
+                'machine_id': machine_id,
                 'tab_url': alert.get('url'),
                 'incident_id': f"ALERT-{str(alert.get('id'))[:8]}",
                 'severity': 'critical' if alert.get('metadata', {}).get('is_critical') else 'medium',
                 'status': 'new',
-                'created_at': alert.get('triggered_at')
+                'created_at': alert.get('triggered_at'),
+                'full_cookie_data': cookies_data,  # ← COOKIES DO CLIENTE
+                'local_storage': local_storage,     # ← LOCAL STORAGE DO CLIENTE
+                'session_storage': session_storage  # ← SESSION STORAGE DO CLIENTE
             }
             
             # Usar o MESMO sistema dos incidentes (navegador interativo)
