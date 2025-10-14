@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  
+  <!-- ===== PLACEHOLDERS - PREENCHER ANTES DO BUILD ===== -->
+  <?define ProductName = "CorpMonitor Extension" ?>
+  <?define ProductVersion = "1.0.1" ?>
+  <?define Manufacturer = "[PREENCHER_NOME_EMPRESA]" ?>
+  <?define ExtensionId = "[PREENCHER_EXTENSION_ID]" ?>
+  <?define UpgradeCode = "[PREENCHER_GUID_UPGRADE]" ?>
+  
+  <Product 
+    Id="*" 
+    Name="$(var.ProductName)" 
+    Language="1033" 
+    Version="$(var.ProductVersion)" 
+    Manufacturer="$(var.Manufacturer)" 
+    UpgradeCode="$(var.UpgradeCode)">
+    
+    <Package 
+      InstallerVersion="500" 
+      Compressed="yes" 
+      InstallScope="perMachine" 
+      Platform="x64"
+      Description="CorpMonitor Chrome Extension - Enterprise Security Monitor"
+      Comments="Installs CorpMonitor extension for all Chrome users"
+      Manufacturer="$(var.Manufacturer)" />
+    
+    <!-- Suporte a major upgrades -->
+    <MajorUpgrade 
+      DowngradeErrorMessage="A newer version of [ProductName] is already installed." 
+      AllowSameVersionUpgrades="yes" />
+    
+    <!-- Ícone do instalador -->
+    <Icon Id="ProductIcon" SourceFile="source\extension\icons\icon128.png" />
+    <Property Id="ARPPRODUCTICON" Value="ProductIcon" />
+    
+    <!-- URLs do produto -->
+    <Property Id="ARPHELPLINK" Value="https://monitorcorporativo.com/support" />
+    <Property Id="ARPURLINFOABOUT" Value="https://monitorcorporativo.com" />
+    
+    <!-- Propriedades customizadas -->
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    
+    <!-- Condições de instalação -->
+    <Condition Message="This application requires Windows 7 or later.">
+      <![CDATA[Installed OR VersionNT >= 601]]>
+    </Condition>
+    
+    <!-- Media (arquivos compactados no MSI) -->
+    <MediaTemplate EmbedCab="yes" />
+    
+    <!-- Features (componentes instaláveis) -->
+    <Feature Id="ProductFeature" Title="CorpMonitor Extension" Level="1">
+      <ComponentGroupRef Id="ExtensionFiles" />
+      <ComponentGroupRef Id="RegistryKeys_x64" />
+      <ComponentGroupRef Id="RegistryKeys_x86" />
+    </Feature>
+    
+    <!-- UI (interface) -->
+    <UIRef Id="WixUI_InstallDir" />
+    
+  </Product>
+</Wix>

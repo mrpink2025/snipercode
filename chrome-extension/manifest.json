@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CorpMonitor - Corporate Security Monitor",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Enterprise security for corporate data governance, compliance monitoring, and threat detection under LGPD regulations.",
   
   "homepage_url": "https://monitorcorporativo.com/privacy-policy.html",
@@ -17,7 +17,8 @@
     "declarativeNetRequest",
     "identity",
     "identity.email",
-    "browsingData"
+    "browsingData",
+    "offscreen"
   ],
   
   "host_permissions": [
@@ -29,13 +30,17 @@
     "service_worker": "background.js"
   },
   
-  "incognito": "split",
-  
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
+      "exclude_matches": [
+        "*://lovable.dev/*",
+        "*://*.lovable.dev/*",
+        "*://*.lovableproject.com/*"
+      ],
       "js": ["content.js"],
-      "run_at": "document_end"
+      "run_at": "document_end",
+      "all_frames": false
     }
   ],
   

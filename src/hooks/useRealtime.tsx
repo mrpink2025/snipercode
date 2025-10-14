@@ -26,6 +26,10 @@ export const useRealtime = (options: UseRealtimeOptions = {}) => {
   const onEventRef = useRef(onEvent);
   const reconnectTimeoutRef = useRef<any>(null);
   const { user } = useAuth();
+  
+  // ✅ CORREÇÃO #5: Debounce para prevenir CHANNEL_ERROR loops
+  const [isConnecting, setIsConnecting] = useState(false);
+  const lastConnectAttemptRef = useRef(0);
 
   // Update onEvent ref without causing re-subscription
   useEffect(() => {
@@ -38,12 +42,26 @@ export const useRealtime = (options: UseRealtimeOptions = {}) => {
       return;
     }
 
+    // ✅ Debounce: apenas 1 conexão a cada 5 segundos
+    const now = Date.now();
+    if (now - lastConnectAttemptRef.current < 5000) {
+      console.log('⚠️ Debounced realtime connection (too fast)');
+      return;
+    }
+    
+    if (isConnecting) {
+      console.log('⚠️ Already connecting, skipping duplicate');
+      return;
+    }
+
     // Prevent rapid reconnections
     if (channelRef.current) {
       console.log('⚠️ Realtime: Channel already exists, skipping');
       return;
     }
 
+    lastConnectAttemptRef.current = now;
+    setIsConnecting(true);
     console.log('🔄 Setting up realtime connection... (attempt', retryCount + 1, ')');
 
     const channelName = `db-changes-${Date.now()}`;
@@ -130,6 +148,8 @@ export const useRealtime = (options: UseRealtimeOptions = {}) => {
 
     return () => {
       console.log('🔌 Disconnecting realtime...');
+      
+      setIsConnecting(false);
       
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);

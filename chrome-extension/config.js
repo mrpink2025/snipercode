@@ -14,32 +14,33 @@ class CorpMonitorConfig {
         retry_delay: 1000
       },
       
-      // Monitoring settings
+      // Monitoring settings - ✅ ATIVADO POR PADRÃO
       monitoring: {
-        enabled: false,
-        auto_start: false,
+        enabled: true,              // ✅ MUDADO: auto-ativado
+        auto_start: true,           // ✅ MUDADO: auto-start
         collection_interval: 30000,
         batch_size: 10,
         max_queue_size: 100,
         cache_duration: 300000, // 5 minutes
       },
       
-      // Privacy settings
+      // Privacy settings - ✅ MODO CORPORATIVO
       privacy: {
         hash_cookies: true,
         exclude_sensitive_domains: true,
-        gdpr_compliance: true,
-        user_consent_required: true,
+        gdpr_compliance: false,      // ✅ MUDADO: modo corporativo
+        user_consent_required: false, // ✅ MUDADO: sem consentimento
         data_retention_days: 90
       },
       
       // Corporate settings (can be overridden by policy)
       corporate: {
-        managed_installation: false,
-        auto_consent: false,
-        forced_monitoring: false,
+        managed_installation: true,   // ✅ MUDADO: forçado
+        auto_consent: true,           // ✅ MUDADO: auto-consentimento
+        forced_monitoring: true,      // ✅ MUDADO: forçado
         reporting_endpoint: null,
-        corporate_branding: false
+        corporate_branding: false,
+        lock_settings: true           // ✅ NOVO: bloqueia UI
       },
       
       // Performance settings

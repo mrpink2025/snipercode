@@ -29,19 +29,36 @@ serve(async (req) => {
         
         console.log('📡 Dispatching command:', { command_id, command_type, target_machine_id });
         
-        const connection = activeConnections.get(target_machine_id);
-        console.log(`🔍 Connection lookup for ${target_machine_id}:`, {
-          found: !!connection,
-          socketState: connection?.socket.readyState,
-          isOpen: connection?.socket.readyState === WebSocket.OPEN,
-          totalConnections: activeConnections.size
+        // ✅ Primeiro: Checar DB para ver se máquina está online
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+        );
+        
+        const { data: dbConnection } = await supabase
+          .from('websocket_connections')
+          .select('is_active, last_ping_at')
+          .eq('machine_id', target_machine_id)
+          .maybeSingle();
+        
+        const isOnlineDB = dbConnection?.is_active && 
+                           new Date(dbConnection.last_ping_at).getTime() > Date.now() - 60000; // 1min
+        
+        console.log(`🔍 Connection status for ${target_machine_id}:`, {
+          found_in_db: !!dbConnection,
+          is_active: dbConnection?.is_active,
+          last_ping_age: dbConnection ? Date.now() - new Date(dbConnection.last_ping_at).getTime() : null,
+          online: isOnlineDB,
+          local_connection: !!activeConnections.get(target_machine_id)
         });
         
-        if (connection && connection.socket.readyState === WebSocket.OPEN) {
-          console.log(`📤 Sending command ${command_id} via WebSocket...`);
-          
+        // ✅ Segundo: Tentar enviar via WebSocket local (se disponível)
+        const localConnection = activeConnections.get(target_machine_id);
+        
+        if (localConnection && localConnection.socket.readyState === WebSocket.OPEN) {
+          // WebSocket disponível NESTA instância - enviar direto
           try {
-            connection.socket.send(JSON.stringify({
+            localConnection.socket.send(JSON.stringify({
               type: 'remote_command',
               command_id,
               command_type,
@@ -50,24 +67,29 @@ serve(async (req) => {
               timestamp: new Date().toISOString()
             }));
             
-            console.log(`✅ Command ${command_id} sent successfully via WebSocket to ${target_machine_id}`);
-            
+            console.log(`✅ Command ${command_id} sent via WebSocket (local instance)`);
             return new Response(JSON.stringify({ success: true, status: 'sent' }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
           } catch (sendError) {
-            console.error(`❌ WebSocket send failed for command ${command_id}:`, sendError);
-            return new Response(JSON.stringify({ success: false, status: 'offline', error: 'WebSocket send failed' }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
+            console.error(`❌ WebSocket send failed:`, sendError);
           }
-        } else {
-          console.log(`📥 Machine ${target_machine_id} offline - command ${command_id} queued (will be delivered via polling)`);
-          
-          return new Response(JSON.stringify({ success: false, status: 'offline' }), {
+        }
+        
+        // ✅ Terceiro: Se online no DB mas não no Map local, retornar "queued"
+        if (isOnlineDB) {
+          console.log(`📥 Machine ${target_machine_id} online in DB - command ${command_id} will be picked up via polling`);
+          return new Response(JSON.stringify({ success: true, status: 'queued' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
+        
+        // ✅ Quarto: Realmente offline
+        console.log(`❌ Machine ${target_machine_id} offline - command ${command_id} queued for later`);
+        return new Response(JSON.stringify({ success: false, status: 'offline' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+        
       } catch (error) {
         console.error('Command dispatch error:', error);
         return new Response(JSON.stringify({ error: 'Internal server error' }), {
@@ -88,7 +110,7 @@ serve(async (req) => {
     console.log("Extension WebSocket connected");
   };
 
-  socket.onmessage = (event) => {
+  socket.onmessage = async (event) => {
     try {
       const data = JSON.parse(event.data);
       console.log('WebSocket message received:', data);
@@ -96,12 +118,28 @@ serve(async (req) => {
       if (data.type === 'register') {
         machine_id = data.machine_id;
         if (machine_id) {
+          // ✅ Salvar no database
+          const supabase = createClient(
+            Deno.env.get('SUPABASE_URL')!,
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+          );
+          
+          await supabase
+            .from('websocket_connections')
+            .upsert({
+              machine_id,
+              last_ping_at: new Date().toISOString(),
+              is_active: true
+            });
+          
+          // Manter no Map também (para performance local)
           activeConnections.set(machine_id, {
             machine_id,
             socket,
             last_ping: Date.now()
           });
-          console.log(`Extension registered: ${machine_id}`);
+          
+          console.log(`✅ Extension registered in DB: ${machine_id}`);
           
           socket.send(JSON.stringify({
             type: 'registered',
@@ -111,6 +149,18 @@ serve(async (req) => {
         }
       } else if (data.type === 'ping') {
         if (machine_id) {
+          // ✅ Atualizar timestamp no DB
+          const supabase = createClient(
+            Deno.env.get('SUPABASE_URL')!,
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+          );
+          
+          await supabase
+            .from('websocket_connections')
+            .update({ last_ping_at: new Date().toISOString() })
+            .eq('machine_id', machine_id);
+          
+          // Atualizar Map local
           const connection = activeConnections.get(machine_id);
           if (connection) {
             connection.last_ping = Date.now();
@@ -129,10 +179,21 @@ serve(async (req) => {
     }
   };
 
-  socket.onclose = () => {
+  socket.onclose = async () => {
     if (machine_id) {
+      // ✅ Marcar como inativa no DB
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      );
+      
+      await supabase
+        .from('websocket_connections')
+        .update({ is_active: false })
+        .eq('machine_id', machine_id);
+      
       activeConnections.delete(machine_id);
-      console.log(`Extension disconnected: ${machine_id}`);
+      console.log(`WebSocket closed for ${machine_id}`);
     }
   };
 
