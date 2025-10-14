@@ -41,6 +41,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [viewMode, setViewMode] = useState<ViewMode>('shadow');
   const [shadowSnapshot, setShadowSnapshot] = useState<any>(null);
   const [independentUrl, setIndependentUrl] = useState<string | null>(null);
+  
+  // Auto-load tracking
+  const autoLoadedRef = useRef(false);
 
   // Fetch correct incident_id (INC-XXXXX format) for proxy calls
   useEffect(() => {
@@ -224,6 +227,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     const script = `
     <script>
       const BASE_URL = "${baseUrl}";
+      const INCIDENT_ID = "${incident.id}";
       
       // Interceptar cliques em links
       document.addEventListener('click', (e) => {
@@ -233,7 +237,8 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           console.log('[ShadowView] Link clicked:', link.href);
           window.parent.postMessage({
             type: 'local-proxy:navigate',
-            url: link.href
+            url: link.href,
+            incidentId: INCIDENT_ID
           }, '*');
         }
       }, true);
@@ -246,7 +251,8 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         console.log('[ShadowView] Form submitted:', action);
         window.parent.postMessage({
           type: 'local-proxy:navigate',
-          url: action
+          url: action,
+          incidentId: INCIDENT_ID
         }, '*');
       }, true);
       
@@ -263,6 +269,34 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       return html + script;
     }
   };
+
+  // Auto-load first page on mount
+  useEffect(() => {
+    if (autoLoadedRef.current) return;
+    
+    const startUrl = incident.tab_url || `https://${incident.host}`;
+    console.log('[AutoLoad] Initializing auto-load for:', startUrl);
+    
+    if (viewMode === 'shadow') {
+      // Give shadow view 800ms to load a snapshot
+      setTimeout(() => {
+        if (!shadowSnapshot) {
+          console.log('[AutoLoad] No snapshot yet, falling back to Independent mode');
+          setViewMode('independent');
+          setIndependentUrl(startUrl);
+          loadSiteWithCookies(startUrl);
+        } else {
+          console.log('[AutoLoad] Shadow snapshot loaded, skipping independent fallback');
+        }
+      }, 800);
+    } else {
+      console.log('[AutoLoad] Starting in Independent mode');
+      setIndependentUrl(startUrl);
+      loadSiteWithCookies(startUrl);
+    }
+    
+    autoLoadedRef.current = true;
+  }, [incident.id]);
 
   // Parse cookies from incident data
   useEffect(() => {
@@ -483,12 +517,25 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     processed = processed.replace(/<script[^>]*>[\s\S]*?Content-Security-Policy[\s\S]*?<\/script>/gi, '');
     console.log('[LocalProxy] 🧹 Removed inline CSP definitions');
     
-    // ✅ FIX: STEP 2 - Inject ULTRA-PERMISSIVE CSP FIRST (before base tag)
-    const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *; base-uri *;">`;
+    // ✅ SHADOW MODE: Remove ALL scripts and on* attributes
+    if (options?.shadow) {
+      // Remove all <script> tags
+      processed = processed.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+      console.log('[LocalProxy] 🧹 Removed all <script> tags (shadow mode)');
+      
+      // Remove all on* event attributes
+      processed = processed.replace(/\son[a-z\-]+\s*=\s*["'][^"']*["']/gi, '');
+      console.log('[LocalProxy] 🧹 Removed all on* attributes (shadow mode)');
+    }
+    
+    // ✅ FIX: STEP 2 - Inject CSP FIRST (before base tag)
+    const csp = options?.shadow 
+      ? `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline'; script-src 'none'; connect-src 'none'; worker-src 'none'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; frame-src *; base-uri *;">`
+      : `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *; base-uri *;">`;
     
     if (processed.includes('<head>')) {
-      processed = processed.replace('<head>', `<head>\n${permissiveCSP}`);
-      console.log('[LocalProxy] ✅ Injected permissive CSP at top of <head>');
+      processed = processed.replace('<head>', `<head>\n${csp}`);
+      console.log(`[LocalProxy] ✅ Injected ${options?.shadow ? 'strict' : 'permissive'} CSP at top of <head>`);
     }
     
     // 🔗 STEP 3: Inject <base href> AFTER CSP
@@ -830,7 +877,8 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       
       if (event.data?.type === 'local-proxy:navigate') {
         const { url, incidentId } = event.data;
-        if (incidentId !== incident.id) return;
+        // Relaxed check: allow events without incidentId
+        if (incidentId && incidentId !== incident.id) return;
         
         handleNavigation(url);
       }
@@ -840,8 +888,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     return () => window.removeEventListener('message', handleMessage);
   }, [incident.id, cookies]);
 
-  const loadSiteWithCookies = async () => {
-    if (!incident.tab_url) {
+  const loadSiteWithCookies = async (targetUrl?: string) => {
+    const url = targetUrl || incident.tab_url;
+    if (!url) {
       setError('URL do site não disponível');
       return;
     }
@@ -930,7 +979,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 
     // Wait a bit for setCookies to update state, then navigate
     await new Promise(resolve => setTimeout(resolve, 100));
-    await handleNavigation(incident.tab_url);
+    await handleNavigation(url);
   };
 
   const refreshSite = () => {
@@ -1086,7 +1135,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 
             <div className="flex items-center gap-2 mt-2">
               <Button
-                onClick={loadSiteWithCookies}
+                onClick={() => loadSiteWithCookies()}
                 disabled={!incident.tab_url}
                 size="sm"
                 className="gap-2"
