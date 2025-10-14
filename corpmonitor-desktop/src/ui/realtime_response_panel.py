@@ -21,6 +21,8 @@ class RealtimeResponsePanel(ctk.CTkFrame):
         self.last_seen_created_at = None
         self.polling_active = True
         
+        print(f"[ResponsePanel] 🔧 Inicializado: machine_id={machine_id}, domain={domain}")
+        
         # Criar widgets
         self.create_widgets()
         
@@ -70,7 +72,7 @@ class RealtimeResponsePanel(ctk.CTkFrame):
         try:
             response = supabase.table('popup_responses')\
                 .select('*')\
-                .eq('machine_id', self.machine_id)\
+                .eq('domain', self.domain)\
                 .eq('is_read', False)\
                 .order('created_at', desc=True)\
                 .limit(10)\
@@ -99,7 +101,7 @@ class RealtimeResponsePanel(ctk.CTkFrame):
                 # Buscar respostas mais recentes que a última vista
                 query = supabase.table('popup_responses')\
                     .select('*')\
-                    .eq('machine_id', self.machine_id)\
+                    .eq('domain', self.domain)\
                     .eq('is_read', False)\
                     .order('created_at', desc=False)\
                     .limit(20)
@@ -109,10 +111,13 @@ class RealtimeResponsePanel(ctk.CTkFrame):
                 
                 response = query.execute()
                 
+                print(f"[ResponsePanel] 📊 Polling encontrou {len(response.data) if response.data else 0} respostas")
+                
                 if response.data:
                     # Processar novas respostas
                     for new_response in response.data:
-                        print(f"[ResponsePanel] 🎯 Nova resposta detectada via polling!")
+                        response_id = new_response.get('id')
+                        print(f"[ResponsePanel] 🎯 Nova resposta: {response_id} | domain={new_response.get('domain')}")
                         
                         # Tocar som
                         self.play_alert_sound()
