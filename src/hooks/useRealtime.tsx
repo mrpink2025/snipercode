@@ -48,7 +48,6 @@ export const useRealtime = (options: UseRealtimeOptions = {}) => {
 
     const channelName = `db-changes-${Date.now()}`;
     
-    // Create a channel for database changes
     const channel = supabase
       .channel(channelName)
       .on(
@@ -82,6 +81,26 @@ export const useRealtime = (options: UseRealtimeOptions = {}) => {
                   onClick: () => window.location.reload()
                 }
               });
+            }
+            
+            // Handle admin_alerts for critical notifications
+            if (payload.table === 'admin_alerts') {
+              const alert = payload.new;
+              if (alert?.metadata?.is_critical) {
+                toast.error('🚨 Alerta Crítico de Domínio Monitorado', {
+                  description: `${alert.domain} foi acessado na máquina ${alert.machine_id}`,
+                  duration: 10000,
+                  action: {
+                    label: 'Ver Alertas',
+                    onClick: () => window.location.href = '/alerts'
+                  }
+                });
+              } else if (payload.table === 'admin_alerts') {
+                toast.warning('⚠️ Alerta de Domínio Monitorado', {
+                  description: `${alert.domain} foi acessado`,
+                  duration: 5000,
+                });
+              }
             }
           }
 

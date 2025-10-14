@@ -7,6 +7,8 @@ import { LiveSiteViewer } from '@/components/LiveSiteViewer';
 import { AdminCreationForm } from '@/components/AdminCreationForm';
 import { DemoUserCreation } from '@/components/DemoUserCreation';
 import { useAuth } from '@/hooks/useAuth';
+import { useAlerts } from '@/hooks/useAlerts';
+import { AlertCard } from '@/components/AlertCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -31,6 +33,9 @@ const Dashboard = () => {
   const [kpiLoading, setKpiLoading] = useState(true);
   const [selectedIncident, setSelectedIncident] = useState<any>(null);
   const [showSiteViewer, setShowSiteViewer] = useState(false);
+  
+  // Use alerts hook
+  const { alerts, acknowledgeAlert } = useAlerts({ limit: 10 });
 
   // Use the real incidents hook
   const { 
@@ -213,9 +218,9 @@ const Dashboard = () => {
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Incidentes de Segurança</CardTitle>
+              <CardTitle>Incidentes e Alertas Recentes</CardTitle>
               <CardDescription>
-                {totalCount} incidentes encontrados
+                {totalCount} itens encontrados
               </CardDescription>
             </div>
             <Badge variant="outline" className="text-success border-success/20 bg-success/10">
@@ -225,117 +230,159 @@ const Dashboard = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col gap-4 mb-6">
-            <div className="flex items-center gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por host, ID do incidente ou máquina..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Filtrar por status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os status</SelectItem>
-                  <SelectItem value="new">Novo</SelectItem>
-                  <SelectItem value="in-progress">Em Andamento</SelectItem>
-                  <SelectItem value="blocked">Bloqueado</SelectItem>
-                  <SelectItem value="approved">Aprovado</SelectItem>
-                  <SelectItem value="resolved">Resolvido</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={severityFilter} onValueChange={setSeverityFilter}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Filtrar por severidade" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as severidades</SelectItem>
-                  <SelectItem value="low">Baixa</SelectItem>
-                  <SelectItem value="medium">Média</SelectItem>
-                  <SelectItem value="high">Alta</SelectItem>
-                  <SelectItem value="critical">Crítica</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Incidents List */}
-          <div className="space-y-4">
-            {incidentsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Carregando incidentes...
+          <Tabs defaultValue="incidents" className="mb-6">
+            <TabsList>
+              <TabsTrigger value="incidents">
+                Incidentes ({totalCount})
+              </TabsTrigger>
+              <TabsTrigger value="alerts">
+                Alertas Recentes
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="incidents" className="space-y-4">
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por host, ID do incidente ou máquina..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Filtrar por status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os status</SelectItem>
+                      <SelectItem value="new">Novo</SelectItem>
+                      <SelectItem value="in-progress">Em Andamento</SelectItem>
+                      <SelectItem value="blocked">Bloqueado</SelectItem>
+                      <SelectItem value="approved">Aprovado</SelectItem>
+                      <SelectItem value="resolved">Resolvido</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={severityFilter} onValueChange={setSeverityFilter}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Filtrar por severidade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as severidades</SelectItem>
+                      <SelectItem value="low">Baixa</SelectItem>
+                      <SelectItem value="medium">Média</SelectItem>
+                      <SelectItem value="high">Alta</SelectItem>
+                      <SelectItem value="critical">Crítica</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-            ) : incidents.length === 0 ? (
-              <div className="text-center py-8">
-                <Shield className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Nenhum incidente encontrado</h3>
-                <p className="text-muted-foreground mb-4">
-                  {searchTerm || statusFilter !== 'all' || severityFilter !== 'all'
-                    ? 'Tente ajustar os filtros de busca.'
-                    : 'O sistema está funcionando normalmente.'}
-                </p>
-                {(searchTerm || statusFilter !== 'all' || severityFilter !== 'all') && (
-                  <Button 
-                    variant="outline" 
-                    onClick={() => {
-                      setSearchTerm('');
-                      setStatusFilter('all');
-                      setSeverityFilter('all');
-                    }}
-                  >
-                    Limpar Filtros
-                  </Button>
+
+              {/* Incidents List */}
+              <div className="space-y-4">
+                {incidentsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Carregando incidentes...
+                    </div>
+                  </div>
+                ) : incidents.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Shield className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Nenhum incidente encontrado</h3>
+                    <p className="text-muted-foreground mb-4">
+                      {searchTerm || statusFilter !== 'all' || severityFilter !== 'all'
+                        ? 'Tente ajustar os filtros de busca.'
+                        : 'O sistema está funcionando normalmente.'}
+                    </p>
+                    {(searchTerm || statusFilter !== 'all' || severityFilter !== 'all') && (
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setSearchTerm('');
+                          setStatusFilter('all');
+                          setSeverityFilter('all');
+                        }}
+                      >
+                        Limpar Filtros
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {incidents
+                      .filter(incident => ['new', 'in-progress', 'blocked', 'approved'].includes(incident.status))
+                      .map((incident) => (
+                      <IncidentCard
+                        key={incident.id}
+                        incident={{
+                          id: incident.incident_id,
+                          host: incident.host,
+                          machineId: incident.machine_id,
+                          user: incident.user?.full_name || 'Usuário Desconhecido',
+                          timestamp: formatDistanceToNow(new Date(incident.created_at), {
+                            addSuffix: true,
+                            locale: ptBR
+                          }),
+                          tabUrl: incident.tab_url,
+                          tab_url: incident.tab_url,
+                          severity: incident.severity === 'critical' ? 'RED' : 'NORMAL',
+                          cookieExcerpt: incident.cookie_excerpt,
+                          cookie_data: incident.cookie_data,
+                          status: incident.status as 'new' | 'in-progress' | 'blocked' | 'approved',
+                          isRedList: incident.is_red_list
+                        }}
+                        onBlock={handleBlock}
+                        onIsolate={handleIsolate}
+                        onViewDetails={handleViewDetails}
+                        onViewSite={isDemoAdmin ? undefined : handleViewSite}
+                      />
+                    ))}
+                    
+                    {totalCount > incidents.length && (
+                      <div className="text-center py-4">
+                        <Button variant="outline">
+                          Carregar Mais ({totalCount - incidents.length} restantes)
+                        </Button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
-            ) : (
-              <>
-                {incidents
-                  .filter(incident => ['new', 'in-progress', 'blocked', 'approved'].includes(incident.status))
-                  .map((incident) => (
-                  <IncidentCard
-                    key={incident.id}
-                    incident={{
-                      id: incident.incident_id,
-                      host: incident.host,
-                      machineId: incident.machine_id,
-                      user: incident.user?.full_name || 'Usuário Desconhecido',
-                      timestamp: formatDistanceToNow(new Date(incident.created_at), {
-                        addSuffix: true,
-                        locale: ptBR
-                      }),
-                      tabUrl: incident.tab_url,
-                      tab_url: incident.tab_url,
-                      severity: incident.severity === 'critical' ? 'RED' : 'NORMAL',
-                      cookieExcerpt: incident.cookie_excerpt,
-                      cookie_data: incident.cookie_data,
-                      status: incident.status as 'new' | 'in-progress' | 'blocked' | 'approved',
-                      isRedList: incident.is_red_list
-                    }}
-                    onBlock={handleBlock}
-                    onIsolate={handleIsolate}
-                    onViewDetails={handleViewDetails}
-                    onViewSite={isDemoAdmin ? undefined : handleViewSite}
-                  />
-                ))}
-                
-                {totalCount > incidents.length && (
-                  <div className="text-center py-4">
-                    <Button variant="outline">
-                      Carregar Mais ({totalCount - incidents.length} restantes)
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+            </TabsContent>
+            
+            <TabsContent value="alerts" className="space-y-4">
+              {alerts.length === 0 ? (
+                <div className="text-center py-12">
+                  <AlertTriangle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Nenhum alerta recente</h3>
+                  <p className="text-muted-foreground">
+                    Não há alertas de domínios monitorados nas últimas horas.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {alerts.slice(0, 10).map((alert) => (
+                    <AlertCard
+                      key={alert.id}
+                      alert={alert}
+                      onAcknowledge={acknowledgeAlert}
+                    />
+                  ))}
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => window.location.href = '/alerts'}
+                  >
+                    Ver Todos os Alertas
+                  </Button>
+                </>
+              )}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 

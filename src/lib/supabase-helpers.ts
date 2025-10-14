@@ -6,6 +6,7 @@ export interface KPIData {
   activeIncidents: number;
   blockedDomains: number;
   monitoredMachines: number;
+  activeAlerts: number;
   
   severityBreakdown: {
     low: number;
@@ -60,10 +61,21 @@ export const getKPIData = async (): Promise<KPIData> => {
     const uniqueMachines = new Set(activeSessions?.map(s => s.machine_id) || []);
     const monitoredMachines = uniqueMachines.size;
 
+    // Get unacknowledged alerts count
+    const { count: activeAlertsCount, error: alertsError } = await supabase
+      .from('admin_alerts')
+      .select('*', { count: 'exact', head: true })
+      .is('acknowledged_at', null);
+
+    if (alertsError) {
+      console.error('Error fetching alerts:', alertsError);
+    }
+
     console.log('📊 KPI Data:', { 
       incidents: incidentCounts?.length || 0,
       blockedDomains: blockedDomainsCount || 0,
-      monitoredMachines 
+      monitoredMachines,
+      activeAlerts: activeAlertsCount || 0
     });
 
     const incidents = incidentCounts || [];
@@ -110,6 +122,7 @@ export const getKPIData = async (): Promise<KPIData> => {
       activeIncidents,
       blockedDomains: blockedDomainsCount || 0,
       monitoredMachines,
+      activeAlerts: activeAlertsCount || 0,
       severityBreakdown,
       statusBreakdown,
       recentActivity
@@ -123,6 +136,7 @@ export const getKPIData = async (): Promise<KPIData> => {
       activeIncidents: 0,
       blockedDomains: 0,
       monitoredMachines: 0,
+      activeAlerts: 0,
       severityBreakdown: {
         low: 0,
         medium: 0,
