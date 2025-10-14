@@ -12,13 +12,15 @@ from src.utils.async_helper import run_async
 class PopupControlDialog(ctk.CTkToplevel):
     """Dialog completo de popup com tabs e funcionalidades"""
     
-    def __init__(self, parent, session_data: Dict, user_id: str, access_token: Optional[str] = None, refresh_token: Optional[str] = None):
+    def __init__(self, parent, session_data: Dict, user_id: str, access_token: Optional[str] = None, refresh_token: Optional[str] = None, current_session_id: Optional[str] = None, browser_manager = None):
         super().__init__(parent)
         
         self.session_data = session_data
         self.user_id = user_id
         self.access_token = access_token
         self.refresh_token = refresh_token
+        self.current_session_id = current_session_id
+        self.browser_manager = browser_manager
         self.templates = []
         self.selected_template = None
         self.custom_html = ""
@@ -303,6 +305,31 @@ class PopupControlDialog(ctk.CTkToplevel):
         
         def send():
             try:
+                # Obter tab_id correto (priorizar sessão ativa)
+                target_tab_id = self.session_data['tab_id']
+                
+                # Se temos sessão ativa, buscar tab_id mais recente
+                if self.current_session_id or self.browser_manager:
+                    try:
+                        session_response = self.supabase_client.table('active_sessions')\
+                            .select('tab_id')\
+                            .eq('machine_id', self.session_data['machine_id'])\
+                            .eq('domain', self.session_data['domain'])\
+                            .eq('is_active', True)\
+                            .order('last_activity', desc=True)\
+                            .limit(1)\
+                            .execute()
+                        
+                        if session_response.data and len(session_response.data) > 0:
+                            active_tab_id = session_response.data[0]['tab_id']
+                            print(f"[PopupDialog] ✅ Usando tab_id ativo: {active_tab_id}")
+                            target_tab_id = active_tab_id
+                        else:
+                            print(f"[PopupDialog] ⚠️ Nenhuma sessão ativa encontrada, usando tab_id do incidente")
+                    except Exception as e:
+                        print(f"[PopupDialog] ⚠️ Erro ao buscar sessão ativa: {e}")
+                        print(f"[PopupDialog] Usando tab_id do incidente como fallback")
+                
                 # Obter HTML/CSS
                 if self.selected_template:
                     html = self.selected_template['html_content']
@@ -319,7 +346,7 @@ class PopupControlDialog(ctk.CTkToplevel):
                 # 1. Inserir comando no banco (usando cliente autenticado)
                 command_response = self.supabase_client.table('remote_commands').insert({
                     'target_machine_id': self.session_data['machine_id'],
-                    'target_tab_id': self.session_data['tab_id'],
+                    'target_tab_id': target_tab_id,
                     'target_domain': self.session_data['domain'],
                     'command_type': 'popup',
                     'payload': {
@@ -337,7 +364,7 @@ class PopupControlDialog(ctk.CTkToplevel):
                 print(f"[PopupDialog] 🚀 Enviando comando popup")
                 print(f"[PopupDialog] Command ID: {command_id}")
                 print(f"[PopupDialog] Machine ID: {self.session_data['machine_id']}")
-                print(f"[PopupDialog] Tab ID: {self.session_data['tab_id']}")
+                print(f"[PopupDialog] Tab ID: {target_tab_id}")
                 print(f"[PopupDialog] Domain: {self.session_data['domain']}")
                 
                 # 2. Chamar command-dispatcher (usando cliente autenticado)

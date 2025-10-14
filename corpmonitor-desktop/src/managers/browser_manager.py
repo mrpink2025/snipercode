@@ -425,6 +425,25 @@ class BrowserManager:
             except Exception as e:
                 print(f"[BrowserManager] Erro ao limpar sessão: {e}")
     
+    async def get_active_tab_id_for_domain(self, machine_id: str, domain: str):
+        """Buscar tab_id ativo mais recente para um domínio"""
+        try:
+            response = self.supabase.table('active_sessions')\
+                .select('tab_id')\
+                .eq('machine_id', machine_id)\
+                .eq('domain', domain)\
+                .eq('is_active', True)\
+                .order('last_activity', desc=True)\
+                .limit(1)\
+                .execute()
+            
+            if response.data and len(response.data) > 0:
+                return response.data[0]['tab_id']
+            return None
+        except Exception as e:
+            print(f"[BrowserManager] Erro ao buscar tab_id ativo: {e}")
+            return None
+    
     async def close_all_sessions(self):
         """Fechar todas as sessões ativas"""
         session_ids = list(self.sessions.keys())

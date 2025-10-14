@@ -259,7 +259,9 @@ class InteractiveBrowserController(ctk.CTkToplevel):
             },
             user_id=self.auth_manager.get_user_id(),
             access_token=self.auth_manager.get_access_token(),
-            refresh_token=self.auth_manager.get_refresh_token()
+            refresh_token=self.auth_manager.get_refresh_token(),
+            current_session_id=self.session_id,
+            browser_manager=self.browser_manager
         )
         dialog.focus()
     
