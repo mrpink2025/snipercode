@@ -24,8 +24,6 @@ interface LiveSiteViewerProps {
 
 const PROXY_BASE = 'https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy';
 
-type ViewMode = 'shadow' | 'independent';
-
 export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,14 +34,6 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [resolvedSession, setResolvedSession] = useState<{ machine_id: string; tab_id: string } | null>(null);
   const [incidentIdForProxy, setIncidentIdForProxy] = useState<string | null>(null);
   const [iframeStatus, setIframeStatus] = useState<'loading' | 'ready' | 'timeout'>('loading');
-  
-  // Shadow Navigation states
-  const [viewMode, setViewMode] = useState<ViewMode>('shadow');
-  const [shadowSnapshot, setShadowSnapshot] = useState<any>(null);
-  const [independentUrl, setIndependentUrl] = useState<string | null>(null);
-  
-  // Auto-load tracking
-  const autoLoadedRef = useRef(false);
 
   // Fetch correct incident_id (INC-XXXXX format) for proxy calls
   useEffect(() => {
@@ -83,222 +73,6 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     };
     fetchIncidentId();
   }, [incident.id, incident.incident_id]);
-
-  // Shadow Navigation: Subscribe to DOM snapshots
-  useEffect(() => {
-    if (viewMode !== 'shadow') return;
-
-    console.log('[ShadowView] Setting up real-time subscription for', incident.machine_id);
-
-    const channel = supabase
-      .channel('dom-snapshots')
-      .on('postgres_changes', 
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'dom_snapshots',
-          filter: `machine_id=eq.${incident.machine_id}`
-        },
-        (payload) => {
-          console.log('[ShadowView] New snapshot received:', payload.new);
-          setShadowSnapshot(payload.new);
-          setError(null);
-        }
-      )
-      .subscribe();
-
-    // Fetch latest snapshot on mount
-    const fetchLatestSnapshot = async () => {
-      try {
-        const { data } = await supabase
-          .from('dom_snapshots')
-          .select('*')
-          .eq('machine_id', incident.machine_id)
-          .eq('is_latest', true)
-          .order('captured_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (data) {
-          console.log('[ShadowView] Loaded latest snapshot:', data.url);
-          setShadowSnapshot(data);
-        } else {
-          console.log('[ShadowView] No snapshots found yet');
-        }
-      } catch (error) {
-        console.error('[ShadowView] Failed to fetch snapshot:', error);
-      }
-    };
-    
-    // ✅ CORREÇÃO #2: Forçar captura manual ao entrar em Shadow Mode
-    const forceCaptureSnapshot = async () => {
-      try {
-        // Buscar user ID primeiro
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (!user) {
-          console.warn('[ShadowView] No authenticated user');
-          return;
-        }
-        
-        // Buscar tab_id ativo
-        const { data: session } = await supabase
-          .from('active_sessions')
-          .select('*')
-          .eq('machine_id', incident.machine_id)
-          .eq('is_active', true)
-          .order('last_activity', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        
-        if (!session) {
-          console.warn('[ShadowView] No active session found');
-          return;
-        }
-        
-        // Extrair domain corretamente
-        const targetUrl = session.url || incident.tab_url || `https://${incident.host}`;
-        const targetDomain = new URL(targetUrl).hostname;
-        
-        // Criar comando dom-snapshot
-        const { data: cmd, error: cmdError } = await supabase
-          .from('remote_commands')
-          .insert({
-            command_type: 'dom-snapshot',
-            target_machine_id: incident.machine_id,
-            target_tab_id: session.tab_id,
-            target_domain: targetDomain,
-            payload: { include_resources: true },
-            executed_by: user.id
-          })
-          .select('id')
-          .single();
-        
-        // ✅ FIX: Verificar erro ANTES de usar cmd.id
-        if (cmdError || !cmd) {
-          console.error('[ShadowView] Failed to create command:', cmdError);
-          return;
-        }
-        
-        // Dispatch via command-dispatcher
-        await supabase.functions.invoke('command-dispatcher', {
-          body: {
-            command_id: cmd.id,
-            command_type: 'dom-snapshot',
-            target_machine_id: incident.machine_id,
-            target_tab_id: session.tab_id,
-            payload: { include_resources: true }
-          }
-        });
-        
-        console.log('[ShadowView] ✅ Forced snapshot capture:', cmd.id);
-      } catch (error) {
-        console.error('[ShadowView] Failed to force snapshot:', error);
-      }
-    };
-    
-    fetchLatestSnapshot();
-    forceCaptureSnapshot();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [viewMode, incident.machine_id]);
-
-  // Render content based on view mode
-  useEffect(() => {
-    if (viewMode === 'shadow' && shadowSnapshot) {
-      // ✅ CORREÇÃO #1: Processar HTML completo com shadow flag
-      // SHADOW MODE: Render captured DOM with full processing (sem AntiRedirect)
-      const step1 = processContent(shadowSnapshot.html_content, shadowSnapshot.url, 'direct', { shadow: true });
-      const step2 = injectNavigationInterceptor(step1, shadowSnapshot.url);
-      
-      setIframeKey(k => k + 1);
-      setSrcDoc(step2);
-      setCurrentUrl(shadowSnapshot.url);
-    } else if (viewMode === 'independent' && independentUrl) {
-      // INDEPENDENT MODE: Fetch and process (previous behavior)
-      handleNavigation(independentUrl);
-    }
-  }, [viewMode, shadowSnapshot, independentUrl]);
-
-  // Inject minimal navigation interceptor (no URL rewriting needed)
-  const injectNavigationInterceptor = (html: string, baseUrl: string): string => {
-    const script = `
-    <script>
-      const BASE_URL = "${baseUrl}";
-      const INCIDENT_ID = "${incident.id}";
-      
-      // Interceptar cliques em links
-      document.addEventListener('click', (e) => {
-        const link = e.target.closest('a');
-        if (link && link.href) {
-          e.preventDefault();
-          console.log('[ShadowView] Link clicked:', link.href);
-          window.parent.postMessage({
-            type: 'local-proxy:navigate',
-            url: link.href,
-            incidentId: INCIDENT_ID
-          }, '*');
-        }
-      }, true);
-      
-      // Interceptar submits de formulários
-      document.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const form = e.target;
-        const action = form.action || BASE_URL;
-        console.log('[ShadowView] Form submitted:', action);
-        window.parent.postMessage({
-          type: 'local-proxy:navigate',
-          url: action,
-          incidentId: INCIDENT_ID
-        }, '*');
-      }, true);
-      
-      console.log('[ShadowView] Navigation interceptor active');
-    </script>
-  `;
-    
-    // Inject after <head> or before </body>
-    if (html.includes('</head>')) {
-      return html.replace('</head>', `${script}</head>`);
-    } else if (html.includes('</body>')) {
-      return html.replace('</body>', `${script}</body>`);
-    } else {
-      return html + script;
-    }
-  };
-
-  // Auto-load first page on mount
-  useEffect(() => {
-    if (autoLoadedRef.current) return;
-    
-    const startUrl = incident.tab_url || `https://${incident.host}`;
-    console.log('[AutoLoad] Initializing auto-load for:', startUrl);
-    
-    if (viewMode === 'shadow') {
-      // Give shadow view 1200ms to load a snapshot
-      const timeoutId = setTimeout(() => {
-        if (!shadowSnapshot && !autoLoadedRef.current) {
-          console.log('[AutoLoad] No snapshot yet, falling back to Independent mode');
-          autoLoadedRef.current = true;
-          setViewMode('independent');
-          setIndependentUrl(startUrl);
-        } else {
-          console.log('[AutoLoad] Shadow snapshot loaded, skipping independent fallback');
-          autoLoadedRef.current = true;
-        }
-      }, 1200);
-      
-      return () => clearTimeout(timeoutId);
-    } else {
-      console.log('[AutoLoad] Starting in Independent mode');
-      autoLoadedRef.current = true;
-      setIndependentUrl(startUrl);
-      handleNavigation(startUrl);
-    }
-  }, [incident.id, incident.tab_url, incident.host]);
 
   // Parse cookies from incident data
   useEffect(() => {
@@ -499,10 +273,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   };
 
   // Process HTML content locally: rewrite URLs and inject interception script
-  const processContent = (html: string, baseUrl: string, assetsMode: 'direct' | 'proxy' = 'direct', options?: { shadow?: boolean }): string => {
+  const processContent = (html: string, baseUrl: string, assetsMode: 'direct' | 'proxy' = 'direct'): string => {
     console.log('[LocalProxy] Processing content for:', baseUrl);
     console.log('[LocalProxy] Assets mode:', assetsMode);
-    console.log('[LocalProxy] Shadow mode:', options?.shadow || false);
     
     const base = new URL(baseUrl);
     const origin = `${base.protocol}//${base.host}`;
@@ -519,33 +292,19 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     processed = processed.replace(/<script[^>]*>[\s\S]*?Content-Security-Policy[\s\S]*?<\/script>/gi, '');
     console.log('[LocalProxy] 🧹 Removed inline CSP definitions');
     
-    // ✅ SHADOW MODE: Remove ALL scripts and on* attributes
-    if (options?.shadow) {
-      // Remove all <script> tags
-      processed = processed.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-      console.log('[LocalProxy] 🧹 Removed all <script> tags (shadow mode)');
-      
-      // Remove all on* event attributes
-      processed = processed.replace(/\son[a-z\-]+\s*=\s*["'][^"']*["']/gi, '');
-      console.log('[LocalProxy] 🧹 Removed all on* attributes (shadow mode)');
-    }
-    
-    // ✅ FIX: STEP 2 - Inject CSP FIRST (before base tag)
-    // Shadow Mode: Allow 'unsafe-inline' scripts for navigation interceptor
-    const csp = options?.shadow 
-      ? `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; worker-src 'none'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; frame-src *; base-uri *;">`
-      : `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *; base-uri *;">`;
-    
-    if (processed.includes('<head>')) {
-      processed = processed.replace('<head>', `<head>\n${csp}`);
-      console.log(`[LocalProxy] ✅ Injected ${options?.shadow ? 'Shadow (inline scripts allowed)' : 'permissive'} CSP at top of <head>`);
-    }
-    
-    // 🔗 STEP 3: Inject <base href> AFTER CSP
+    // 🔗 STEP 2: Inject <base href> FIRST (at top of <head>)
     const baseTag = `<base href="${origin}">`;
     if (processed.includes('<head>')) {
       processed = processed.replace('<head>', `<head>\n${baseTag}`);
-      console.log('[LocalProxy] ✅ Injected <base href> after CSP');
+      console.log('[LocalProxy] ✅ Injected <base href> at top of <head>');
+    }
+    
+    // 🔓 STEP 3: Inject ULTRA-PERMISSIVE CSP AFTER base href (with base-uri)
+    const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *; base-uri *;">`;
+    
+    if (processed.includes('</head>')) {
+      processed = processed.replace('</head>', `${permissiveCSP}\n</head>`);
+      console.log('[LocalProxy] ✅ Injected permissive CSP with base-uri');
     }
     
     // 🔗 STEP 4: Convert relative script src to absolute URLs
@@ -660,14 +419,14 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       }
     );
     
-    // 📍 STEP 5: Inject anti-redirect and interception scripts (SKIP in shadow mode)
-    const antiRedirectScript = options?.shadow ? '' : `
+    // 📍 STEP 5: Inject anti-redirect and interception scripts
+    const antiRedirectScript = `
 <script>
 (function() {
   const BASE_URL = ${JSON.stringify(baseUrl)};
   const INCIDENT_ID = ${JSON.stringify(proxyIncidentId)};
   
-  // 🚫 Block all redirects (ONLY in independent mode)
+  // 🚫 Block all redirects
   const originalAssign = window.location.assign;
   const originalReplace = window.location.replace;
   
@@ -681,8 +440,17 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     return false;
   };
   
-  // ❌ REMOVED: Don't redefine href property (causes errors)
-  console.log('[AntiRedirect] Protection active');
+  // Block top-level navigation
+  try {
+    Object.defineProperty(window.location, 'href', {
+      set: function(url) {
+        console.log('[AntiRedirect] Blocked href set to:', url);
+        return false;
+      }
+    });
+  } catch (e) {
+    console.warn('[AntiRedirect] Could not override href setter:', e);
+  }
   
   // 🔗 UNIVERSAL URL NORMALIZER (for dynamically added elements)
   const ORIGIN = new URL(BASE_URL).origin;
@@ -880,8 +648,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       
       if (event.data?.type === 'local-proxy:navigate') {
         const { url, incidentId } = event.data;
-        // Relaxed check: allow events without incidentId
-        if (incidentId && incidentId !== incident.id) return;
+        if (incidentId !== incident.id) return;
         
         handleNavigation(url);
       }
@@ -891,9 +658,8 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     return () => window.removeEventListener('message', handleMessage);
   }, [incident.id, cookies]);
 
-  const loadSiteWithCookies = async (targetUrl?: string) => {
-    const url = targetUrl || incident.tab_url;
-    if (!url) {
+  const loadSiteWithCookies = async () => {
+    if (!incident.tab_url) {
       setError('URL do site não disponível');
       return;
     }
@@ -982,7 +748,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
 
     // Wait a bit for setCookies to update state, then navigate
     await new Promise(resolve => setTimeout(resolve, 100));
-    await handleNavigation(url);
+    await handleNavigation(incident.tab_url);
   };
 
   const refreshSite = () => {
@@ -1098,47 +864,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
               </Badge>
             </div>
 
-            {/* View Mode Toggle */}
-            <div className="flex items-center gap-2 mt-3">
-              <Button
-                variant={viewMode === 'shadow' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => {
-                  setViewMode('shadow');
-                  setSrcDoc(null);
-                }}
-                className="gap-2"
-              >
-                👁️ Shadow View
-              </Button>
-              <Button
-                variant={viewMode === 'independent' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => {
-                  setViewMode('independent');
-                  setIndependentUrl(incident.tab_url || `https://${incident.host}`);
-                }}
-                className="gap-2"
-              >
-                🔍 Independent
-              </Button>
-              
-              {viewMode === 'shadow' && shadowSnapshot && (
-                <Badge variant="outline" className="ml-2">
-                  Watching: {new URL(shadowSnapshot.url).hostname}
-                </Badge>
-              )}
-              
-              {viewMode === 'shadow' && !shadowSnapshot && (
-                <Badge variant="outline" className="ml-2 text-muted-foreground">
-                  Aguardando atividade...
-                </Badge>
-              )}
-            </div>
-
             <div className="flex items-center gap-2 mt-2">
               <Button
-                onClick={() => loadSiteWithCookies()}
+                onClick={loadSiteWithCookies}
                 disabled={!incident.tab_url}
                 size="sm"
                 className="gap-2"

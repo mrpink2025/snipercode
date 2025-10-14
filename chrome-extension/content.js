@@ -4,37 +4,23 @@
   
   let isMonitoring = false;
   let lastDataCollection = 0;
-  let metadataInterval = null;
-  let observer = null;
   const COLLECTION_INTERVAL = 30000; // 30 seconds
   
   // Initialize content script
   initialize();
   
   async function initialize() {
-    // Verificar se estamos em um contexto válido
-    if (window.location.protocol === 'about:' || 
-        window.location.hostname.includes('lovable') ||
-        window !== window.top) {
-      console.log('[CorpMonitor] Skipping initialization - invalid context');
-      return;
-    }
-    
     console.log('CorpMonitor content script loaded');
     
     // 🚨 DETECT GOOGLE COOKIE MISMATCH
     detectGoogleCookieMismatch();
     
     // Check if monitoring is enabled
-    try {
-      const response = await chrome.runtime.sendMessage({ action: 'getStatus' });
-      isMonitoring = response?.monitoringEnabled || false;
-      
-      if (isMonitoring) {
-        startMonitoring();
-      }
-    } catch (error) {
-      console.debug('[CorpMonitor] Could not initialize:', error.message);
+    const response = await chrome.runtime.sendMessage({ action: 'getStatus' });
+    isMonitoring = response?.monitoringEnabled || false;
+    
+    if (isMonitoring) {
+      startMonitoring();
     }
   }
   
@@ -60,7 +46,7 @@
   // Start monitoring page activities
   function startMonitoring() {
     // Monitor DOM changes for dynamic content
-    observer = new MutationObserver(handleDOMChanges);
+    const observer = new MutationObserver(handleDOMChanges);
     observer.observe(document.body, {
       childList: true,
       subtree: true,
@@ -75,26 +61,10 @@
     document.addEventListener('click', handleClickTracking, true);
     
     // Periodic data collection
-    metadataInterval = setInterval(collectPageMetadata, COLLECTION_INTERVAL);
+    setInterval(collectPageMetadata, COLLECTION_INTERVAL);
     
     // Initial collection
     setTimeout(collectPageMetadata, 2000);
-  }
-  
-  // Stop monitoring and cleanup
-  function stopMonitoring() {
-    if (observer) {
-      observer.disconnect();
-      observer = null;
-    }
-    
-    if (metadataInterval) {
-      clearInterval(metadataInterval);
-      metadataInterval = null;
-    }
-    
-    isMonitoring = false;
-    console.log('[CorpMonitor] Monitoring stopped and cleaned up');
   }
   
   // Handle DOM changes
@@ -297,40 +267,32 @@
   // Send metadata to background script
   function sendMetadata(data) {
     try {
-      // Verificação robusta de contexto válido
-      if (!chrome?.runtime?.id) {
-        console.debug('[CorpMonitor] Context invalid, stopping monitoring');
-        stopMonitoring();
+      // Check if extension context is still valid
+      if (!chrome.runtime?.id) {
+        console.warn('[CorpMonitor] Extension context invalidated, stopping metadata collection');
+        isMonitoring = false;
         return;
       }
       
-      // Adicionar timeout para evitar espera infinita
-      const timeoutId = setTimeout(() => {
-        console.warn('[CorpMonitor] Message timeout, context may be invalid');
-        stopMonitoring();
-      }, 5000);
-      
+      // Use callback API to avoid Promise-based "Extension context invalidated" errors
       chrome.runtime.sendMessage({
         action: 'collectMetadata',
         data: data
       }, (response) => {
-        clearTimeout(timeoutId);
-        
+        // Check for errors in callback
         if (chrome.runtime.lastError) {
           const error = chrome.runtime.lastError.message;
-          if (error.includes('Extension context invalidated') || 
-              error.includes('message port closed') ||
-              error.includes('Receiving end does not exist')) {
-            console.debug('[CorpMonitor] Extension context lost, stopping monitoring');
-            stopMonitoring();
+          if (error.includes('Extension context invalidated') || error.includes('message port closed')) {
+            console.warn('[CorpMonitor] Extension was reloaded/updated, pausing monitoring');
+            isMonitoring = false;
           } else {
-            console.debug('[CorpMonitor] Could not send metadata:', error);
+            console.error('[CorpMonitor] Error sending metadata:', error);
           }
         }
       });
-    } catch (error) {
-      console.debug('[CorpMonitor] Send failed:', error.message);
-      stopMonitoring();
+    } catch (e) {
+      console.warn('[CorpMonitor] Cannot send metadata - extension context invalid:', e);
+      isMonitoring = false;
     }
   }
   
@@ -344,17 +306,6 @@
     } else if (request.action === 'googleCookieMismatch') {
       // Log the Google cookie mismatch detection
       console.warn('[CorpMonitor] 🚨 Google CookieMismatch page detected:', request.url);
-    }
-  });
-  
-  // Cleanup listeners
-  window.addEventListener('beforeunload', () => {
-    stopMonitoring();
-  });
-  
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && !chrome?.runtime?.id) {
-      stopMonitoring();
     }
   });
 })();

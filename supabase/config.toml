@@ -44,6 +44,3 @@ verify_jwt = true
 
 [functions.create-demo-user]
 verify_jwt = true
-
-[functions.dom-snapshot]
-verify_jwt = false
