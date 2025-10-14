@@ -305,7 +305,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     console.log('[LocalProxy] 🧹 Removed inline CSP definitions (aggressive)');
     
     // 🔗 STEP 2 & 3: Inject CSP INSIDE <head> only (avoid <base> to prevent base-uri CSP violations)
-    const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *; base-uri *;">`;
+    const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data: blob:; connect-src * data: blob:; frame-src * data: blob:; base-uri *;">`;
     
     if (processed.includes('<head>')) {
       processed = processed.replace('<head>', `<head>\n${permissiveCSP}`);
@@ -546,12 +546,34 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
               try {
                 const abs = new URL(url, originalCssUrl).href;
                 
-                // Check if it's a font
-                if (/\.(woff2|woff|ttf|otf|eot)(\?.*)?$/i.test(abs)) {
-                  try {
-                    const fontResp = await fetch(`${PROXY_BASE}?url=${encodeURIComponent(abs)}&incident=${proxyIncidentId}&rawContent=true`);
-                    const fontBuffer = await fontResp.arrayBuffer();
-                    const base64 = btoa(String.fromCharCode(...new Uint8Array(fontBuffer)));
+                 // Check if it's a font
+                 if (/\.(woff2|woff|ttf|otf|eot)(\?.*)?$/i.test(abs)) {
+                   try {
+                     const proxyUrl = `${PROXY_BASE}?url=${encodeURIComponent(abs)}&incident=${proxyIncidentId}&rawContent=true`;
+                     
+                     // Check size first with HEAD request
+                     const headResp = await fetch(proxyUrl, { method: 'HEAD' });
+                     const contentLength = parseInt(headResp.headers.get('content-length') || '0');
+                     
+                     // Skip fonts larger than 200KB
+                     if (contentLength > 200000) {
+                       console.warn('[LocalProxy] Font too large, skipping:', abs, `${Math.round(contentLength/1024)}KB`);
+                       css = css.replace(original, 'url("")');
+                       continue;
+                     }
+                     
+                     const fontResp = await fetch(proxyUrl);
+                     const fontBuffer = await fontResp.arrayBuffer();
+                     
+                     // Use chunked conversion for large fonts
+                     const bytes = new Uint8Array(fontBuffer);
+                     let binary = '';
+                     const chunkSize = 8192;
+                     for (let i = 0; i < bytes.length; i += chunkSize) {
+                       const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+                       binary += String.fromCharCode.apply(null, Array.from(chunk));
+                     }
+                     const base64 = btoa(binary);
                     
                     let mimeType = 'font/woff2';
                     if (abs.endsWith('.woff')) mimeType = 'font/woff';
@@ -562,11 +584,11 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
                     const dataUri = `url("data:${mimeType};base64,${base64}")`;
                     css = css.replace(original, dataUri);
                     console.log('[LocalProxy] ✅ Font inlined:', abs);
-                  } catch (fontErr) {
-                    console.warn('[LocalProxy] Failed to inline font:', abs, fontErr);
-                    const proxied = `${PROXY_BASE}?url=${encodeURIComponent(abs)}&incident=${proxyIncidentId}&rawContent=true`;
-                    css = css.replace(original, `url("${proxied}")`);
-                  }
+                   } catch (fontErr) {
+                     console.warn('[LocalProxy] Skipping font (too large or failed):', abs, fontErr);
+                     // Remove the entire url(...) declaration to avoid CSP errors
+                     css = css.replace(original, 'url("")');
+                   }
                 } else {
                   // Images and other assets: proxy them
                   const proxied = `${PROXY_BASE}?url=${encodeURIComponent(abs)}&incident=${proxyIncidentId}&rawContent=true`;
@@ -619,7 +641,13 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           } catch {}
 
           console.log('[LocalProxy] Inlining script:', originalUrl);
-          const resp = await fetch(src);
+          
+          // Always use proxy for fetching external scripts to avoid CSP connect-src violations
+          const fetchUrl = src.includes('site-proxy') 
+            ? src 
+            : `${PROXY_BASE}?url=${encodeURIComponent(originalUrl)}&incident=${proxyIncidentId}&rawContent=true`;
+          
+          const resp = await fetch(fetchUrl);
           const scriptContent = await resp.text();
 
           const inlineTag = `<script${attrs} data-original-src="${originalUrl}">\n${scriptContent}\n</script>`;
@@ -673,6 +701,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       
       if (event.data?.type === 'local-proxy:navigate') {
         const { url } = event.data;
+        console.log('[LocalProxy] 📨 Navigation message received:', url);
         // Accept navigation from any incident - only one viewer is open at a time
         handleNavigation(url);
       }
