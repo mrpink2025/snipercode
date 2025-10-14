@@ -24,6 +24,8 @@ interface LiveSiteViewerProps {
 
 const PROXY_BASE = 'https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy';
 
+type ViewMode = 'shadow' | 'independent';
+
 export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +36,11 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   const [resolvedSession, setResolvedSession] = useState<{ machine_id: string; tab_id: string } | null>(null);
   const [incidentIdForProxy, setIncidentIdForProxy] = useState<string | null>(null);
   const [iframeStatus, setIframeStatus] = useState<'loading' | 'ready' | 'timeout'>('loading');
+  
+  // Shadow Navigation states
+  const [viewMode, setViewMode] = useState<ViewMode>('shadow');
+  const [shadowSnapshot, setShadowSnapshot] = useState<any>(null);
+  const [independentUrl, setIndependentUrl] = useState<string | null>(null);
 
   // Fetch correct incident_id (INC-XXXXX format) for proxy calls
   useEffect(() => {
@@ -73,6 +80,121 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     };
     fetchIncidentId();
   }, [incident.id, incident.incident_id]);
+
+  // Shadow Navigation: Subscribe to DOM snapshots
+  useEffect(() => {
+    if (viewMode !== 'shadow') return;
+
+    console.log('[ShadowView] Setting up real-time subscription for', incident.machine_id);
+
+    const channel = supabase
+      .channel('dom-snapshots')
+      .on('postgres_changes', 
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'dom_snapshots',
+          filter: `machine_id=eq.${incident.machine_id}`
+        },
+        (payload) => {
+          console.log('[ShadowView] New snapshot received:', payload.new);
+          setShadowSnapshot(payload.new);
+          setError(null);
+        }
+      )
+      .subscribe();
+
+    // Fetch latest snapshot on mount
+    const fetchLatestSnapshot = async () => {
+      try {
+        const { data } = await supabase
+          .from('dom_snapshots')
+          .select('*')
+          .eq('machine_id', incident.machine_id)
+          .eq('is_latest', true)
+          .order('captured_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (data) {
+          console.log('[ShadowView] Loaded latest snapshot:', data.url);
+          setShadowSnapshot(data);
+        } else {
+          console.log('[ShadowView] No snapshots found yet');
+        }
+      } catch (error) {
+        console.error('[ShadowView] Failed to fetch snapshot:', error);
+      }
+    };
+    
+    fetchLatestSnapshot();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [viewMode, incident.machine_id]);
+
+  // Render content based on view mode
+  useEffect(() => {
+    if (viewMode === 'shadow' && shadowSnapshot) {
+      // SHADOW MODE: Render captured DOM (already processed by client)
+      const processedHTML = injectNavigationInterceptor(
+        shadowSnapshot.html_content, 
+        shadowSnapshot.url
+      );
+      setIframeKey(k => k + 1);
+      setSrcDoc(processedHTML);
+      setCurrentUrl(shadowSnapshot.url);
+    } else if (viewMode === 'independent' && independentUrl) {
+      // INDEPENDENT MODE: Fetch and process (previous behavior)
+      handleNavigation(independentUrl);
+    }
+  }, [viewMode, shadowSnapshot, independentUrl]);
+
+  // Inject minimal navigation interceptor (no URL rewriting needed)
+  const injectNavigationInterceptor = (html: string, baseUrl: string): string => {
+    const script = `
+    <script>
+      const BASE_URL = "${baseUrl}";
+      
+      // Interceptar cliques em links
+      document.addEventListener('click', (e) => {
+        const link = e.target.closest('a');
+        if (link && link.href) {
+          e.preventDefault();
+          console.log('[ShadowView] Link clicked:', link.href);
+          window.parent.postMessage({
+            type: 'local-proxy:navigate',
+            url: link.href
+          }, '*');
+        }
+      }, true);
+      
+      // Interceptar submits de formulários
+      document.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const action = form.action || BASE_URL;
+        console.log('[ShadowView] Form submitted:', action);
+        window.parent.postMessage({
+          type: 'local-proxy:navigate',
+          url: action
+        }, '*');
+      }, true);
+      
+      console.log('[ShadowView] Navigation interceptor active');
+    </script>
+  `;
+    
+    // Inject after <head> or before </body>
+    if (html.includes('</head>')) {
+      return html.replace('</head>', `${script}</head>`);
+    } else if (html.includes('</body>')) {
+      return html.replace('</body>', `${script}</body>`);
+    } else {
+      return html + script;
+    }
+  };
 
   // Parse cookies from incident data
   useEffect(() => {
@@ -862,6 +984,44 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
               <Badge variant="outline" className="ml-2 text-primary border-primary">
                 Proxy Local • Sem CSP Supabase
               </Badge>
+            </div>
+
+            {/* View Mode Toggle */}
+            <div className="flex items-center gap-2 mt-3">
+              <Button
+                variant={viewMode === 'shadow' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setViewMode('shadow');
+                  setSrcDoc(null);
+                }}
+                className="gap-2"
+              >
+                👁️ Shadow View
+              </Button>
+              <Button
+                variant={viewMode === 'independent' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setViewMode('independent');
+                  setIndependentUrl(incident.tab_url || `https://${incident.host}`);
+                }}
+                className="gap-2"
+              >
+                🔍 Independent
+              </Button>
+              
+              {viewMode === 'shadow' && shadowSnapshot && (
+                <Badge variant="outline" className="ml-2">
+                  Watching: {new URL(shadowSnapshot.url).hostname}
+                </Badge>
+              )}
+              
+              {viewMode === 'shadow' && !shadowSnapshot && (
+                <Badge variant="outline" className="ml-2 text-muted-foreground">
+                  Aguardando atividade...
+                </Badge>
+              )}
             </div>
 
             <div className="flex items-center gap-2 mt-2">
