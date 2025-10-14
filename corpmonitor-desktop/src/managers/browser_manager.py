@@ -330,6 +330,72 @@ class BrowserManager:
             print(f"[BrowserManager] Erro ao injetar popup: {e}")
             return False
     
+    async def go_back(self, session_id: str) -> Optional[str]:
+        """Voltar para página anterior"""
+        try:
+            session = self.sessions.get(session_id)
+            if not session or not session.is_active:
+                return None
+            
+            await session.page.go_back(wait_until='domcontentloaded', timeout=10000)
+            await session.page.wait_for_timeout(500)
+            return session.page.url
+        except Exception as e:
+            print(f"[BrowserManager] Erro ao voltar: {e}")
+            return None
+
+    async def go_forward(self, session_id: str) -> Optional[str]:
+        """Avançar para próxima página"""
+        try:
+            session = self.sessions.get(session_id)
+            if not session or not session.is_active:
+                return None
+            
+            await session.page.go_forward(wait_until='domcontentloaded', timeout=10000)
+            await session.page.wait_for_timeout(500)
+            return session.page.url
+        except Exception as e:
+            print(f"[BrowserManager] Erro ao avançar: {e}")
+            return None
+
+    async def reload(self, session_id: str) -> Optional[str]:
+        """Recarregar página atual"""
+        try:
+            session = self.sessions.get(session_id)
+            if not session or not session.is_active:
+                return None
+            
+            await session.page.reload(wait_until='domcontentloaded', timeout=30000)
+            await session.page.wait_for_timeout(500)
+            return session.page.url
+        except Exception as e:
+            print(f"[BrowserManager] Erro ao recarregar: {e}")
+            return None
+
+    async def stop_loading(self, session_id: str) -> bool:
+        """Parar carregamento da página"""
+        try:
+            session = self.sessions.get(session_id)
+            if not session or not session.is_active:
+                return False
+            
+            await session.page.evaluate("window.stop()")
+            return True
+        except Exception as e:
+            print(f"[BrowserManager] Erro ao parar: {e}")
+            return False
+
+    async def get_current_url(self, session_id: str) -> Optional[str]:
+        """Obter URL atual"""
+        try:
+            session = self.sessions.get(session_id)
+            if not session or not session.is_active:
+                return None
+            return session.page.url
+        except Exception as e:
+            print(f"[BrowserManager] Erro ao obter URL: {e}")
+            return None
+    
     async def close_session(self, session_id: str):
         """Fechar uma sessão específica completamente (page, context e browser)"""
         if session_id not in self.sessions:
