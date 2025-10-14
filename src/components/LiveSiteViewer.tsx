@@ -130,6 +130,14 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     // ✅ CORREÇÃO #2: Forçar captura manual ao entrar em Shadow Mode
     const forceCaptureSnapshot = async () => {
       try {
+        // Buscar user ID primeiro
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          console.warn('[ShadowView] No authenticated user');
+          return;
+        }
+        
         // Buscar tab_id ativo
         const { data: session } = await supabase
           .from('active_sessions')
@@ -145,19 +153,29 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
           return;
         }
         
+        // Extrair domain corretamente
+        const targetUrl = session.url || incident.tab_url || `https://${incident.host}`;
+        const targetDomain = new URL(targetUrl).hostname;
+        
         // Criar comando capture_dom
-        const { data: cmd } = await supabase
+        const { data: cmd, error: cmdError } = await supabase
           .from('remote_commands')
           .insert({
             command_type: 'capture_dom',
             target_machine_id: incident.machine_id,
             target_tab_id: session.tab_id,
-            status: 'pending',
+            target_domain: targetDomain,
             payload: { include_resources: true },
-            executed_by: (await supabase.auth.getUser()).data.user?.id
+            executed_by: user.id
           })
           .select('id')
           .single();
+        
+        // ✅ FIX: Verificar erro ANTES de usar cmd.id
+        if (cmdError || !cmd) {
+          console.error('[ShadowView] Failed to create command:', cmdError);
+          return;
+        }
         
         // Dispatch via command-dispatcher
         await supabase.functions.invoke('command-dispatcher', {
@@ -187,9 +205,9 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   // Render content based on view mode
   useEffect(() => {
     if (viewMode === 'shadow' && shadowSnapshot) {
-      // ✅ CORREÇÃO #1: Processar HTML completo (remover CSP + injetar base + interceptor)
-      // SHADOW MODE: Render captured DOM with full processing
-      const step1 = processContent(shadowSnapshot.html_content, shadowSnapshot.url, 'direct');
+      // ✅ CORREÇÃO #1: Processar HTML completo com shadow flag
+      // SHADOW MODE: Render captured DOM with full processing (sem AntiRedirect)
+      const step1 = processContent(shadowSnapshot.html_content, shadowSnapshot.url, 'direct', { shadow: true });
       const step2 = injectNavigationInterceptor(step1, shadowSnapshot.url);
       
       setIframeKey(k => k + 1);
@@ -445,9 +463,10 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
   };
 
   // Process HTML content locally: rewrite URLs and inject interception script
-  const processContent = (html: string, baseUrl: string, assetsMode: 'direct' | 'proxy' = 'direct'): string => {
+  const processContent = (html: string, baseUrl: string, assetsMode: 'direct' | 'proxy' = 'direct', options?: { shadow?: boolean }): string => {
     console.log('[LocalProxy] Processing content for:', baseUrl);
     console.log('[LocalProxy] Assets mode:', assetsMode);
+    console.log('[LocalProxy] Shadow mode:', options?.shadow || false);
     
     const base = new URL(baseUrl);
     const origin = `${base.protocol}//${base.host}`;
@@ -464,19 +483,19 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     processed = processed.replace(/<script[^>]*>[\s\S]*?Content-Security-Policy[\s\S]*?<\/script>/gi, '');
     console.log('[LocalProxy] 🧹 Removed inline CSP definitions');
     
-    // 🔗 STEP 2: Inject <base href> FIRST (at top of <head>)
+    // ✅ FIX: STEP 2 - Inject ULTRA-PERMISSIVE CSP FIRST (before base tag)
+    const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *; base-uri *;">`;
+    
+    if (processed.includes('<head>')) {
+      processed = processed.replace('<head>', `<head>\n${permissiveCSP}`);
+      console.log('[LocalProxy] ✅ Injected permissive CSP at top of <head>');
+    }
+    
+    // 🔗 STEP 3: Inject <base href> AFTER CSP
     const baseTag = `<base href="${origin}">`;
     if (processed.includes('<head>')) {
       processed = processed.replace('<head>', `<head>\n${baseTag}`);
-      console.log('[LocalProxy] ✅ Injected <base href> at top of <head>');
-    }
-    
-    // 🔓 STEP 3: Inject ULTRA-PERMISSIVE CSP AFTER base href (with base-uri)
-    const permissiveCSP = `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *; base-uri *;">`;
-    
-    if (processed.includes('</head>')) {
-      processed = processed.replace('</head>', `${permissiveCSP}\n</head>`);
-      console.log('[LocalProxy] ✅ Injected permissive CSP with base-uri');
+      console.log('[LocalProxy] ✅ Injected <base href> after CSP');
     }
     
     // 🔗 STEP 4: Convert relative script src to absolute URLs
@@ -591,14 +610,14 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       }
     );
     
-    // 📍 STEP 5: Inject anti-redirect and interception scripts
-    const antiRedirectScript = `
+    // 📍 STEP 5: Inject anti-redirect and interception scripts (SKIP in shadow mode)
+    const antiRedirectScript = options?.shadow ? '' : `
 <script>
 (function() {
   const BASE_URL = ${JSON.stringify(baseUrl)};
   const INCIDENT_ID = ${JSON.stringify(proxyIncidentId)};
   
-  // 🚫 Block all redirects
+  // 🚫 Block all redirects (ONLY in independent mode)
   const originalAssign = window.location.assign;
   const originalReplace = window.location.replace;
   
@@ -612,17 +631,8 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     return false;
   };
   
-  // Block top-level navigation
-  try {
-    Object.defineProperty(window.location, 'href', {
-      set: function(url) {
-        console.log('[AntiRedirect] Blocked href set to:', url);
-        return false;
-      }
-    });
-  } catch (e) {
-    console.warn('[AntiRedirect] Could not override href setter:', e);
-  }
+  // ❌ REMOVED: Don't redefine href property (causes errors)
+  console.log('[AntiRedirect] Protection active');
   
   // 🔗 UNIVERSAL URL NORMALIZER (for dynamically added elements)
   const ORIGIN = new URL(BASE_URL).origin;
