@@ -91,3 +91,9 @@ class AuthManager:
         """Verificar se é admin ou superior"""
         role = self.get_user_role()
         return role in ["admin", "superadmin", "demo_admin"]
+    
+    def get_user_id(self) -> Optional[str]:
+        """Obter ID do usuário logado"""
+        if self.current_user:
+            return self.current_user.get("id")
+        return None

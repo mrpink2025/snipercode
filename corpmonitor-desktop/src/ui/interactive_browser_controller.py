@@ -252,7 +252,7 @@ class InteractiveBrowserController(ctk.CTkToplevel):
                 'url': self.incident.get('tab_url'),
                 'title': self.incident.get('cookie_excerpt', '')[:50]
             },
-            user_id=self.auth_manager.user_id
+            user_id=self.auth_manager.get_user_id()
         )
         dialog.focus()
     
@@ -264,7 +264,7 @@ class InteractiveBrowserController(ctk.CTkToplevel):
             parent=self,
             domain=self.incident.get('host'),
             incident_id=self.incident.get('incident_id'),
-            user_id=self.auth_manager.user_id
+            user_id=self.auth_manager.get_user_id()
         )
         dialog.focus()
     
