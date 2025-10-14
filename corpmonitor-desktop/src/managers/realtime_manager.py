@@ -259,3 +259,14 @@ class RealtimeManager:
             threading.Thread(target=play, daemon=True).start()
         except Exception as e:
             logger.warning(f"Erro ao tocar som crítico: {e}")
+    
+    def subscribe_to_sessions(self, callback: Callable[[Dict], None]):
+        """
+        Registrar callback para mudanças em active_sessions
+        
+        Args:
+            callback: Função a ser chamada quando uma sessão mudar
+        """
+        # Adicionar à lista de callbacks de alertas
+        # (Reutilizando infraestrutura existente)
+        self.alert_callbacks.append(lambda alert: callback({"eventType": "session_change", "data": alert}))

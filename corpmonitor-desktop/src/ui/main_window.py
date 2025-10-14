@@ -4,6 +4,7 @@ from src.managers.incident_manager import IncidentManager
 from src.managers.domain_manager import DomainManager
 from src.managers.browser_manager import BrowserManager
 from src.managers.realtime_manager import RealtimeManager
+from src.managers.machine_manager import MachineManager
 from src.ui.site_viewer import SiteViewer
 from src.utils.async_helper import run_async
 from src.utils.logger import logger
@@ -28,6 +29,7 @@ class MainWindow(ctk.CTk):
         self.domain_manager = DomainManager(auth_manager.supabase, user_id)
         self.browser_manager = BrowserManager(auth_manager.supabase)
         self.realtime_manager = RealtimeManager(auth_manager.supabase)
+        self.machine_manager = MachineManager(auth_manager.supabase, user_id)
         
         # Configuração da janela
         self.title("CorpMonitor Desktop")
@@ -43,6 +45,7 @@ class MainWindow(ctk.CTk):
         self.incidents_list: List[Dict] = []
         self.monitored_domains_list: List[Dict] = []
         self.blocked_domains_list: List[Dict] = []
+        self.machines_list: List[Dict] = []
         self.site_viewer: Optional[SiteViewer] = None
         
         # Variáveis de paginação
@@ -155,6 +158,7 @@ class MainWindow(ctk.CTk):
         # Criar abas
         self.tabview.add("📋 Incidentes")
         self.tabview.add("📖 Incidentes Lidos")
+        self.tabview.add("🖥️ Máquinas Monitoradas")
         self.tabview.add("🌐 Domínios Monitorados")
         self.tabview.add("🚫 Domínios Bloqueados")
         
@@ -163,6 +167,9 @@ class MainWindow(ctk.CTk):
         
         # Tab Incidentes Lidos
         self.create_incidents_tab(viewed=True)
+        
+        # Tab Máquinas Monitoradas
+        self.create_machines_tab()
         
         # Tab Domínios Monitorados
         self.create_monitored_domains_tab()
@@ -383,6 +390,82 @@ class MainWindow(ctk.CTk):
         
         # Carregar domínios
         self.load_blocked_domains()
+    
+    def create_machines_tab(self):
+        """Criar aba de máquinas monitoradas"""
+        machines_tab = self.tabview.tab("🖥️ Máquinas Monitoradas")
+        
+        # Filtros
+        filters_frame = ctk.CTkFrame(machines_tab, fg_color="transparent")
+        filters_frame.pack(fill="x", padx=10, pady=10)
+        
+        ctk.CTkLabel(
+            filters_frame,
+            text="Filtros:",
+            font=ctk.CTkFont(size=12, weight="bold")
+        ).pack(side="left", padx=5)
+        
+        # Filtro de status
+        self.machines_status_filter = ctk.CTkOptionMenu(
+            filters_frame,
+            values=["Apenas Ativas", "Todas"],
+            command=lambda _: self.load_machines(),
+            width=150
+        )
+        self.machines_status_filter.pack(side="left", padx=5)
+        
+        # Botão atualizar
+        refresh_btn = ctk.CTkButton(
+            filters_frame,
+            text="🔄 Atualizar",
+            width=100,
+            command=self.load_machines
+        )
+        refresh_btn.pack(side="left", padx=5)
+        
+        # Campo de busca
+        ctk.CTkLabel(filters_frame, text="|", text_color="gray").pack(side="left", padx=10)
+        
+        self.machines_search_entry = ctk.CTkEntry(
+            filters_frame,
+            placeholder_text="Buscar por email/nome da máquina...",
+            width=300
+        )
+        self.machines_search_entry.pack(side="left", padx=5)
+        
+        search_btn = ctk.CTkButton(
+            filters_frame,
+            text="🔍",
+            width=40,
+            command=self.apply_machines_search
+        )
+        search_btn.pack(side="left", padx=2)
+        
+        # KPIs de máquinas
+        kpi_frame = ctk.CTkFrame(machines_tab, fg_color="transparent", height=100)
+        kpi_frame.pack(fill="x", padx=10, pady=10)
+        kpi_frame.pack_propagate(False)
+        
+        self.machines_kpi_cards = {}
+        machine_kpis = [
+            ("total_machines", "Total de Máquinas", "🖥️"),
+            ("active_machines", "Máquinas Ativas", "🟢"),
+            ("total_tabs", "Abas Abertas", "📑"),
+            ("unique_domains", "Domínios Únicos", "🌐")
+        ]
+        
+        for i, (key, label, icon) in enumerate(machine_kpis):
+            card = self.create_mini_kpi_card(kpi_frame, label, "0", icon)
+            card.grid(row=0, column=i, padx=5, sticky="ew")
+            kpi_frame.grid_columnconfigure(i, weight=1)
+            self.machines_kpi_cards[key] = card
+        
+        # Lista de máquinas (ScrollableFrame)
+        self.machines_scroll = ctk.CTkScrollableFrame(machines_tab)
+        self.machines_scroll.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Carregar máquinas
+        self.load_machines()
     
     def load_dashboard_data(self):
         """Carregar dados do dashboard"""
@@ -742,6 +825,226 @@ class MainWindow(ctk.CTk):
         reason_label = ctk.CTkLabel(content, text=f"Motivo: {reason[:40]}...", text_color="gray", font=ctk.CTkFont(size=11))
         reason_label.pack(side="left", padx=15)
     
+    def create_mini_kpi_card(self, parent, title: str, value: str, icon: str):
+        """Criar card mini de KPI para máquinas"""
+        card = ctk.CTkFrame(parent, fg_color="#1e293b", corner_radius=8)
+        
+        content = ctk.CTkFrame(card, fg_color="transparent")
+        content.pack(fill="both", expand=True, padx=10, pady=8)
+        
+        icon_label = ctk.CTkLabel(
+            content,
+            text=icon,
+            font=ctk.CTkFont(size=20)
+        )
+        icon_label.pack(side="left", padx=(0, 10))
+        
+        text_frame = ctk.CTkFrame(content, fg_color="transparent")
+        text_frame.pack(side="left", fill="both", expand=True)
+        
+        value_label = ctk.CTkLabel(
+            text_frame,
+            text=value,
+            font=ctk.CTkFont(size=20, weight="bold")
+        )
+        value_label.pack(anchor="w")
+        
+        title_label = ctk.CTkLabel(
+            text_frame,
+            text=title,
+            font=ctk.CTkFont(size=10),
+            text_color="gray"
+        )
+        title_label.pack(anchor="w")
+        
+        # Armazenar referência
+        card.value_label = value_label
+        
+        return card
+    
+    def load_machines(self):
+        """Carregar lista de máquinas monitoradas"""
+        # Limpar lista atual
+        for widget in self.machines_scroll.winfo_children():
+            widget.destroy()
+        
+        # Obter filtros
+        active_only = self.machines_status_filter.get() == "Apenas Ativas"
+        search_term = self.machines_search_entry.get().strip()
+        
+        # Buscar máquinas
+        self.machines_list = self.machine_manager.get_monitored_machines(
+            active_only=active_only,
+            search_term=search_term
+        )
+        
+        # Atualizar KPIs
+        self.update_machines_kpis()
+        
+        if not self.machines_list:
+            no_data = ctk.CTkLabel(
+                self.machines_scroll,
+                text="Nenhuma máquina encontrada",
+                text_color="gray"
+            )
+            no_data.pack(pady=20)
+            return
+        
+        # Criar cards de máquinas
+        for machine in self.machines_list:
+            self.create_machine_card(machine)
+    
+    def update_machines_kpis(self):
+        """Atualizar KPIs de máquinas"""
+        kpis = self.machine_manager.get_machines_kpis()
+        
+        self.machines_kpi_cards["total_machines"].value_label.configure(text=str(kpis.get("total_machines", 0)))
+        self.machines_kpi_cards["active_machines"].value_label.configure(text=str(kpis.get("active_machines", 0)))
+        self.machines_kpi_cards["total_tabs"].value_label.configure(text=str(kpis.get("total_tabs", 0)))
+        self.machines_kpi_cards["unique_domains"].value_label.configure(text=str(kpis.get("unique_domains", 0)))
+    
+    def apply_machines_search(self):
+        """Aplicar busca de máquinas"""
+        self.load_machines()
+    
+    def create_machine_card(self, machine: Dict):
+        """Criar card de máquina monitorada"""
+        card = ctk.CTkFrame(self.machines_scroll, fg_color="#1e293b", corner_radius=10)
+        card.pack(fill="x", pady=8, padx=5)
+        
+        content = ctk.CTkFrame(card, fg_color="transparent")
+        content.pack(fill="x", padx=15, pady=12)
+        
+        # Header: Machine ID + Status
+        header_frame = ctk.CTkFrame(content, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 10))
+        
+        # Ícone de máquina + ID
+        machine_label = ctk.CTkLabel(
+            header_frame,
+            text=f"🖥️ {machine['machine_id']}",
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        machine_label.pack(side="left")
+        
+        # Badge de status
+        is_active = machine.get('is_recently_active', False)
+        status_badge = ctk.CTkLabel(
+            header_frame,
+            text="🟢 ATIVA" if is_active else "⚫ INATIVA",
+            fg_color="#22c55e" if is_active else "#64748b",
+            corner_radius=4,
+            padx=8,
+            pady=2,
+            font=ctk.CTkFont(size=10, weight="bold")
+        )
+        status_badge.pack(side="left", padx=15)
+        
+        # Última atividade
+        from datetime import datetime
+        last_activity = datetime.fromisoformat(machine['last_activity'].replace('Z', '+00:00'))
+        time_ago = self.format_time_ago(last_activity)
+        
+        time_label = ctk.CTkLabel(
+            header_frame,
+            text=f"🕒 Última atividade: {time_ago}",
+            font=ctk.CTkFont(size=11),
+            text_color="gray"
+        )
+        time_label.pack(side="left", padx=10)
+        
+        # Estatísticas
+        stats_frame = ctk.CTkFrame(content, fg_color="#0f172a", corner_radius=6)
+        stats_frame.pack(fill="x", pady=(0, 10))
+        
+        stats_content = ctk.CTkFrame(stats_frame, fg_color="transparent")
+        stats_content.pack(fill="x", padx=10, pady=8)
+        
+        # Tabs abertas
+        tabs_label = ctk.CTkLabel(
+            stats_content,
+            text=f"📑 {machine['tabs_count']} abas abertas",
+            font=ctk.CTkFont(size=12)
+        )
+        tabs_label.pack(side="left", padx=10)
+        
+        # Domínios únicos
+        domains_label = ctk.CTkLabel(
+            stats_content,
+            text=f"🌐 {machine['domains_count']} domínios únicos",
+            font=ctk.CTkFont(size=12)
+        )
+        domains_label.pack(side="left", padx=10)
+        
+        # Top 5 domínios
+        if machine['domains']:
+            domains_text = ", ".join(machine['domains'][:5])
+            if len(machine['domains']) > 5:
+                domains_text += f" (+{len(machine['domains']) - 5} mais)"
+            
+            domains_list_label = ctk.CTkLabel(
+                content,
+                text=f"Domínios: {domains_text}",
+                font=ctk.CTkFont(size=11),
+                text_color="gray",
+                wraplength=1200,
+                justify="left"
+            )
+            domains_list_label.pack(fill="x", pady=(0, 10))
+        
+        # Botões de ação
+        actions_frame = ctk.CTkFrame(content, fg_color="transparent")
+        actions_frame.pack(fill="x")
+        
+        view_details_btn = ctk.CTkButton(
+            actions_frame,
+            text="📋 Ver Detalhes",
+            width=120,
+            height=32,
+            fg_color="#3b82f6",
+            command=lambda: self.show_machine_details(machine)
+        )
+        view_details_btn.pack(side="left", padx=(0, 10))
+        
+        view_sessions_btn = ctk.CTkButton(
+            actions_frame,
+            text="🌐 Ver Abas",
+            width=120,
+            height=32,
+            fg_color="#8b5cf6",
+            command=lambda: self.show_machine_sessions(machine)
+        )
+        view_sessions_btn.pack(side="left")
+    
+    def format_time_ago(self, dt: datetime) -> str:
+        """Formatar tempo relativo (há X minutos/horas)"""
+        from datetime import datetime, timedelta
+        
+        now = datetime.now(dt.tzinfo)
+        diff = now - dt
+        
+        if diff < timedelta(minutes=1):
+            return "agora"
+        elif diff < timedelta(hours=1):
+            minutes = int(diff.total_seconds() / 60)
+            return f"há {minutes} min"
+        elif diff < timedelta(days=1):
+            hours = int(diff.total_seconds() / 3600)
+            return f"há {hours}h"
+        else:
+            days = diff.days
+            return f"há {days} dias"
+    
+    def show_machine_details(self, machine: Dict):
+        """Mostrar detalhes detalhados da máquina em janela modal"""
+        logger.info(f"Ver detalhes da máquina: {machine['machine_id']}")
+        # TODO: Implementar diálogo com todas as informações
+    
+    def show_machine_sessions(self, machine: Dict):
+        """Mostrar todas as abas/sessões abertas da máquina"""
+        logger.info(f"Ver sessões da máquina: {machine['machine_id']}")
+        # TODO: Implementar diálogo listando todas as abas com URLs completas
+    
     def show_add_monitored_domain_dialog(self):
         """Exibir diálogo para adicionar domínio monitorado"""
         dialog = ctk.CTkToplevel(self)
@@ -919,7 +1222,13 @@ class MainWindow(ctk.CTk):
             # Recarregar dashboard quando houver novos alertas (usar safe_after)
             self.safe_after(0, self.load_dashboard_data)
         
+        def on_sessions_change(event):
+            logger.info(f"📡 Sessão alterada: {event.get('eventType')}")
+            # Recarregar máquinas após 1 segundo
+            self.safe_after(1000, self.load_machines)
+        
         self.realtime_manager.start(on_alert=on_alert)
+        self.realtime_manager.subscribe_to_sessions(on_sessions_change)
     
     def handle_logout(self):
         """Processar logout"""
