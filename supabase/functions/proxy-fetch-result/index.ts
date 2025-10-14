@@ -19,12 +19,6 @@ serve(async (req) => {
     const { command_id, machine_id, url, html_content, status_code, success, error } = await req.json();
 
     console.log(`📥 [ProxyFetch] Result received for command: ${command_id}, success: ${success}`);
-    console.log(`📊 [ProxyFetch] HTML size: ${html_content?.length || 0} bytes, URL: ${url}`);
-
-    // Warn if HTML is too large (but still allow it)
-    if (html_content && html_content.length > 100000) {
-      console.warn(`⚠️ [ProxyFetch] Large HTML detected: ${html_content.length} bytes`);
-    }
 
     // 1. Insert result into proxy_fetch_results
     const { data: resultData, error: insertError } = await supabase
@@ -43,11 +37,8 @@ serve(async (req) => {
 
     if (insertError) {
       console.error('❌ Error inserting proxy-fetch result:', insertError);
-      console.error('❌ Insert error details:', JSON.stringify(insertError, null, 2));
       throw insertError;
     }
-    
-    console.log(`✅ [ProxyFetch] Inserted result with ID: ${resultData.id}`);
 
     // 2. Update remote_commands status
     // Check if it's a protected domain (stealth mode)
@@ -83,18 +74,8 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('❌ Error in proxy-fetch-result:', error);
-    console.error('❌ Error stack:', error.stack);
-    console.error('❌ Error details:', JSON.stringify({
-      message: error.message,
-      name: error.name,
-      cause: error.cause
-    }, null, 2));
-    
     return new Response(
-      JSON.stringify({ 
-        error: error.message,
-        details: error.stack
-      }),
+      JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

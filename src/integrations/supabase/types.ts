@@ -177,56 +177,6 @@ export type Database = {
           },
         ]
       }
-      dom_snapshots: {
-        Row: {
-          captured_at: string | null
-          html_content: string
-          id: string
-          is_latest: boolean | null
-          machine_id: string
-          resources: Json | null
-          session_id: string | null
-          tab_id: string
-          title: string | null
-          url: string
-          viewport: Json | null
-        }
-        Insert: {
-          captured_at?: string | null
-          html_content: string
-          id?: string
-          is_latest?: boolean | null
-          machine_id: string
-          resources?: Json | null
-          session_id?: string | null
-          tab_id: string
-          title?: string | null
-          url: string
-          viewport?: Json | null
-        }
-        Update: {
-          captured_at?: string | null
-          html_content?: string
-          id?: string
-          is_latest?: boolean | null
-          machine_id?: string
-          resources?: Json | null
-          session_id?: string | null
-          tab_id?: string
-          title?: string | null
-          url?: string
-          viewport?: Json | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "dom_snapshots_session_id_fkey"
-            columns: ["session_id"]
-            isOneToOne: false
-            referencedRelation: "active_sessions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       incidents: {
         Row: {
           assigned_to: string | null
@@ -237,11 +187,9 @@ export type Database = {
           id: string
           incident_id: string
           is_red_list: boolean
-          local_storage: Json | null
           machine_id: string
           resolution_notes: string | null
           resolved_at: string | null
-          session_storage: Json | null
           severity: Database["public"]["Enums"]["incident_severity"]
           status: Database["public"]["Enums"]["incident_status"]
           tab_url: string | null
@@ -257,11 +205,9 @@ export type Database = {
           id?: string
           incident_id: string
           is_red_list?: boolean
-          local_storage?: Json | null
           machine_id: string
           resolution_notes?: string | null
           resolved_at?: string | null
-          session_storage?: Json | null
           severity?: Database["public"]["Enums"]["incident_severity"]
           status?: Database["public"]["Enums"]["incident_status"]
           tab_url?: string | null
@@ -277,11 +223,9 @@ export type Database = {
           id?: string
           incident_id?: string
           is_red_list?: boolean
-          local_storage?: Json | null
           machine_id?: string
           resolution_notes?: string | null
           resolved_at?: string | null
-          session_storage?: Json | null
           severity?: Database["public"]["Enums"]["incident_severity"]
           status?: Database["public"]["Enums"]["incident_status"]
           tab_url?: string | null
@@ -618,41 +562,12 @@ export type Database = {
           },
         ]
       }
-      websocket_connections: {
-        Row: {
-          connected_at: string
-          is_active: boolean | null
-          last_ping_at: string
-          machine_id: string
-        }
-        Insert: {
-          connected_at?: string
-          is_active?: boolean | null
-          last_ping_at?: string
-          machine_id: string
-        }
-        Update: {
-          connected_at?: string
-          is_active?: boolean | null
-          last_ping_at?: string
-          machine_id?: string
-        }
-        Relationships: []
-      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
       cleanup_old_sessions: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      cleanup_old_snapshots: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      cleanup_stale_websockets: {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }

