@@ -1060,6 +1060,29 @@ class MainWindow(ctk.CTk):
         )
         view_sessions_btn.pack(side="left")
     
+    def test_alert_sound(self):
+        """Testar som de alerta crítico"""
+        try:
+            logger.info("🔊 Testando som de alerta...")
+            self.realtime_manager._play_critical_alert_sound()
+            
+            # Mostrar feedback visual
+            def show_feedback():
+                try:
+                    from tkinter import messagebox
+                    messagebox.showinfo(
+                        "Teste de Som",
+                        "Som de alerta reproduzido!\n\nVocê ouviu 3 bips?"
+                    )
+                except Exception as e:
+                    logger.error(f"Erro ao mostrar feedback: {e}")
+            
+            # Agendar feedback após som terminar (1 segundo)
+            self.after(1000, show_feedback)
+            
+        except Exception as e:
+            logger.error(f"Erro ao testar som: {e}", exc_info=True)
+    
     def format_time_ago(self, dt: datetime) -> str:
         """Formatar tempo relativo (há X minutos/horas)"""
         from datetime import datetime, timedelta
@@ -1250,20 +1273,38 @@ class MainWindow(ctk.CTk):
             self.refresh_job_id = None
             logger.info("⏸️ Auto-refresh desativado")
     
-    def safe_after(self, ms, callback, *args):
-        """Versão segura do after() que verifica se a janela existe"""
-        if not self._destroyed:
-            after_id = self.after(ms, lambda: self._safe_callback(callback, *args))
+    def safe_after(self, ms: int, callback, *args):
+        """Agendar callback de forma segura"""
+        if self._destroyed:
+            return None
+        
+        def safe_callback():
+            if not self._destroyed:
+                try:
+                    callback(*args)
+                except Exception as e:
+                    logger.error(f"Erro em callback agendado: {e}", exc_info=True)
+        
+        try:
+            after_id = self.after(ms, safe_callback)
             self._after_ids.append(after_id)
             return after_id
+        except Exception as e:
+            logger.error(f"Erro ao agendar callback: {e}")
+            return None
     
     def _safe_callback(self, callback, *args):
-        """Executa callback apenas se a janela ainda existe"""
-        if not self._destroyed:
-            try:
-                callback(*args)
-            except Exception as e:
-                logger.error(f"Erro em callback: {e}", exc_info=True)
+        """Wrapper para callbacks agendados"""
+        if self._destroyed:
+            return
+            
+        if not hasattr(self, 'winfo_exists') or not self.winfo_exists():
+            return
+            
+        try:
+            callback(*args)
+        except Exception as e:
+            logger.error(f"Erro em callback: {e}", exc_info=True)
     
     def setup_realtime(self):
         """Configurar subscriptions realtime"""
@@ -1277,26 +1318,38 @@ class MainWindow(ctk.CTk):
             # Recarregar máquinas após 1 segundo
             self.safe_after(1000, self.load_machines)
         
-        def on_connection_status(mode: str):
-            """Atualizar badge de status de conexão"""
-            def update_badge():
-                if mode == "websocket":
-                    self.realtime_status_badge.configure(
-                        text="🟢 Websocket ativo",
-                        fg_color="#10b981"
-                    )
-                elif mode == "polling":
-                    self.realtime_status_badge.configure(
-                        text="🟡 Polling (fallback)",
-                        fg_color="#f59e0b"
-                    )
-                else:
-                    self.realtime_status_badge.configure(
-                        text="🔴 Desconectado",
-                        fg_color="#ef4444"
-                    )
+        def on_connection_status(status: str):
+            """Callback de mudança de status da conexão realtime"""
+            if self._destroyed:
+                return
+                
+            def update_ui():
+                if self._destroyed or not hasattr(self, 'realtime_status_badge'):
+                    return
+                    
+                try:
+                    if status == "websocket":
+                        self.realtime_status_badge.configure(
+                            text="🟢 Websocket ativo",
+                            fg_color="#10b981"
+                        )
+                        logger.info("✅ Realtime: WebSocket conectado")
+                    elif status == "polling":
+                        self.realtime_status_badge.configure(
+                            text="🟡 Polling (fallback)",
+                            fg_color="#f59e0b"
+                        )
+                        logger.warning("⚠️ Realtime: Modo polling (WebSocket falhou)")
+                    else:
+                        self.realtime_status_badge.configure(
+                            text="🔴 Desconectado",
+                            fg_color="#ef4444"
+                        )
+                        logger.error("❌ Realtime: Desconectado")
+                except Exception as e:
+                    logger.error(f"Erro ao atualizar badge de status: {e}")
             
-            self.safe_after(0, update_badge)
+            self.safe_after(0, update_ui)
         
         self.realtime_manager.on_connection_status_change(on_connection_status)
         self.realtime_manager.start(on_alert=on_alert)
