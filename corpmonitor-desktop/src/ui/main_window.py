@@ -80,18 +80,38 @@ class MainWindow(ctk.CTk):
     
     def create_widgets(self):
         """Criar elementos da interface"""
-        # Header
-        header = ctk.CTkFrame(self, height=70, fg_color="#1a1a1a")
-        header.pack(fill="x", padx=0, pady=0)
-        header.pack_propagate(False)
+        # Header com título e status
+        header_frame = ctk.CTkFrame(self, fg_color="transparent")
+        header_frame.pack(fill="x", padx=20, pady=(20, 10))
         
-        # Título
         title = ctk.CTkLabel(
-            header,
-            text="🔒 CorpMonitor Desktop",
-            font=ctk.CTkFont(size=24, weight="bold")
+            header_frame,
+            text="🛡️ CorpMonitor Desktop",
+            font=("Segoe UI", 24, "bold")
         )
-        title.pack(side="left", padx=20)
+        title.pack(side="left")
+        
+        # Realtime connection status badge
+        self.realtime_status_badge = ctk.CTkLabel(
+            header_frame,
+            text="🔴 Desconectado",
+            font=("Segoe UI", 11),
+            fg_color="#ef4444",
+            corner_radius=6,
+            padx=10,
+            pady=4
+        )
+        self.realtime_status_badge.pack(side="left", padx=10)
+        
+        # Test sound button
+        test_sound_btn = ctk.CTkButton(
+            header_frame,
+            text="🔊 Testar Som",
+            command=self.test_alert_sound,
+            width=120,
+            height=32
+        )
+        test_sound_btn.pack(side="right", padx=5)
         
         # User info
         user_name = self.auth_manager.get_user_name()

@@ -86,15 +86,18 @@ class RealtimeManager:
     
     def _run(self):
         """Thread principal do realtime"""
+        logger.info("🚀 Starting realtime manager thread...")
+        
         if self._ws_url and self._supabase_key:
             try:
+                logger.info("🔌 Attempting WebSocket connection...")
                 self._loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(self._loop)
-                self._notify_connection_status("websocket")
+                self._notify_connection_status("connecting")
                 self._loop.run_until_complete(self._run_async_realtime())
                 return
             except Exception as e:
-                logger.error(f"Falha no websocket Realtime, caindo para polling: {e}", exc_info=True)
+                logger.error(f"⚠️ WebSocket failed, falling back to polling: {e}", exc_info=True)
         else:
             logger.warning("Configuração de websocket incompleta, usando polling")
         
@@ -110,7 +113,7 @@ class RealtimeManager:
             logger.error("Módulo 'realtime' não encontrado, caindo para polling")
             raise
         
-        logger.info("Conectando ao Supabase Realtime (websocket)...")
+        logger.info("🔌 Setting up WebSocket realtime connection...")
         self._async_client = AsyncRealtimeClient(self._ws_url, self._supabase_key)
         
         try:
@@ -129,7 +132,8 @@ class RealtimeManager:
                 lambda status, err: logger.info(f"Realtime alerts channel: {status}")
             )
             
-            logger.info("✓ Realtime conectado via websocket")
+            logger.info("✅ WebSocket subscribed to admin_alerts realtime channel")
+            self._notify_connection_status("websocket")
             
             # Loop de escuta até pedirmos stop()
             while not self._stop_event.is_set():
@@ -214,25 +218,25 @@ class RealtimeManager:
             }
             
             # Log detalhado do alerta e metadata
-            logger.info("=" * 60)
-            logger.info(f"🚨 ALERTA RECEBIDO")
-            logger.info(f"   Tipo: {alert_type}")
-            logger.info(f"   Domínio: {alert['domain']}")
+            logger.info("=" * 80)
+            logger.info(f"🚨 ALERT RECEIVED - {alert_type.upper()}")
+            logger.info(f"   Alert ID: {data.get('id', 'N/A')}")
+            logger.info(f"   Domain: {alert['domain']}")
             logger.info(f"   Machine: {alert['machine_id']}")
             logger.info(f"   URL: {alert['url']}")
-            logger.info(f"   Crítico: {is_critical}")
-            logger.info(f"   Metadata completa: {metadata}")
-            logger.info("=" * 60)
+            logger.info(f"   Critical: {'YES ⚠️' if is_critical else 'No'}")
+            logger.info(f"   Metadata: {metadata}")
+            logger.info("=" * 80)
             
             # Notificação e som apropriado
-            logger.info(f"🔔 Exibindo notificação do sistema...")
+            logger.info(f"📬 Showing system notification...")
             self._show_system_notification(alert)
             
             if is_critical:
-                logger.info(f"🔊 Reproduzindo som de alerta CRÍTICO")
+                logger.info(f"🔊 Playing CRITICAL alert sound...")
                 self._play_critical_alert_sound()
             else:
-                logger.info(f"🔊 Reproduzindo som de alerta padrão")
+                logger.info(f"🔊 Playing standard alert sound...")
                 self._play_alert_sound()
             
             # Chamar callbacks registrados
@@ -277,14 +281,18 @@ class RealtimeManager:
     def _play_critical_alert_sound(self):
         """Tocar som de alerta CRÍTICO (repetido e alto)"""
         try:
+            logger.info("🔊 Playing critical alert sound...")
             def play():
                 try:
-                    # 3 beeps longos e altos (1500Hz, 800ms cada)
-                    for _ in range(3):
-                        winsound.Beep(1500, 800)
-                        time.sleep(0.2)
-                except Exception:
-                    pass
+                    # Use MessageBeep for reliability
+                    winsound.MessageBeep(winsound.MB_ICONHAND)
+                    time.sleep(0.3)
+                    winsound.MessageBeep(winsound.MB_ICONHAND)
+                    time.sleep(0.3)
+                    winsound.MessageBeep(winsound.MB_ICONHAND)
+                    logger.info("✅ Alert sound played successfully")
+                except Exception as e:
+                    logger.error(f"❌ Error playing sound: {e}", exc_info=True)
             
             threading.Thread(target=play, daemon=True).start()
         except Exception as e:

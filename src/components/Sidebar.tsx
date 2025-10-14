@@ -6,27 +6,31 @@ import {
   Settings,
   Database,
   Clock,
-  MonitorSpeaker
+  MonitorSpeaker,
+  Bell
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
-
-const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard, current: true },
-  { name: "Incidentes", href: "/incidents", icon: AlertTriangle, badge: "12" },
-  { name: "Hosts Monitorados", href: "/hosts", icon: Shield },
-  { name: "Controle Remoto", href: "/remote-control", icon: MonitorSpeaker, adminOnly: true },
-  { name: "Auditoria", href: "/audit", icon: FileText },
-  { name: "Logs do Sistema", href: "/logs", icon: Database },
-  { name: "Histórico", href: "/history", icon: Clock },
-  { name: "Configurações", href: "/settings", icon: Settings },
-];
+import { useAlerts } from "@/hooks/useAlerts";
 
 const Sidebar = () => {
   const location = useLocation();
   const { isAdmin, isDemoAdmin } = useAuth();
+  const { unacknowledgedCount } = useAlerts({ limit: 1 });
+
+  const navigation = [
+    { name: "Dashboard", href: "/", icon: LayoutDashboard, current: true },
+    { name: "Incidentes", href: "/incidents", icon: AlertTriangle },
+    { name: "Alertas", href: "/alerts", icon: Bell, badge: unacknowledgedCount > 0 ? unacknowledgedCount.toString() : undefined },
+    { name: "Hosts Monitorados", href: "/hosts", icon: Shield },
+    { name: "Controle Remoto", href: "/remote-control", icon: MonitorSpeaker, adminOnly: true },
+    { name: "Auditoria", href: "/audit", icon: FileText },
+    { name: "Logs do Sistema", href: "/logs", icon: Database },
+    { name: "Histórico", href: "/history", icon: Clock },
+    { name: "Configurações", href: "/settings", icon: Settings },
+  ];
 
   return (
     <div className="flex flex-col w-sidebar bg-sidebar border-r h-screen sticky top-0">
@@ -67,7 +71,9 @@ const Sidebar = () => {
                 <Badge 
                   className={cn(
                     "ml-auto",
-                    item.name === "Incidentes" ? "bg-danger text-danger-foreground" : "bg-primary text-primary-foreground"
+                    item.name === "Alertas" || item.name === "Incidentes" 
+                      ? "bg-danger text-danger-foreground" 
+                      : "bg-primary text-primary-foreground"
                   )}
                 >
                   {item.badge}
