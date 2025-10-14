@@ -469,17 +469,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     return false;
   };
   
-  // Block top-level navigation
-  try {
-    Object.defineProperty(window.location, 'href', {
-      set: function(url) {
-        console.log('[AntiRedirect] Blocked href set to:', url);
-        return false;
-      }
-    });
-  } catch (e) {
-    console.warn('[AntiRedirect] Could not override href setter:', e);
-  }
+  // Block top-level navigation (href setter removed - causes syntax errors)
   
   // 🔗 UNIVERSAL URL NORMALIZER (for dynamically added elements)
   const ORIGIN = new URL(BASE_URL).origin;
@@ -744,9 +734,8 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       }
       
       if (event.data?.type === 'local-proxy:navigate') {
-        const { url, incidentId } = event.data;
-        if (incidentId !== incident.id) return;
-        
+        const { url } = event.data;
+        // Accept navigation from any incident - only one viewer is open at a time
         handleNavigation(url);
       }
     };
@@ -1033,7 +1022,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
                 key={iframeKey}
                 srcDoc={srcDoc}
                 className="w-full h-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"
+                sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"
                 title={`Site: ${incident.host}`}
                 onLoad={() => console.log('[LocalProxy] Iframe loaded')}
                 onError={(e) => console.error('[LocalProxy] Iframe error:', e)}
