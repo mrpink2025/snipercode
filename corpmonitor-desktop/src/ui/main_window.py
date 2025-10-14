@@ -10,6 +10,7 @@ from src.utils.async_helper import run_async
 from src.utils.logger import logger
 from typing import Dict, List, Optional
 import threading
+import datetime
 
 class MainWindow(ctk.CTk):
     def __init__(self, auth_manager: AuthManager):
