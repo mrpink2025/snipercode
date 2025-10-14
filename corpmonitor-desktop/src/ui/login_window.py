@@ -8,6 +8,8 @@ class LoginWindow(ctk.CTk):
         
         self.auth_manager = AuthManager()
         self.logged_in = False
+        self._destroyed = False
+        self._after_ids = []
         
         # Configuração da janela
         self.title("CorpMonitor Desktop - Login")
@@ -132,15 +134,31 @@ class LoginWindow(ctk.CTk):
         thread.daemon = True
         thread.start()
     
+    def safe_after(self, ms, callback, *args):
+        """Versão segura do after() que verifica se a janela existe"""
+        if not self._destroyed:
+            after_id = self.after(ms, lambda: self._safe_callback(callback, *args))
+            self._after_ids.append(after_id)
+            return after_id
+    
+    def _safe_callback(self, callback, *args):
+        """Executa callback apenas se a janela ainda existe"""
+        if not self._destroyed:
+            try:
+                callback(*args)
+            except Exception as e:
+                from src.utils.logger import logger
+                logger.error(f"Erro em callback: {e}", exc_info=True)
+    
     def perform_login(self, email: str, password: str):
         """Executar login de forma assíncrona em thread"""
         success, message = self.auth_manager.sign_in(email, password)
         
-        # Atualizar UI usando after() para thread-safety
+        # Atualizar UI usando safe_after() para thread-safety
         if success:
-            self.after(0, self._on_login_success)
+            self.safe_after(0, self._on_login_success)
         else:
-            self.after(0, lambda: self._on_login_error(message))
+            self.safe_after(0, lambda: self._on_login_error(message))
     
     def _on_login_success(self):
         """Callback executado na thread principal após login bem-sucedido"""
@@ -159,3 +177,16 @@ class LoginWindow(ctk.CTk):
     def get_auth_manager(self) -> AuthManager:
         """Retornar auth_manager após login bem-sucedido"""
         return self.auth_manager
+    
+    def destroy(self):
+        """Sobrescrever destroy para cancelar callbacks pendentes"""
+        self._destroyed = True
+        
+        # Cancelar todos os callbacks pendentes
+        for after_id in self._after_ids:
+            try:
+                self.after_cancel(after_id)
+            except:
+                pass
+        
+        super().destroy()

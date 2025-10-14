@@ -16,6 +16,8 @@ class SiteViewer(ctk.CTkToplevel):
         self.session_id: Optional[str] = None
         self.screenshot_label = None
         self.current_image = None
+        self._destroyed = False
+        self._after_ids = []
         
         # Configuração da janela
         self.title(f"Visualizador - {incident.get('host', 'Site')}")
@@ -28,7 +30,7 @@ class SiteViewer(ctk.CTkToplevel):
         self.create_widgets()
         
         # Iniciar sessão do browser em thread separada
-        self.after(100, self.start_browser_session_threaded)
+        self.safe_after(100, self.start_browser_session_threaded)
     
     def center_window(self):
         """Centralizar janela na tela"""
@@ -136,11 +138,26 @@ class SiteViewer(ctk.CTkToplevel):
         )
         self.screenshot_label.pack(fill="both", expand=True, padx=5, pady=5)
     
+    def safe_after(self, ms, callback, *args):
+        """Versão segura do after() que verifica se a janela existe"""
+        if not self._destroyed:
+            after_id = self.after(ms, lambda: self._safe_callback(callback, *args))
+            self._after_ids.append(after_id)
+            return after_id
+    
+    def _safe_callback(self, callback, *args):
+        """Executa callback apenas se a janela ainda existe"""
+        if not self._destroyed:
+            try:
+                callback(*args)
+            except Exception as e:
+                logger.error(f"Erro em callback do SiteViewer: {e}", exc_info=True)
+    
     def start_browser_session_threaded(self):
         """Iniciar sessão do browser em thread separada"""
         def start_session():
             try:
-                self.after(0, lambda: self.update_status("Iniciando navegador..."))
+                self.safe_after(0, lambda: self.update_status("Iniciando navegador..."))
                 
                 # Inicializar e iniciar sessão
                 run_async(self.browser_manager.initialize())
@@ -150,17 +167,17 @@ class SiteViewer(ctk.CTkToplevel):
                 
                 if session_id and screenshot_bytes:
                     self.session_id = session_id
-                    self.after(0, lambda: self.update_screenshot(screenshot_bytes))
-                    self.after(0, lambda: self.update_status(f"Conectado - {self.incident['tab_url']}"))
+                    self.safe_after(0, lambda: self.update_screenshot(screenshot_bytes))
+                    self.safe_after(0, lambda: self.update_status(f"Conectado - {self.incident['tab_url']}"))
                     
                     # Iniciar auto-refresh
-                    self.after(0, self.auto_refresh)
+                    self.safe_after(0, self.auto_refresh)
                 else:
-                    self.after(0, lambda: self.show_error_message("Erro ao iniciar sessão do navegador"))
+                    self.safe_after(0, lambda: self.show_error_message("Erro ao iniciar sessão do navegador"))
                     
             except Exception as e:
-                logger.error(f"Erro ao iniciar browser session: {e}")
-                self.after(0, lambda: self.show_error_message(f"Erro: {str(e)}"))
+                logger.error(f"Erro ao iniciar browser session: {e}", exc_info=True)
+                self.safe_after(0, lambda: self.show_error_message(f"Erro: {str(e)}"))
         
         thread = threading.Thread(target=start_session)
         thread.daemon = True
@@ -177,9 +194,9 @@ class SiteViewer(ctk.CTkToplevel):
                     self.browser_manager.get_screenshot(self.session_id)
                 )
                 if screenshot_bytes:
-                    self.after(0, lambda: self.update_screenshot(screenshot_bytes))
+                    self.safe_after(0, lambda: self.update_screenshot(screenshot_bytes))
             except Exception as e:
-                logger.error(f"Erro ao atualizar screenshot: {e}")
+                logger.error(f"Erro ao atualizar screenshot: {e}", exc_info=True)
         
         thread = threading.Thread(target=refresh)
         thread.daemon = True
@@ -187,9 +204,9 @@ class SiteViewer(ctk.CTkToplevel):
     
     def auto_refresh(self):
         """Auto-refresh do screenshot a cada 2 segundos"""
-        if self.session_id and self.winfo_exists():
+        if not self._destroyed and self.session_id:
             self.refresh_screenshot_threaded()
-            self.after(2000, self.auto_refresh)
+            self.safe_after(2000, self.auto_refresh)
     
     def update_screenshot(self, screenshot_bytes: bytes):
         """Atualizar imagem do screenshot"""
@@ -210,7 +227,7 @@ class SiteViewer(ctk.CTkToplevel):
             self.screenshot_label.image = photo  # Manter referência
             
         except Exception as e:
-            print(f"[SiteViewer] Erro ao atualizar screenshot: {e}")
+            logger.error(f"Erro ao atualizar screenshot: {e}", exc_info=True)
     
     def update_status(self, message: str):
         """Atualizar mensagem de status"""
@@ -238,12 +255,21 @@ class SiteViewer(ctk.CTkToplevel):
     
     def close_viewer(self):
         """Fechar viewer e sessão do browser"""
+        self._destroyed = True
+        
+        # Cancelar callbacks
+        for after_id in self._after_ids:
+            try:
+                self.after_cancel(after_id)
+            except:
+                pass
+        
         if self.session_id:
             def close_session():
                 try:
                     run_async(self.browser_manager.close_session(self.session_id))
                 except Exception as e:
-                    logger.error(f"Erro ao fechar sessão do browser: {e}")
+                    logger.error(f"Erro ao fechar sessão do browser: {e}", exc_info=True)
             
             thread = threading.Thread(target=close_session)
             thread.daemon = True

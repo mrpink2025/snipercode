@@ -15,6 +15,8 @@ class MainWindow(ctk.CTk):
         super().__init__()
         
         self.auth_manager = auth_manager
+        self._destroyed = False
+        self._after_ids = []
         
         # Validar que o usuário está autenticado
         if not auth_manager.current_user or not auth_manager.current_user.get("id"):
@@ -492,18 +494,33 @@ class MainWindow(ctk.CTk):
                 self.load_blocked_domains()
                 logger.info("Dados iniciais carregados com sucesso")
             except Exception as e:
-                logger.error(f"Erro ao carregar dados iniciais: {e}")
+                logger.error(f"Erro ao carregar dados iniciais: {e}", exc_info=True)
         
         thread = threading.Thread(target=load)
         thread.daemon = True
         thread.start()
     
+    def safe_after(self, ms, callback, *args):
+        """Versão segura do after() que verifica se a janela existe"""
+        if not self._destroyed:
+            after_id = self.after(ms, lambda: self._safe_callback(callback, *args))
+            self._after_ids.append(after_id)
+            return after_id
+    
+    def _safe_callback(self, callback, *args):
+        """Executa callback apenas se a janela ainda existe"""
+        if not self._destroyed:
+            try:
+                callback(*args)
+            except Exception as e:
+                logger.error(f"Erro em callback: {e}", exc_info=True)
+    
     def setup_realtime(self):
         """Configurar subscriptions realtime"""
         def on_alert(alert: Dict):
             logger.info(f"🔔 Novo alerta recebido: {alert}")
-            # Recarregar dashboard quando houver novos alertas
-            self.after(0, self.load_dashboard_data)
+            # Recarregar dashboard quando houver novos alertas (usar safe_after)
+            self.safe_after(0, self.load_dashboard_data)
         
         self.realtime_manager.subscribe_to_alerts(on_alert)
     
@@ -531,10 +548,26 @@ class MainWindow(ctk.CTk):
             
             logger.info("Logout concluído")
         except Exception as e:
-            logger.error(f"Erro durante logout: {e}")
+            logger.error(f"Erro durante logout: {e}", exc_info=True)
         finally:
             # Fechar janela
             self.destroy()
+    
+    def destroy(self):
+        """Sobrescrever destroy para limpar recursos"""
+        self._destroyed = True
         
-        self.auth_manager.sign_out()
-        self.destroy()
+        # Cancelar callbacks pendentes
+        for after_id in self._after_ids:
+            try:
+                self.after_cancel(after_id)
+            except:
+                pass
+        
+        # Limpar recursos
+        try:
+            self.realtime_manager.unsubscribe_all()
+        except:
+            pass
+        
+        super().destroy()
