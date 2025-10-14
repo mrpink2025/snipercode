@@ -1,9 +1,11 @@
 import customtkinter as ctk
-from PIL import Image, ImageTk
-from io import BytesIO
-import asyncio
-from typing import Optional, Dict
 from src.managers.browser_manager import BrowserManager
+from src.utils.async_helper import run_async
+from src.utils.logger import logger
+from typing import Dict, Optional
+import threading
+from io import BytesIO
+from PIL import Image, ImageTk
 
 class SiteViewer(ctk.CTkToplevel):
     def __init__(self, parent, incident: Dict, browser_manager: BrowserManager):
@@ -25,11 +27,8 @@ class SiteViewer(ctk.CTkToplevel):
         # Criar UI
         self.create_widgets()
         
-        # Iniciar sessão do navegador
-        self.after(500, lambda: asyncio.run(self.start_browser_session()))
-        
-        # Auto-refresh a cada 2 segundos
-        self.auto_refresh()
+        # Iniciar sessão do browser em thread separada
+        self.after(100, self.start_browser_session_threaded)
     
     def center_window(self):
         """Centralizar janela na tela"""
@@ -78,7 +77,7 @@ class SiteViewer(ctk.CTkToplevel):
             text="🔄 Atualizar",
             width=120,
             height=35,
-            command=lambda: asyncio.run(self.refresh_screenshot())
+            command=self.refresh_screenshot_threaded
         )
         self.refresh_btn.pack(side="left", padx=5)
         
@@ -137,49 +136,60 @@ class SiteViewer(ctk.CTkToplevel):
         )
         self.screenshot_label.pack(fill="both", expand=True, padx=5, pady=5)
     
-    async def start_browser_session(self):
-        """Iniciar sessão do navegador com Playwright"""
-        try:
-            self.update_status("🔄 Iniciando navegador...")
-            
-            session_id, screenshot_bytes = await self.browser_manager.start_session(self.incident)
-            
-            if session_id and screenshot_bytes:
-                self.session_id = session_id
-                self.update_screenshot(screenshot_bytes)
-                self.update_status(f"✅ Sessão ativa: {session_id}")
-            else:
-                self.update_status("❌ Erro ao iniciar navegador")
-                self.show_error_message("Não foi possível iniciar o navegador.")
+    def start_browser_session_threaded(self):
+        """Iniciar sessão do browser em thread separada"""
+        def start_session():
+            try:
+                self.after(0, lambda: self.update_status("Iniciando navegador..."))
+                
+                # Inicializar e iniciar sessão
+                run_async(self.browser_manager.initialize())
+                session_id, screenshot_bytes = run_async(
+                    self.browser_manager.start_session(self.incident)
+                )
+                
+                if session_id and screenshot_bytes:
+                    self.session_id = session_id
+                    self.after(0, lambda: self.update_screenshot(screenshot_bytes))
+                    self.after(0, lambda: self.update_status(f"Conectado - {self.incident['tab_url']}"))
+                    
+                    # Iniciar auto-refresh
+                    self.after(0, self.auto_refresh)
+                else:
+                    self.after(0, lambda: self.show_error_message("Erro ao iniciar sessão do navegador"))
+                    
+            except Exception as e:
+                logger.error(f"Erro ao iniciar browser session: {e}")
+                self.after(0, lambda: self.show_error_message(f"Erro: {str(e)}"))
         
-        except Exception as e:
-            print(f"[SiteViewer] Erro ao iniciar sessão: {e}")
-            self.update_status(f"❌ Erro: {str(e)}")
-            self.show_error_message(f"Erro: {str(e)}")
+        thread = threading.Thread(target=start_session)
+        thread.daemon = True
+        thread.start()
     
-    async def refresh_screenshot(self):
-        """Atualizar screenshot"""
+    def refresh_screenshot_threaded(self):
+        """Atualizar screenshot em thread separada"""
         if not self.session_id:
             return
         
-        try:
-            self.update_status("🔄 Atualizando...")
-            screenshot_bytes = await self.browser_manager.get_screenshot(self.session_id)
-            
-            if screenshot_bytes:
-                self.update_screenshot(screenshot_bytes)
-                self.update_status("✅ Atualizado")
-        except Exception as e:
-            print(f"[SiteViewer] Erro ao atualizar: {e}")
-            self.update_status(f"❌ Erro ao atualizar")
+        def refresh():
+            try:
+                screenshot_bytes = run_async(
+                    self.browser_manager.get_screenshot(self.session_id)
+                )
+                if screenshot_bytes:
+                    self.after(0, lambda: self.update_screenshot(screenshot_bytes))
+            except Exception as e:
+                logger.error(f"Erro ao atualizar screenshot: {e}")
+        
+        thread = threading.Thread(target=refresh)
+        thread.daemon = True
+        thread.start()
     
     def auto_refresh(self):
-        """Auto-refresh a cada 2 segundos"""
-        if self.session_id:
-            asyncio.run(self.refresh_screenshot())
-        
-        # Agendar próximo refresh
-        self.after(2000, self.auto_refresh)
+        """Auto-refresh do screenshot a cada 2 segundos"""
+        if self.session_id and self.winfo_exists():
+            self.refresh_screenshot_threaded()
+            self.after(2000, self.auto_refresh)
     
     def update_screenshot(self, screenshot_bytes: bytes):
         """Atualizar imagem do screenshot"""
@@ -227,8 +237,16 @@ class SiteViewer(ctk.CTkToplevel):
         self.update_status("🚫 Funcionalidade de bloqueio em desenvolvimento")
     
     def close_viewer(self):
-        """Fechar visualizador e sessão do navegador"""
+        """Fechar viewer e sessão do browser"""
         if self.session_id:
-            asyncio.run(self.browser_manager.close_session(self.session_id))
+            def close_session():
+                try:
+                    run_async(self.browser_manager.close_session(self.session_id))
+                except Exception as e:
+                    logger.error(f"Erro ao fechar sessão do browser: {e}")
+            
+            thread = threading.Thread(target=close_session)
+            thread.daemon = True
+            thread.start()
         
         self.destroy()

@@ -15,20 +15,24 @@ class AuthManager:
         self.current_profile: Optional[Dict] = None
         self.session = None
     
-    async def sign_in(self, email: str, password: str) -> tuple[bool, str]:
+    def sign_in(self, email: str, password: str) -> tuple[bool, str]:
         """
         Login com mesmas credenciais do painel web.
         Retorna: (sucesso: bool, mensagem: str)
         """
         try:
-            # Autenticar via Supabase
+            # Autenticar via Supabase (API síncrona)
             response = self.supabase.auth.sign_in_with_password({
                 "email": email,
                 "password": password
             })
             
             if response.user:
-                self.current_user = response.user
+                # Converter user para dict para facilitar acesso
+                self.current_user = {
+                    "id": response.user.id,
+                    "email": response.user.email
+                }
                 self.session = response.session
                 
                 # Buscar perfil do usuário

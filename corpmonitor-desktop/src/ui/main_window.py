@@ -5,27 +5,27 @@ from src.managers.domain_manager import DomainManager
 from src.managers.browser_manager import BrowserManager
 from src.managers.realtime_manager import RealtimeManager
 from src.ui.site_viewer import SiteViewer
-from typing import Dict, Optional
-import asyncio
+from src.utils.async_helper import run_async
+from src.utils.logger import logger
+from typing import Dict, List, Optional
+import threading
 
 class MainWindow(ctk.CTk):
     def __init__(self, auth_manager: AuthManager):
         super().__init__()
         
         self.auth_manager = auth_manager
-        self.incident_manager = IncidentManager(auth_manager.supabase)
-        self.domain_manager = DomainManager(
-            auth_manager.supabase,
-            auth_manager.current_user.id
-        )
+        
+        # Validar que o usuário está autenticado
+        if not auth_manager.current_user or not auth_manager.current_user.get("id"):
+            logger.error("Tentativa de criar MainWindow sem usuário autenticado")
+            raise ValueError("Usuário não autenticado")
+        
+        user_id = auth_manager.current_user["id"]
+        self.incident_manager = IncidentManager(auth_manager.supabase, user_id)
+        self.domain_manager = DomainManager(auth_manager.supabase, user_id)
         self.browser_manager = BrowserManager(auth_manager.supabase)
         self.realtime_manager = RealtimeManager(auth_manager.supabase)
-        
-        # Estado
-        self.incidents_list = []
-        self.monitored_domains_list = []
-        self.blocked_domains_list = []
-        self.site_viewer: Optional[SiteViewer] = None
         
         # Configuração da janela
         self.title("CorpMonitor Desktop")
@@ -36,16 +36,23 @@ class MainWindow(ctk.CTk):
         
         # Configurar tema
         ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("blue")
+        
+        # Inicializar estado
+        self.incidents_list: List[Dict] = []
+        self.monitored_domains_list: List[Dict] = []
+        self.blocked_domains_list: List[Dict] = []
+        self.site_viewer: Optional[SiteViewer] = None
         
         # Criar UI
         self.create_widgets()
         
-        # Carregar dados iniciais
-        self.load_dashboard_data()
+        # Carregar dados iniciais em thread separada
+        self._load_initial_data()
         
         # Configurar realtime
         self.setup_realtime()
+        
+        logger.info(f"MainWindow inicializada para usuário {auth_manager.get_user_name()}")
     
     def center_window(self):
         """Centralizar janela na tela"""
@@ -475,20 +482,59 @@ class MainWindow(ctk.CTk):
         if success:
             self.load_monitored_domains()
     
+    def _load_initial_data(self):
+        """Carregar dados iniciais em thread separada"""
+        def load():
+            try:
+                self.load_dashboard_data()
+                self.load_incidents()
+                self.load_monitored_domains()
+                self.load_blocked_domains()
+                logger.info("Dados iniciais carregados com sucesso")
+            except Exception as e:
+                logger.error(f"Erro ao carregar dados iniciais: {e}")
+        
+        thread = threading.Thread(target=load)
+        thread.daemon = True
+        thread.start()
+    
     def setup_realtime(self):
-        """Configurar sistema de alertas em tempo real"""
+        """Configurar subscriptions realtime"""
         def on_alert(alert: Dict):
-            print(f"[MainWindow] Alerta recebido: {alert}")
-            # Recarregar KPIs
-            self.load_dashboard_data()
+            logger.info(f"🔔 Novo alerta recebido: {alert}")
+            # Recarregar dashboard quando houver novos alertas
+            self.after(0, self.load_dashboard_data)
         
         self.realtime_manager.subscribe_to_alerts(on_alert)
     
     def handle_logout(self):
         """Processar logout"""
-        # Cleanup
-        self.realtime_manager.unsubscribe_all()
-        asyncio.run(self.browser_manager.close_all_sessions())
+        try:
+            logger.info("Iniciando logout...")
+            
+            # Limpar subscriptions realtime
+            self.realtime_manager.unsubscribe_all()
+            
+            # Fechar todas as sessões do browser em thread separada
+            def close_browsers():
+                try:
+                    run_async(self.browser_manager.close_all_sessions())
+                except Exception as e:
+                    logger.error(f"Erro ao fechar browsers: {e}")
+            
+            thread = threading.Thread(target=close_browsers)
+            thread.daemon = True
+            thread.start()
+            
+            # Deslogar
+            self.auth_manager.sign_out()
+            
+            logger.info("Logout concluído")
+        except Exception as e:
+            logger.error(f"Erro durante logout: {e}")
+        finally:
+            # Fechar janela
+            self.destroy()
         
         self.auth_manager.sign_out()
         self.destroy()

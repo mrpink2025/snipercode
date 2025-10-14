@@ -1,6 +1,6 @@
 import customtkinter as ctk
 from src.managers.auth_manager import AuthManager
-import asyncio
+import threading
 
 class LoginWindow(ctk.CTk):
     def __init__(self):
@@ -127,19 +127,30 @@ class LoginWindow(ctk.CTk):
         self.login_button.configure(state="disabled", text="Autenticando...")
         self.error_label.configure(text="")
         
-        # Executar login assíncrono
-        asyncio.run(self.perform_login(email, password))
+        # Executar login em thread separada para não travar a UI
+        thread = threading.Thread(target=self.perform_login, args=(email, password))
+        thread.daemon = True
+        thread.start()
     
-    async def perform_login(self, email: str, password: str):
-        """Executar login de forma assíncrona"""
-        success, message = await self.auth_manager.sign_in(email, password)
+    def perform_login(self, email: str, password: str):
+        """Executar login de forma assíncrona em thread"""
+        success, message = self.auth_manager.sign_in(email, password)
         
+        # Atualizar UI usando after() para thread-safety
         if success:
-            self.logged_in = True
-            self.destroy()  # Fechar janela de login
+            self.after(0, self._on_login_success)
         else:
-            self.show_error(message)
-            self.login_button.configure(state="normal", text="Entrar")
+            self.after(0, lambda: self._on_login_error(message))
+    
+    def _on_login_success(self):
+        """Callback executado na thread principal após login bem-sucedido"""
+        self.logged_in = True
+        self.destroy()
+    
+    def _on_login_error(self, message: str):
+        """Callback executado na thread principal após erro de login"""
+        self.show_error(message)
+        self.login_button.configure(state="normal", text="Entrar")
     
     def show_error(self, message: str):
         """Exibir mensagem de erro"""
