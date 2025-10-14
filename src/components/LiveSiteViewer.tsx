@@ -307,23 +307,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       console.log('[LocalProxy] ✅ Injected permissive CSP with base-uri');
     }
     
-    // 🚫 STEP 4: Remove ALL Cloudflare-related scripts and problematic paths
-    // Remove script tags by src pattern (with or without closing tag)
-    processed = processed.replace(/<script[^>]*src=["'][^"']*cdn-cgi[^"']*["'][^>]*>[\s\S]*?<\/script>/gi, '');
-    processed = processed.replace(/<script[^>]*src=["'][^"']*cloudflare[^"']*["'][^>]*>[\s\S]*?<\/script>/gi, '');
-    processed = processed.replace(/<script[^>]*src=["'][^"']*\/cake\/[^"']*["'][^>]*>[\s\S]*?<\/script>/gi, '');
-    processed = processed.replace(/<script[^>]*src=["'][^"']*challenge-platform[^"']*["'][^>]*>[\s\S]*?<\/script>/gi, '');
-    
-    // Remove inline scripts that reference Cloudflare
-    processed = processed.replace(/<script[^>]*>[\s\S]*?cloudflare[\s\S]*?<\/script>/gi, '');
-    processed = processed.replace(/<script[^>]*>[\s\S]*?cdn-cgi[\s\S]*?<\/script>/gi, '');
-    
-    // Remove noscript Cloudflare fallbacks
-    processed = processed.replace(/<noscript[^>]*>[\s\S]*?cloudflare[\s\S]*?<\/noscript>/gi, '');
-    
-    console.log('[LocalProxy] 🧹 Filtered ALL Cloudflare scripts and challenges');
-    
-    // 🔗 STEP 5: Convert relative script src to absolute URLs
+    // 🔗 STEP 4: Convert relative script src to absolute URLs
     processed = processed.replace(/<script([^>]*)\ssrc=["']\/([^"']+)["']/gi, (match, attrs, path) => {
       return `<script${attrs} src="${origin}/${path}"`;
     });
@@ -335,11 +319,20 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       /(<link[^>]+href=["'])([^"']+)(["'][^>]*>)/gi,
       (match, prefix, url, suffix) => {
         try {
-          // Skip if already absolute or special protocols
-          if (url.startsWith('http') || url.startsWith('//') || url.startsWith('data:') || url.startsWith('blob:')) {
+          // Skip only absolute HTTP(S) and special protocols
+          if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
             return match;
           }
-          const absolute = new URL(url, origin).href;
+          
+          // Normalize protocol-relative and relative URLs
+          let absolute;
+          if (url.startsWith('//')) {
+            // Protocol-relative: //example.com/path → https://example.com/path
+            absolute = `https:${url}`;
+          } else {
+            // Relative: /path or path → https://origin/path
+            absolute = new URL(url, origin).href;
+          }
           
           if (assetsMode === 'proxy') {
             const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
@@ -355,10 +348,18 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       /(<script[^>]+src=["'])([^"']+)(["'][^>]*>)/gi,
       (match, prefix, url, suffix) => {
         try {
-          if (url.startsWith('http') || url.startsWith('//') || url.startsWith('data:') || url.startsWith('blob:')) {
+          // Skip only absolute HTTP(S) and special protocols
+          if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
             return match;
           }
-          const absolute = new URL(url, origin).href;
+          
+          // Normalize protocol-relative and relative URLs
+          let absolute;
+          if (url.startsWith('//')) {
+            absolute = `https:${url}`;
+          } else {
+            absolute = new URL(url, origin).href;
+          }
           
           if (assetsMode === 'proxy') {
             const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
@@ -374,10 +375,18 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
       /(<img[^>]+src=["'])([^"']+)(["'])/gi,
       (match, prefix, url, suffix) => {
         try {
-          if (url.startsWith('http') || url.startsWith('//') || url.startsWith('data:') || url.startsWith('blob:')) {
+          // Skip only absolute HTTP(S) and special protocols
+          if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
             return match;
           }
-          const absolute = new URL(url, origin).href;
+          
+          // Normalize protocol-relative and relative URLs
+          let absolute;
+          if (url.startsWith('//')) {
+            absolute = `https:${url}`;
+          } else {
+            absolute = new URL(url, origin).href;
+          }
           
           if (assetsMode === 'proxy') {
             const proxied = `${PROXY_BASE}?url=${encodeURIComponent(absolute)}&incident=${proxyIncidentId}&rawContent=true`;
@@ -443,6 +452,108 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     console.warn('[AntiRedirect] Could not override href setter:', e);
   }
   
+  // 🔗 UNIVERSAL URL NORMALIZER (for dynamically added elements)
+  const ORIGIN = new URL(BASE_URL).origin;
+
+  function normalizeUrl(url) {
+    if (!url || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('javascript:') || url.startsWith('#')) {
+      return url;
+    }
+    
+    // Already absolute
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    
+    // Protocol-relative: //example.com/path
+    if (url.startsWith('//')) {
+      return 'https:' + url;
+    }
+    
+    // Relative: /path or path
+    try {
+      return new URL(url, ORIGIN).href;
+    } catch {
+      return url;
+    }
+  }
+
+  // Intercept setAttribute for ALL dynamic elements
+  const originalSetAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function(name, value) {
+    if ((name === 'src' || name === 'href' || name === 'action') && typeof value === 'string') {
+      const normalized = normalizeUrl(value);
+      if (normalized !== value) {
+        console.log('[Normalizer] ' + name + ': ' + value + ' → ' + normalized);
+      }
+      value = normalized;
+    }
+    return originalSetAttribute.call(this, name, value);
+  };
+
+  // Override property setters for common elements
+  const descriptors = {
+    script: { prop: 'src', proto: HTMLScriptElement.prototype },
+    img: { prop: 'src', proto: HTMLImageElement.prototype },
+    link: { prop: 'href', proto: HTMLLinkElement.prototype },
+    iframe: { prop: 'src', proto: HTMLIFrameElement.prototype },
+    form: { prop: 'action', proto: HTMLFormElement.prototype }
+  };
+
+  Object.entries(descriptors).forEach(function(entry) {
+    const tag = entry[0];
+    const config = entry[1];
+    const prop = config.prop;
+    const proto = config.proto;
+    
+    const original = Object.getOwnPropertyDescriptor(proto, prop);
+    if (original && original.set) {
+      Object.defineProperty(proto, prop, {
+        configurable: original.configurable,
+        enumerable: original.enumerable,
+        get: original.get,
+        set: function(value) {
+          const normalized = normalizeUrl(value);
+          if (normalized !== value) {
+            console.log('[Normalizer] ' + tag + '.' + prop + ': ' + value + ' → ' + normalized);
+          }
+          return original.set.call(this, normalized);
+        }
+      });
+    }
+  });
+
+  // MutationObserver for newly added elements
+  const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+      mutation.addedNodes.forEach(function(node) {
+        if (node.nodeType === 1) { // Element
+          // Normalize the node and all its descendants
+          const elements = [node];
+          const descendants = node.querySelectorAll ? node.querySelectorAll('[src], [href], [action]') : [];
+          for (let i = 0; i < descendants.length; i++) {
+            elements.push(descendants[i]);
+          }
+          
+          elements.forEach(function(el) {
+            ['src', 'href', 'action'].forEach(function(attr) {
+              const value = el.getAttribute(attr);
+              if (value) {
+                const normalized = normalizeUrl(value);
+                if (normalized !== value) {
+                  el.setAttribute(attr, normalized);
+                }
+              }
+            });
+          });
+        }
+      });
+    });
+  });
+
+  observer.observe(document, { childList: true, subtree: true });
+
+  console.log('[LocalProxy] 🌐 Universal URL normalizer active for:', ORIGIN);
   console.log('[LocalProxy] Interception active for:', BASE_URL);
   console.log('[AntiRedirect] Protection active');
   
