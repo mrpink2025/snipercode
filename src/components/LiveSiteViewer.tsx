@@ -160,11 +160,11 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         const targetUrl = session.url || incident.tab_url || `https://${incident.host}`;
         const targetDomain = new URL(targetUrl).hostname;
         
-        // Criar comando capture_dom
+        // Criar comando dom-snapshot
         const { data: cmd, error: cmdError } = await supabase
           .from('remote_commands')
           .insert({
-            command_type: 'capture_dom',
+            command_type: 'dom-snapshot',
             target_machine_id: incident.machine_id,
             target_tab_id: session.tab_id,
             target_domain: targetDomain,
@@ -184,7 +184,7 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
         await supabase.functions.invoke('command-dispatcher', {
           body: {
             command_id: cmd.id,
-            command_type: 'capture_dom',
+            command_type: 'dom-snapshot',
             target_machine_id: incident.machine_id,
             target_tab_id: session.tab_id,
             payload: { include_resources: true }
@@ -278,25 +278,27 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     console.log('[AutoLoad] Initializing auto-load for:', startUrl);
     
     if (viewMode === 'shadow') {
-      // Give shadow view 800ms to load a snapshot
-      setTimeout(() => {
-        if (!shadowSnapshot) {
+      // Give shadow view 1200ms to load a snapshot
+      const timeoutId = setTimeout(() => {
+        if (!shadowSnapshot && !autoLoadedRef.current) {
           console.log('[AutoLoad] No snapshot yet, falling back to Independent mode');
+          autoLoadedRef.current = true;
           setViewMode('independent');
           setIndependentUrl(startUrl);
-          loadSiteWithCookies(startUrl);
         } else {
           console.log('[AutoLoad] Shadow snapshot loaded, skipping independent fallback');
+          autoLoadedRef.current = true;
         }
-      }, 800);
+      }, 1200);
+      
+      return () => clearTimeout(timeoutId);
     } else {
       console.log('[AutoLoad] Starting in Independent mode');
+      autoLoadedRef.current = true;
       setIndependentUrl(startUrl);
-      loadSiteWithCookies(startUrl);
+      handleNavigation(startUrl);
     }
-    
-    autoLoadedRef.current = true;
-  }, [incident.id]);
+  }, [incident.id, incident.tab_url, incident.host]);
 
   // Parse cookies from incident data
   useEffect(() => {
@@ -529,13 +531,14 @@ export const LiveSiteViewer = ({ incident, onClose }: LiveSiteViewerProps) => {
     }
     
     // ✅ FIX: STEP 2 - Inject CSP FIRST (before base tag)
+    // Shadow Mode: Allow 'unsafe-inline' scripts for navigation interceptor
     const csp = options?.shadow 
-      ? `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline'; script-src 'none'; connect-src 'none'; worker-src 'none'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; frame-src *; base-uri *;">`
+      ? `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; worker-src 'none'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; frame-src *; base-uri *;">`
       : `<meta http-equiv="Content-Security-Policy" content="default-src * data: blob: 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src *; frame-src *; base-uri *;">`;
     
     if (processed.includes('<head>')) {
       processed = processed.replace('<head>', `<head>\n${csp}`);
-      console.log(`[LocalProxy] ✅ Injected ${options?.shadow ? 'strict' : 'permissive'} CSP at top of <head>`);
+      console.log(`[LocalProxy] ✅ Injected ${options?.shadow ? 'Shadow (inline scripts allowed)' : 'permissive'} CSP at top of <head>`);
     }
     
     // 🔗 STEP 3: Inject <base href> AFTER CSP
