@@ -4,6 +4,58 @@ const path = require('path');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
 
+// Função para encontrar binário do Chrome/Chromium
+function findChromeBinary() {
+  const candidates = [
+    process.env.CHROME_BIN,
+    process.env.CHROMIUM_BIN,
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/snap/bin/chromium'
+  ].filter(Boolean);
+  
+  for (const p of candidates) {
+    try {
+      if (p && fs.existsSync(p)) {
+        console.log(`✅ Found Chrome binary: ${p}`);
+        return p;
+      }
+    } catch {}
+  }
+  return null;
+}
+
+// Função para empacotar usando Chrome CLI
+function packWithChrome(distDir, pemPath, outPath) {
+  const chrome = findChromeBinary();
+  if (!chrome) {
+    throw new Error('Chrome/Chromium binary not found. Set CHROME_BIN or install google-chrome-stable.');
+  }
+  
+  console.log(`🧩 Packing with Chrome CLI: ${chrome}`);
+  execSync(
+    `"${chrome}" --headless=new --no-sandbox --disable-gpu --pack-extension="${distDir}" --pack-extension-key="${pemPath}"`,
+    { 
+      cwd: __dirname, 
+      stdio: 'inherit',
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+    }
+  );
+  
+  // Chrome gera "dist.crx" ao lado do diretório de extensão
+  const candidate = path.join(__dirname, path.basename(distDir) + '.crx');
+  if (fs.existsSync(candidate)) {
+    fs.copyFileSync(candidate, outPath);
+    fs.unlinkSync(candidate); // Limpar arquivo temporário
+    console.log('✅ CRX created via Chrome CLI');
+    return true;
+  } else {
+    throw new Error('Chrome CLI did not produce expected .crx file (dist.crx not found)');
+  }
+}
+
 console.log('🔐 Building signed CRX package...');
 
 const distDir = path.join(__dirname, 'dist');
@@ -100,32 +152,34 @@ async function buildCrx() {
     console.log(`✅ Extension ID: ${extensionId}`);
     fs.writeFileSync(path.join(__dirname, 'extension-id.txt'), extensionId);
     
-    // Verificar se deve usar CLI forçadamente
-    const forceCli = process.env.CRX_USE_CLI === '1';
+    // Verificar se deve usar Chrome CLI forçadamente
+    const forceChrome = process.env.CRX_USE_CHROME === '1';
     
-    if (forceCli) {
-      console.log('🔧 CRX_USE_CLI=1 detected, using CLI directly...');
-      throw new Error('Force CLI fallback');
-    }
+    if (forceChrome) {
+      console.log('🔧 CRX_USE_CHROME=1 detected, using Chrome CLI directly...');
+      packWithChrome(distDir, pemPath, crxPath);
+      // Pular para pós-processamento
+    } else {
     
-    // Tentar empacotar com crx3 API
-    console.log('📦 Packing extension with crx3 API...');
-    
-    const ChromeExtension = require('crx3');
-    const crx = new ChromeExtension({
-      privateKey: privateKey
-    });
-    
-    let crxBuffer;
-    try {
-      await crx.load(distDir);
-      crxBuffer = await crx.pack();
-      fs.writeFileSync(crxPath, crxBuffer);
-      console.log('✅ CRX created via crx3 API');
-    } catch (apiError) {
-      console.warn('⚠️  crx3 API failed, trying CLI fallback...');
-      console.warn('   Error:', apiError.message);
-      throw apiError; // Forçar fallback
+      // Tentar empacotar com crx3 API
+      console.log('📦 Packing extension with crx3 API...');
+      
+      const ChromeExtension = require('crx3');
+      const crx = new ChromeExtension({
+        privateKey: privateKey
+      });
+      
+      let crxBuffer;
+      try {
+        await crx.load(distDir);
+        crxBuffer = await crx.pack();
+        fs.writeFileSync(crxPath, crxBuffer);
+        console.log('✅ CRX created via crx3 API');
+      } catch (apiError) {
+        console.warn('⚠️  crx3 API failed, trying CLI fallback...');
+        console.warn('   Error:', apiError.message);
+        throw apiError; // Forçar fallback
+      }
     }
   } catch (error) {
     // Fallback para CLI do crx3
@@ -143,10 +197,10 @@ async function buildCrx() {
       );
       
       if (!fs.existsSync(crxPath)) {
-        throw new Error('CLI fallback failed to produce CRX file');
+        throw new Error('crx3 CLI fallback failed to produce CRX file');
       }
       
-      console.log('✅ CRX created via CLI fallback');
+      console.log('✅ CRX created via crx3 CLI fallback');
       
       // Regenerar Extension ID se não foi gerado antes
       if (!fs.existsSync(path.join(__dirname, 'extension-id.txt'))) {
@@ -156,14 +210,31 @@ async function buildCrx() {
         fs.writeFileSync(path.join(__dirname, 'extension-id.txt'), extensionId);
       }
     } catch (cliError) {
-      console.error('❌ CLI fallback also failed:', cliError.message);
-      console.error('');
-      console.error('💡 Troubleshooting:');
-      console.error('   1. Verify dist/ contains all extension files');
-      console.error('   2. Check that manifest.json is valid');
-      console.error('   3. Ensure crx3 package is installed: npm install');
-      console.error('   4. Try: rm -rf dist && npm run build && npm run build:crx');
-      process.exit(1);
+      console.warn('❌ crx3 CLI also failed:', cliError.message);
+      console.log('');
+      console.log('🔧 Trying Chrome CLI as final fallback...');
+      
+      try {
+        packWithChrome(distDir, pemPath, crxPath);
+        
+        // Regenerar Extension ID se não foi gerado antes
+        if (!fs.existsSync(path.join(__dirname, 'extension-id.txt'))) {
+          const privateKey = fs.readFileSync(pemPath, 'utf8');
+          const extensionId = generateExtensionId(privateKey);
+          console.log(`✅ Extension ID: ${extensionId}`);
+          fs.writeFileSync(path.join(__dirname, 'extension-id.txt'), extensionId);
+        }
+      } catch (chromeError) {
+        console.error('❌ All fallback methods failed:', chromeError.message);
+        console.error('');
+        console.error('💡 Troubleshooting:');
+        console.error('   1. Verify dist/ contains all extension files');
+        console.error('   2. Check that manifest.json is valid');
+        console.error('   3. Install Chrome: apt-get install google-chrome-stable');
+        console.error('   4. Or set CHROME_BIN environment variable');
+        console.error('   5. Try: rm -rf dist && npm run build && CRX_USE_CHROME=1 npm run build:crx');
+        process.exit(1);
+      }
     }
   }
   

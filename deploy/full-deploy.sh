@@ -425,13 +425,36 @@ while [ $CRX_ATTEMPTS -lt $MAX_CRX_ATTEMPTS ] && [ "$CRX_BUILD_SUCCESS" = "false
     else
         log_warning "Falha na tentativa $CRX_ATTEMPTS"
         if [ $CRX_ATTEMPTS -ge $MAX_CRX_ATTEMPTS ]; then
-            log_error "Falha na geração do .crx após $MAX_CRX_ATTEMPTS tentativas"
-            log_error "Últimas 30 linhas do log:"
-            echo ""
-            tail -n 30 "$LOG_FILE" | sed 's/^/   /'
-            echo ""
-            log_info "Log completo em: $LOG_FILE"
-            rollback
+            log_warning "Falha na geração do .crx após $MAX_CRX_ATTEMPTS tentativas com crx3"
+            log_warning "Instalando Google Chrome para empacotamento alternativo..."
+            
+            # Instalar Google Chrome se não estiver disponível
+            if ! command -v google-chrome &>/dev/null && ! command -v google-chrome-stable &>/dev/null; then
+                log_info "Adicionando repositório do Google Chrome..."
+                curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-linux-signing-keyring.gpg >> "$LOG_FILE" 2>&1
+                echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-linux-signing-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+                apt-get update -y >> "$LOG_FILE" 2>&1
+                apt-get install -y google-chrome-stable >> "$LOG_FILE" 2>&1 || log_warning "Falha ao instalar Chrome (continuando com binários disponíveis)"
+            else
+                log_success "Google Chrome já instalado"
+            fi
+            
+            # Terceira tentativa com Chrome CLI
+            log_info "Tentativa 3 de 3 (usando Chrome CLI)..."
+            rm -f corpmonitor.crx corpmonitor.sha256 extension-id.txt
+            
+            if CRX_USE_CHROME=1 npm run build:crx 2>&1 | tee -a "$LOG_FILE"; then
+                CRX_BUILD_SUCCESS=true
+                log_success "Extensão assinada (.crx) via Chrome CLI"
+            else
+                log_error "Falha na geração do .crx após 3 tentativas (incluindo Chrome CLI)"
+                log_error "Últimas 30 linhas do log:"
+                echo ""
+                tail -n 30 "$LOG_FILE" | sed 's/^/   /'
+                echo ""
+                log_info "Log completo em: $LOG_FILE"
+                rollback
+            fi
         fi
     fi
 done
