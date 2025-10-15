@@ -406,8 +406,11 @@ log_success "Extensão compilada (.zip)"
 
 # Build CRX assinado
 log_info "Executando npm run build:crx (gera .crx assinado)..."
-if ! npm run build:crx >> "$LOG_FILE" 2>&1; then
+if ! npm run build:crx 2>&1 | tee -a "$LOG_FILE"; then
     log_error "Falha na geração do .crx"
+    log_error "Últimas 20 linhas do log:"
+    tail -20 "$LOG_FILE" | sed 's/^/   /'
+    log_info "Log completo em: $LOG_FILE"
     rollback
 fi
 log_success "CRX assinado gerado"
