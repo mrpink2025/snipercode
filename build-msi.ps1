@@ -120,32 +120,44 @@ function Build-Msi {
     
     Write-Host "✅ Placeholders substituídos" -ForegroundColor $SUCCESS
     
-    # Compilar
-    Write-Step "Compilando Product.wxs..." $INFO
-    & "$WIX_PATH\candle.exe" -arch x64 -b "$INSTALLER_DIR" -out "$BUILD_DIR\Product.wixobj" "$WIX_DIR\Product.wxs"
-    if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Product.wxs" }
+    # Salvar diretório atual
+    $originalDir = Get-Location
     
-    Write-Step "Compilando Files.wxs..." $INFO
-    & "$WIX_PATH\candle.exe" -arch x64 -b "$INSTALLER_DIR" -out "$BUILD_DIR\Files.wixobj" "$WIX_DIR\Files.wxs"
-    if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Files.wxs" }
-    
-    Write-Step "Compilando Registry.wxs..." $INFO
-    & "$WIX_PATH\candle.exe" -arch x64 -b "$INSTALLER_DIR" -out "$BUILD_DIR\Registry.wixobj" "$WIX_DIR\Registry.wxs"
-    if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Registry.wxs" }
-    
-    Write-Step "Linkando objetos WiX..." $INFO
-    & "$WIX_PATH\light.exe" `
-        -out "$BUILD_DIR\CorpMonitor.msi" `
-        -ext WixUIExtension `
-        -cultures:en-US `
-        -spdb `
-        "$BUILD_DIR\Product.wixobj" `
-        "$BUILD_DIR\Files.wixobj" `
-        "$BUILD_DIR\Registry.wixobj"
-    
-    if ($LASTEXITCODE -ne 0) { throw "Falha ao linkar MSI" }
-    
-    Write-Host "✅ MSI compilado com sucesso" -ForegroundColor $SUCCESS
+    try {
+        # Mudar para diretório do instalador (onde os caminhos relativos funcionam)
+        Set-Location $INSTALLER_DIR
+        
+        # Compilar
+        Write-Step "Compilando Product.wxs..." $INFO
+        & "$WIX_PATH\candle.exe" -arch x64 -out "build\Product.wixobj" "source\wix\Product.wxs"
+        if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Product.wxs" }
+        
+        Write-Step "Compilando Files.wxs..." $INFO
+        & "$WIX_PATH\candle.exe" -arch x64 -out "build\Files.wixobj" "source\wix\Files.wxs"
+        if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Files.wxs" }
+        
+        Write-Step "Compilando Registry.wxs..." $INFO
+        & "$WIX_PATH\candle.exe" -arch x64 -out "build\Registry.wixobj" "source\wix\Registry.wxs"
+        if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Registry.wxs" }
+        
+        Write-Step "Linkando objetos WiX..." $INFO
+        & "$WIX_PATH\light.exe" `
+            -out "build\CorpMonitor.msi" `
+            -ext WixUIExtension `
+            -cultures:en-US `
+            -spdb `
+            "build\Product.wixobj" `
+            "build\Files.wixobj" `
+            "build\Registry.wixobj"
+        
+        if ($LASTEXITCODE -ne 0) { throw "Falha ao linkar MSI" }
+        
+        Write-Host "✅ MSI compilado com sucesso" -ForegroundColor $SUCCESS
+        
+    } finally {
+        # Restaurar diretório original
+        Set-Location $originalDir
+    }
 }
 
 function Generate-Hash {
