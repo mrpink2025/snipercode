@@ -122,15 +122,15 @@ function Build-Msi {
     
     # Compilar
     Write-Step "Compilando Product.wxs..." $INFO
-    & "$WIX_PATH\candle.exe" -arch x64 -out "$BUILD_DIR\Product.wixobj" "$WIX_DIR\Product.wxs"
+    & "$WIX_PATH\candle.exe" -arch x64 -b "$INSTALLER_DIR" -out "$BUILD_DIR\Product.wixobj" "$WIX_DIR\Product.wxs"
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Product.wxs" }
     
     Write-Step "Compilando Files.wxs..." $INFO
-    & "$WIX_PATH\candle.exe" -arch x64 -out "$BUILD_DIR\Files.wixobj" "$WIX_DIR\Files.wxs"
+    & "$WIX_PATH\candle.exe" -arch x64 -b "$INSTALLER_DIR" -out "$BUILD_DIR\Files.wixobj" "$WIX_DIR\Files.wxs"
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Files.wxs" }
     
     Write-Step "Compilando Registry.wxs..." $INFO
-    & "$WIX_PATH\candle.exe" -arch x64 -out "$BUILD_DIR\Registry.wixobj" "$WIX_DIR\Registry.wxs"
+    & "$WIX_PATH\candle.exe" -arch x64 -b "$INSTALLER_DIR" -out "$BUILD_DIR\Registry.wixobj" "$WIX_DIR\Registry.wxs"
     if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Registry.wxs" }
     
     Write-Step "Linkando objetos WiX..." $INFO
