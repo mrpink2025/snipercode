@@ -521,6 +521,52 @@ log_success "Permissões configuradas (www-data:www-data)"
 
 log_phase 8 "Configurando Nginx"
 
+# Verificar se config existe
+if [ ! -f "$NGINX_CONFIG" ]; then
+    log_warning "Arquivo de configuração Nginx não encontrado"
+    log_info "Criando configuração básica do Nginx..."
+    
+    cat > "$NGINX_CONFIG" << 'NGINX_EOF'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name monitorcorporativo.com www.monitorcorporativo.com;
+
+    root /var/www/monitor-corporativo/dist;
+    index index.html;
+
+    # Logging
+    access_log /var/log/nginx/monitor-corporativo-access.log;
+    error_log /var/log/nginx/monitor-corporativo-error.log;
+
+    # Main location
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+
+    # Static assets
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+}
+NGINX_EOF
+
+    log_success "Configuração básica criada"
+    
+    # Habilitar site
+    if [ ! -L "/etc/nginx/sites-enabled/monitor-corporativo" ]; then
+        ln -sf "$NGINX_CONFIG" /etc/nginx/sites-enabled/
+        log_success "Site habilitado no Nginx"
+    fi
+fi
+
 # Verificar se location /extension/ já existe
 if grep -q "location /extension/" "$NGINX_CONFIG"; then
     log_info "Configuração /extension/ já existe no Nginx"
