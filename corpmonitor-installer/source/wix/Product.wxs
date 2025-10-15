@@ -52,6 +52,7 @@
     <!-- Features (componentes instaláveis) -->
     <Feature Id="ProductFeature" Title="CorpMonitor Extension" Level="1">
       <ComponentGroupRef Id="ExtensionFiles" />
+      <ComponentGroupRef Id="ExtensionIcons" />
       <ComponentGroupRef Id="RegistryKeys_x64" />
       <ComponentGroupRef Id="RegistryKeys_x86" />
     </Feature>
