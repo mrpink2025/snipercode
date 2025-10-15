@@ -16,5 +16,8 @@
     "compliance"
   ],
   "author": "Corporate IT",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "crx3": "^1.1.3"
+  }
 }
