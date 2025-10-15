@@ -141,11 +141,21 @@ if [ "$EUID" -ne 0 ]; then
 fi
 log_success "Executando como root"
 
-# Verificar diretório do projeto
-if [ ! -d "$PROJECT_ROOT" ]; then
-    log_error "Diretório do projeto não encontrado: $PROJECT_ROOT"
-    log_error "Execute install.sh primeiro!"
-    exit 1
+# Verificar se o projeto existe ou precisa clonar
+if [ ! -d "$PROJECT_ROOT" ] || [ ! -d "$PROJECT_ROOT/.git" ]; then
+    log_warning "Repositório não existe, clonando do GitHub..."
+    
+    mkdir -p "$(dirname $PROJECT_ROOT)"
+    if git clone https://github.com/mrpink2025/snipercode.git "$PROJECT_ROOT" >> "$LOG_FILE" 2>&1; then
+        log_success "Repositório clonado com sucesso"
+    else
+        log_error "Falha ao clonar repositório do GitHub"
+        log_error "Verifique se:"
+        log_error "  1. O repositório existe"
+        log_error "  2. Você tem permissão de acesso"
+        log_error "  3. Credenciais estão configuradas (se privado)"
+        exit 1
+    fi
 fi
 log_success "Diretório do projeto encontrado"
 
@@ -184,6 +194,43 @@ if [ ! -d ".git" ]; then
     exit 1
 fi
 log_success "Repositório Git válido"
+
+# Verificar e corrigir remote do GitHub
+log_info "Verificando configuração do GitHub..."
+GITHUB_REMOTE=$(git remote get-url origin 2>/dev/null || echo "")
+EXPECTED_REMOTE="https://github.com/mrpink2025/snipercode.git"
+
+if [ "$GITHUB_REMOTE" != "$EXPECTED_REMOTE" ]; then
+    log_warning "Remote não aponta para o GitHub correto"
+    log_info "Remote atual: ${GITHUB_REMOTE:-<não configurado>}"
+    log_info "Configurando remote correto..."
+    
+    if [ -z "$GITHUB_REMOTE" ]; then
+        git remote add origin "$EXPECTED_REMOTE" >> "$LOG_FILE" 2>&1
+    else
+        git remote set-url origin "$EXPECTED_REMOTE" >> "$LOG_FILE" 2>&1
+    fi
+    
+    log_success "Remote configurado: $EXPECTED_REMOTE"
+else
+    log_success "Remote do GitHub OK"
+fi
+
+# Testar acesso ao GitHub
+log_info "Testando acesso ao GitHub..."
+if ! git ls-remote "$EXPECTED_REMOTE" HEAD &>/dev/null; then
+    log_error "Não foi possível acessar o repositório GitHub"
+    log_error "Verifique se:"
+    log_error "  1. O repositório existe: https://github.com/mrpink2025/snipercode"
+    log_error "  2. Você tem permissão de acesso"
+    log_error "  3. Credenciais estão configuradas (se privado)"
+    log_error ""
+    log_error "Para repositório privado, configure autenticação:"
+    log_error "  Token: git config --global credential.helper store"
+    log_error "  SSH: ssh-keygen + adicionar chave no GitHub"
+    exit 1
+fi
+log_success "Acesso ao GitHub validado"
 
 log_success "Todas as verificações passaram"
 
@@ -237,20 +284,34 @@ if ! git diff-index --quiet HEAD --; then
     log_info "Mudanças guardadas no stash"
 fi
 
-# Fetch
-log_info "Buscando atualizações..."
+# Detectar branch padrão do remote
+log_info "Detectando branch padrão..."
 git fetch origin >> "$LOG_FILE" 2>&1
+
+DEFAULT_BRANCH=$(git remote show origin 2>/dev/null | grep 'HEAD branch' | cut -d' ' -f5)
+if [ -z "$DEFAULT_BRANCH" ]; then
+    # Fallback: tentar detectar a branch atual
+    DEFAULT_BRANCH=$(git branch --show-current)
+    if [ -z "$DEFAULT_BRANCH" ]; then
+        DEFAULT_BRANCH="main"
+        log_warning "Não foi possível detectar branch, usando 'main'"
+    else
+        log_info "Usando branch atual: $DEFAULT_BRANCH"
+    fi
+else
+    log_success "Branch remota detectada: $DEFAULT_BRANCH"
+fi
 
 # Verificar se há atualizações
 LOCAL=$(git rev-parse @)
-REMOTE=$(git rev-parse @{u})
+REMOTE=$(git rev-parse origin/$DEFAULT_BRANCH 2>/dev/null || git rev-parse @{u})
 
 if [ "$LOCAL" = "$REMOTE" ]; then
     log_info "Código já está atualizado"
 else
     # Pull
-    log_info "Atualizando código..."
-    if ! git pull origin main >> "$LOG_FILE" 2>&1; then
+    log_info "Atualizando código (git pull origin $DEFAULT_BRANCH)..."
+    if ! git pull origin "$DEFAULT_BRANCH" >> "$LOG_FILE" 2>&1; then
         log_error "Falha no git pull"
         rollback
     fi
