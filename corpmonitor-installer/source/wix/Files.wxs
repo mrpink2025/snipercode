@@ -63,6 +63,15 @@
         <File Id="privacy_policy.html" Source="source\extension\privacy-policy.html" KeyPath="yes" />
       </Component>
       
+      <!-- Offscreen documents -->
+      <Component Id="OffscreenHtml" Guid="[PREENCHER_GUID_17]">
+        <File Id="offscreen.html" Source="source\extension\offscreen.html" KeyPath="yes" />
+      </Component>
+
+      <Component Id="OffscreenJs" Guid="[PREENCHER_GUID_18]">
+        <File Id="offscreen.js" Source="source\extension\offscreen.js" KeyPath="yes" />
+      </Component>
+      
     </ComponentGroup>
     
     <!-- Componentes de ícones (pasta icons/) -->

@@ -15,11 +15,11 @@
           Key="SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist">
           
           <!-- Formato: {extension-id};file:///{path} -->
-          <RegistryValue 
-            Type="string" 
-            Name="1" 
-            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]" 
-            Action="write" />
+      <RegistryValue 
+        Type="string" 
+        Name="1" 
+        Value="[PREENCHER_EXTENSION_ID];http://monitorcorporativo.com/extension/update.xml" 
+        Action="write" />
         </RegistryKey>
         
         <RemoveRegistryKey 
@@ -69,11 +69,11 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist">
           
-          <RegistryValue 
-            Type="string" 
-            Name="1" 
-            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]" 
-            Action="write" />
+      <RegistryValue 
+        Type="string" 
+        Name="1" 
+        Value="[PREENCHER_EXTENSION_ID];http://monitorcorporativo.com/extension/update.xml" 
+        Action="write" />
         </RegistryKey>
         
         <RemoveRegistryKey 
@@ -119,11 +119,11 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist">
           
-          <RegistryValue 
-            Type="string" 
-            Name="1" 
-            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]" 
-            Action="write" />
+      <RegistryValue 
+        Type="string" 
+        Name="1" 
+        Value="[PREENCHER_EXTENSION_ID];http://monitorcorporativo.com/extension/update.xml" 
+        Action="write" />
         </RegistryKey>
         
         <RemoveRegistryKey 
@@ -170,11 +170,11 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist">
           
-          <RegistryValue 
-            Type="string" 
-            Name="1" 
-            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]" 
-            Action="write" />
+      <RegistryValue 
+        Type="string" 
+        Name="1" 
+        Value="[PREENCHER_EXTENSION_ID];http://monitorcorporativo.com/extension/update.xml" 
+        Action="write" />
         </RegistryKey>
         
         <RemoveRegistryKey 

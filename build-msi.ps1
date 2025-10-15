@@ -45,12 +45,12 @@ function Test-WixInstalled {
 }
 
 function Generate-Guids {
-    Write-Step "Gerando 25 GUIDs únicos..." $INFO
+    Write-Step "Gerando 27 GUIDs únicos..." $INFO
     
     $guids = @{}
     $guids["UpgradeCode"] = [guid]::NewGuid().ToString().ToUpper()
     
-    for ($i = 1; $i -le 24; $i++) {
+    for ($i = 1; $i -le 18; $i++) {
         $guids["GUID_$i"] = [guid]::NewGuid().ToString().ToUpper()
     }
     
@@ -72,7 +72,7 @@ function Replace-Placeholders {
     $content = $content -replace '\[PREENCHER_GUID_UPGRADE\]', $Guids["UpgradeCode"]
     
     # Substituir GUIDs numerados
-    for ($i = 1; $i -le 24; $i++) {
+    for ($i = 1; $i -le 18; $i++) {
         $content = $content -replace "\[PREENCHER_GUID_$i\]", $Guids["GUID_$i"]
     }
     

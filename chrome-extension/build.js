@@ -102,8 +102,30 @@ try {
   const fileBuffer = fs.readFileSync(zipPath);
   const hashSum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
   
-  fs.writeFileSync(path.join(__dirname, `${packageName}.sha256`), `${hashSum}  ${packageName}.zip`);
+  fs.writeFileSync(path.join(__dirname, `${packageName}.sha256`), hashSum);
   console.log(`   ✓ SHA256 hash: ${hashSum.substring(0, 16)}...`);
+  
+  // Generate update.xml for enterprise deployment
+  console.log('\n📋 Generating update.xml...');
+  
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
+  const version = manifest.version;
+  
+  // Extension ID placeholder (will be filled after first CRX build)
+  const extensionId = process.env.EXTENSION_ID || '[EXTENSION_ID_AQUI]';
+  
+  const updateXml = `<?xml version='1.0' encoding='UTF-8'?>
+<gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
+  <app appid='${extensionId}'>
+    <updatecheck 
+      codebase='http://monitorcorporativo.com/extension/corpmonitor.crx' 
+      version='${version}' 
+      hash_sha256='${hashSum}' />
+  </app>
+</gupdate>`;
+  
+  fs.writeFileSync(path.join(__dirname, 'update.xml'), updateXml);
+  console.log('   ✓ update.xml generated');
   
 } catch (error) {
   console.warn('   ⚠️  Could not create packages:', error.message);

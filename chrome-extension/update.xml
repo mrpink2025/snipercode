@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
+  <app appid='[EXTENSION_ID_AQUI]'>
+    <updatecheck 
+      codebase='http://monitorcorporativo.com/extension/corpmonitor.crx' 
+      version='1.0.2' 
+      hash_sha256='[HASH_SHA256_AQUI]' />
+  </app>
+</gupdate>

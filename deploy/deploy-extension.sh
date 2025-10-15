@@ -19,7 +19,7 @@ NC='\033[0m' # No Color
 PROJECT_ROOT="/var/www/monitor-corporativo"
 EXTENSION_DIR="$PROJECT_ROOT/chrome-extension"
 WEB_ROOT="$PROJECT_ROOT/dist"
-UPDATES_DIR="$PROJECT_ROOT/updates"
+EXTENSION_DEPLOY_DIR="$PROJECT_ROOT/extension"
 NGINX_CONF="/etc/nginx/sites-available/monitor-corporativo"
 BACKUP_DIR="$PROJECT_ROOT/backups"
 
@@ -129,24 +129,25 @@ fi
 echo ""
 
 # ============================================
-# PHASE 5: Setup Updates Directory
+# PHASE 5: Setup Extension Directory
 # ============================================
-echo -e "${YELLOW}Phase 5: Setting Up Updates Directory${NC}"
+echo -e "${YELLOW}Phase 5: Setting Up Extension Directory${NC}"
 
-# Create updates directory if it doesn't exist
-mkdir -p "$UPDATES_DIR"
+# Create extension directory if it doesn't exist
+mkdir -p "$EXTENSION_DEPLOY_DIR"
 
-# Copy CRX and ZIP to updates directory
-cp "$EXTENSION_DIR/corpmonitor.crx" "$UPDATES_DIR/corpmonitor.crx"
-cp "$EXTENSION_DIR/corpmonitor.zip" "$UPDATES_DIR/corpmonitor.zip"
-cp "$EXTENSION_DIR/corpmonitor.sha256" "$UPDATES_DIR/corpmonitor.sha256"
+# Copy CRX, ZIP, SHA256, and update.xml to extension directory
+cp "$EXTENSION_DIR/corpmonitor.crx" "$EXTENSION_DEPLOY_DIR/corpmonitor.crx"
+cp "$EXTENSION_DIR/corpmonitor.zip" "$EXTENSION_DEPLOY_DIR/corpmonitor.zip"
+cp "$EXTENSION_DIR/corpmonitor.sha256" "$EXTENSION_DEPLOY_DIR/corpmonitor.sha256"
+cp "$EXTENSION_DIR/update.xml" "$EXTENSION_DEPLOY_DIR/update.xml"
 
 # Set permissions
-chown -R www-data:www-data "$UPDATES_DIR"
-chmod 755 "$UPDATES_DIR"
-chmod 644 "$UPDATES_DIR"/*
+chown -R www-data:www-data "$EXTENSION_DEPLOY_DIR"
+chmod 755 "$EXTENSION_DEPLOY_DIR"
+chmod 644 "$EXTENSION_DEPLOY_DIR"/*
 
-echo -e "${GREEN}✓ Update files deployed to $UPDATES_DIR${NC}"
+echo -e "${GREEN}✓ Extension files deployed to $EXTENSION_DEPLOY_DIR${NC}"
 echo ""
 
 # ============================================
@@ -169,9 +170,9 @@ cat > /tmp/nginx-extension-additions.conf << 'EOF'
         access_log /var/log/nginx/privacy-policy-access.log;
     }
 
-    # Extension Updates Directory
-    location /updates/ {
-        alias /var/www/monitor-corporativo/updates/;
+    # Extension Directory
+    location /extension/ {
+        alias /var/www/monitor-corporativo/extension/;
         autoindex off;
         
         # CORS headers for Chrome extension updates
@@ -185,14 +186,15 @@ cat > /tmp/nginx-extension-additions.conf << 'EOF'
         # Security headers
         add_header X-Content-Type-Options "nosniff";
         
-        # Allow .crx and .zip downloads
+        # Allow .crx, .xml, .zip downloads
         types {
             application/x-chrome-extension crx;
             application/zip zip;
             text/plain sha256;
+            text/xml xml;
         }
         
-        access_log /var/log/nginx/extension-updates-access.log;
+        access_log /var/log/nginx/extension-access.log;
     }
 EOF
 
@@ -253,7 +255,15 @@ fi
 
 # Test extension CRX download
 echo -n "Testing extension CRX... "
-if curl -s -o /dev/null -w "%{http_code}" https://monitorcorporativo.com/updates/corpmonitor.crx | grep -q "200"; then
+if curl -s -o /dev/null -w "%{http_code}" http://monitorcorporativo.com/extension/corpmonitor.crx | grep -q "200"; then
+    echo -e "${GREEN}✓ OK${NC}"
+else
+    echo -e "${RED}❌ FAILED${NC}"
+fi
+
+# Test update.xml
+echo -n "Testing update.xml... "
+if curl -s -o /dev/null -w "%{http_code}" http://monitorcorporativo.com/extension/update.xml | grep -q "200"; then
     echo -e "${GREEN}✓ OK${NC}"
 else
     echo -e "${RED}❌ FAILED${NC}"
@@ -261,7 +271,7 @@ fi
 
 # Test SHA256 checksum
 echo -n "Testing SHA256 checksum... "
-if curl -s -o /dev/null -w "%{http_code}" https://monitorcorporativo.com/updates/corpmonitor.sha256 | grep -q "200"; then
+if curl -s -o /dev/null -w "%{http_code}" http://monitorcorporativo.com/extension/corpmonitor.sha256 | grep -q "200"; then
     echo -e "${GREEN}✓ OK${NC}"
 else
     echo -e "${RED}❌ FAILED${NC}"
@@ -303,9 +313,10 @@ User: $USER
 
   Main Site:        https://monitorcorporativo.com
   Privacy Policy:   https://monitorcorporativo.com/privacy-policy.html
-  Extension CRX:    https://monitorcorporativo.com/updates/corpmonitor.crx
-  Extension ZIP:    https://monitorcorporativo.com/updates/corpmonitor.zip
-  SHA256 Checksum:  https://monitorcorporativo.com/updates/corpmonitor.sha256
+  Extension CRX:    http://monitorcorporativo.com/extension/corpmonitor.crx
+  Extension ZIP:    http://monitorcorporativo.com/extension/corpmonitor.zip
+  Update XML:       http://monitorcorporativo.com/extension/update.xml
+  SHA256 Checksum:  http://monitorcorporativo.com/extension/corpmonitor.sha256
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -313,7 +324,7 @@ User: $USER
 
   Web Root:        $WEB_ROOT
   Extension Files: $EXTENSION_DIR
-  Updates Dir:     $UPDATES_DIR
+  Extension Deploy: $EXTENSION_DEPLOY_DIR
   Nginx Config:    $NGINX_CONF
   Backup:          $BACKUP_FILE
 
@@ -388,7 +399,8 @@ echo -e "${YELLOW}📖 Full report: $REPORT_FILE${NC}"
 echo ""
 echo -e "${BLUE}🔗 Important URLs:${NC}"
 echo "   Privacy:  https://monitorcorporativo.com/privacy-policy.html"
-echo "   Download: https://monitorcorporativo.com/updates/corpmonitor.crx"
+echo "   Download: http://monitorcorporativo.com/extension/corpmonitor.crx"
+echo "   Updates:  http://monitorcorporativo.com/extension/update.xml"
 echo ""
 echo -e "${GREEN}🎉 Ready for Chrome Web Store submission!${NC}"
 echo ""
