@@ -404,16 +404,37 @@ if ! npm run build >> "$LOG_FILE" 2>&1; then
 fi
 log_success "Extensão compilada (.zip)"
 
-# Build CRX assinado
+# Build CRX assinado com retry
 log_info "Executando npm run build:crx (gera .crx assinado)..."
-if ! npm run build:crx 2>&1 | tee -a "$LOG_FILE"; then
-    log_error "Falha na geração do .crx"
-    log_error "Últimas 20 linhas do log:"
-    tail -20 "$LOG_FILE" | sed 's/^/   /'
-    log_info "Log completo em: $LOG_FILE"
-    rollback
-fi
-log_success "CRX assinado gerado"
+CRX_BUILD_SUCCESS=false
+CRX_ATTEMPTS=0
+MAX_CRX_ATTEMPTS=2
+
+while [ $CRX_ATTEMPTS -lt $MAX_CRX_ATTEMPTS ] && [ "$CRX_BUILD_SUCCESS" = "false" ]; do
+    CRX_ATTEMPTS=$((CRX_ATTEMPTS + 1))
+    
+    if [ $CRX_ATTEMPTS -gt 1 ]; then
+        log_warning "Tentativa $CRX_ATTEMPTS de $MAX_CRX_ATTEMPTS..."
+        log_info "Limpando artefatos anteriores..."
+        rm -f corpmonitor.crx corpmonitor.sha256 extension-id.txt
+    fi
+    
+    if npm run build:crx 2>&1 | tee -a "$LOG_FILE"; then
+        CRX_BUILD_SUCCESS=true
+        log_success "Extensão assinada (.crx)"
+    else
+        log_warning "Falha na tentativa $CRX_ATTEMPTS"
+        if [ $CRX_ATTEMPTS -ge $MAX_CRX_ATTEMPTS ]; then
+            log_error "Falha na geração do .crx após $MAX_CRX_ATTEMPTS tentativas"
+            log_error "Últimas 30 linhas do log:"
+            echo ""
+            tail -n 30 "$LOG_FILE" | sed 's/^/   /'
+            echo ""
+            log_info "Log completo em: $LOG_FILE"
+            rollback
+        fi
+    fi
+done
 
 # Validar arquivos gerados
 REQUIRED_FILES=("corpmonitor.zip" "corpmonitor.crx" "corpmonitor.sha256" "update.xml")

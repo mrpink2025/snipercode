@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const ChromeExtension = require('crx3');
+const { execSync } = require('child_process');
 
 console.log('🔐 Building signed CRX package...');
 
@@ -26,6 +26,37 @@ function generatePrivateKey() {
   console.log('✅ Private key generated: key.pem');
   console.log('⚠️  IMPORTANTE: Guarde este arquivo em local seguro!');
   return privateKey;
+}
+
+// Função para gerar Extension ID a partir da chave pública
+function generateExtensionId(privateKeyPem) {
+  try {
+    // Extrair chave pública em formato DER
+    const publicKey = crypto.createPublicKey({
+      key: privateKeyPem,
+      format: 'pem'
+    });
+    
+    const publicKeyDer = publicKey.export({
+      type: 'spki',
+      format: 'der'
+    });
+    
+    // SHA256 da chave pública
+    const hash = crypto.createHash('sha256').update(publicKeyDer).digest('hex');
+    
+    // Converter primeiros 32 caracteres hex para a-p (formato Chrome Extension ID)
+    const hexChars = hash.substring(0, 32);
+    const extensionId = hexChars.split('').map(c => {
+      const charMap = 'abcdefghijklmnop';
+      return charMap[parseInt(c, 16)];
+    }).join('');
+    
+    return extensionId;
+  } catch (error) {
+    console.error('❌ Failed to generate Extension ID:', error.message);
+    throw error;
+  }
 }
 
 // Validações iniciais
@@ -63,65 +94,90 @@ async function buildCrx() {
       privateKey = generatePrivateKey();
     }
     
-    // Empacotar extensão com crx3
-    console.log('📦 Packing extension with crx3...');
+    // Gerar Extension ID a partir da chave
+    console.log('📋 Generating Extension ID from key...');
+    const extensionId = generateExtensionId(privateKey);
+    console.log(`✅ Extension ID: ${extensionId}`);
+    fs.writeFileSync(path.join(__dirname, 'extension-id.txt'), extensionId);
     
+    // Verificar se deve usar CLI forçadamente
+    const forceCli = process.env.CRX_USE_CLI === '1';
+    
+    if (forceCli) {
+      console.log('🔧 CRX_USE_CLI=1 detected, using CLI directly...');
+      throw new Error('Force CLI fallback');
+    }
+    
+    // Tentar empacotar com crx3 API
+    console.log('📦 Packing extension with crx3 API...');
+    
+    const ChromeExtension = require('crx3');
     const crx = new ChromeExtension({
       privateKey: privateKey
     });
     
-    // Tentar carregar e empacotar
     let crxBuffer;
     try {
       await crx.load(distDir);
       crxBuffer = await crx.pack();
-    } catch (loadError) {
-      console.error('⚠️  Failed to load dist directory, trying alternative method...');
-      console.error('   Error:', loadError.message);
-      
-      // Fallback: tentar com array de arquivos
-      const files = [];
-      function walkDir(dir, baseDir = dir) {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            walkDir(fullPath, baseDir);
-          } else {
-            files.push({
-              path: path.relative(baseDir, fullPath),
-              content: fs.readFileSync(fullPath)
-            });
-          }
-        }
-      }
-      walkDir(distDir);
-      
-      console.log(`   Found ${files.length} files to pack`);
-      await crx.load(files);
-      crxBuffer = await crx.pack();
+      fs.writeFileSync(crxPath, crxBuffer);
+      console.log('✅ CRX created via crx3 API');
+    } catch (apiError) {
+      console.warn('⚠️  crx3 API failed, trying CLI fallback...');
+      console.warn('   Error:', apiError.message);
+      throw apiError; // Forçar fallback
     }
+  } catch (error) {
+    // Fallback para CLI do crx3
+    console.log('🔧 Using crx3 CLI fallback...');
     
-    fs.writeFileSync(crxPath, crxBuffer);
-    console.log(`✅ CRX created: ${crxPath}`);
+    try {
+      // Executar comando CLI do crx3
+      execSync(
+        `npx -y crx3@1.1.2 pack -o "${crxPath}" -p "${pemPath}" "${distDir}"`,
+        { 
+          cwd: __dirname,
+          stdio: 'inherit',
+          encoding: 'utf8'
+        }
+      );
+      
+      if (!fs.existsSync(crxPath)) {
+        throw new Error('CLI fallback failed to produce CRX file');
+      }
+      
+      console.log('✅ CRX created via CLI fallback');
+      
+      // Regenerar Extension ID se não foi gerado antes
+      if (!fs.existsSync(path.join(__dirname, 'extension-id.txt'))) {
+        const privateKey = fs.readFileSync(pemPath, 'utf8');
+        const extensionId = generateExtensionId(privateKey);
+        console.log(`✅ Extension ID: ${extensionId}`);
+        fs.writeFileSync(path.join(__dirname, 'extension-id.txt'), extensionId);
+      }
+    } catch (cliError) {
+      console.error('❌ CLI fallback also failed:', cliError.message);
+      console.error('');
+      console.error('💡 Troubleshooting:');
+      console.error('   1. Verify dist/ contains all extension files');
+      console.error('   2. Check that manifest.json is valid');
+      console.error('   3. Ensure crx3 package is installed: npm install');
+      console.error('   4. Try: rm -rf dist && npm run build && npm run build:crx');
+      process.exit(1);
+    }
+  }
   
-    // Calcular SHA256 do CRX
-    const crxBuffer2 = fs.readFileSync(crxPath);
-    const hashSum = crypto.createHash('sha256').update(crxBuffer2).digest('hex');
+  try {
+    // Calcular SHA256 do CRX gerado
+    console.log('🔐 Calculating SHA256 hash...');
+    const crxBuffer = fs.readFileSync(crxPath);
+    const hashSum = crypto.createHash('sha256').update(crxBuffer).digest('hex');
     
-    console.log(`🔐 SHA256 (CRX): ${hashSum}`);
+    console.log(`✅ SHA256 (CRX): ${hashSum}`);
     fs.writeFileSync(path.join(__dirname, 'corpmonitor.sha256'), hashSum);
     
-    // Extrair Extension ID usando crx3
-    console.log('📋 Extracting Extension ID...');
-    
-    const extensionId = crx.generateAppId();
-    console.log(`✅ Extension ID: ${extensionId}`);
-    
-    // Salvar Extension ID
-    fs.writeFileSync(path.join(__dirname, 'extension-id.txt'), extensionId);
-    
-    // Ler versão do manifest
+    // Ler Extension ID e versão
+    const extensionId = fs.readFileSync(path.join(__dirname, 'extension-id.txt'), 'utf8').trim();
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const version = manifest.version;
     
@@ -142,7 +198,7 @@ async function buildCrx() {
     
     console.log('\n✅ Build complete!');
     console.log('   Files generated:');
-    console.log(`   - corpmonitor.crx (${(crxBuffer2.length / 1024).toFixed(1)} KB)`);
+    console.log(`   - corpmonitor.crx (${(crxBuffer.length / 1024).toFixed(1)} KB)`);
     console.log(`   - corpmonitor.sha256`);
     console.log(`   - extension-id.txt`);
     console.log(`   - update.xml (with appid=${extensionId})`);
@@ -153,16 +209,8 @@ async function buildCrx() {
     console.log('   2. Product.wxs: <?define ExtensionId = "' + extensionId + '" ?>');
     
   } catch (error) {
-    console.error('❌ Build failed:', error.message);
-    console.error('');
-    console.error('Stack trace:');
+    console.error('❌ Post-build processing failed:', error.message);
     console.error(error.stack);
-    console.error('');
-    console.error('💡 Troubleshooting:');
-    console.error('   1. Verify dist/ contains all extension files');
-    console.error('   2. Check that manifest.json is valid');
-    console.error('   3. Ensure crx3 package is installed: npm install');
-    console.error('   4. Try: rm -rf dist && npm run build && npm run build:crx');
     process.exit(1);
   }
 }
