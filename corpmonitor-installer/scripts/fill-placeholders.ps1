@@ -37,7 +37,7 @@ Write-Step ""
 # Validar estrutura
 Write-Step "[1/6] Validando estrutura de pastas..." $Colors.Info
 if (!(Test-Path $WixSourceDir)) {
-    Write-Step "❌ Pasta WiX não encontrada: $WixSourceDir" $Colors.Error
+    Write-Step "[ERRO] Pasta WiX nao encontrada: $WixSourceDir" $Colors.Error
     exit 1
 }
 
@@ -47,11 +47,11 @@ $RegistryWxs = Join-Path $WixSourceDir "Registry.wxs"
 
 foreach ($file in @($ProductWxs, $FilesWxs, $RegistryWxs)) {
     if (!(Test-Path $file)) {
-        Write-Step "❌ Arquivo não encontrado: $file" $Colors.Error
+        Write-Step "[ERRO] Arquivo nao encontrado: $file" $Colors.Error
         exit 1
     }
 }
-Write-Step "✅ Estrutura validada" $Colors.Success
+Write-Step "[OK] Estrutura validada" $Colors.Success
 
 # Gerar GUIDs
 Write-Step ""
@@ -61,7 +61,7 @@ $Guids = @()
 for ($i = 1; $i -le 29; $i++) {
     $Guids += [guid]::NewGuid().ToString().ToUpper()
 }
-Write-Step "✅ 30 GUIDs gerados" $Colors.Success
+Write-Step "[OK] 30 GUIDs gerados" $Colors.Success
 
 # Salvar GUIDs para referência
 if (!(Test-Path $BuildDir)) {
@@ -99,7 +99,7 @@ $productContent = $productContent -replace '\[PREENCHER_EXTENSION_ID\]', $Extens
 $productContent = $productContent -replace '\[PREENCHER_UPGRADE_CODE\]', $UpgradeCode
 
 $productContent | Out-File -FilePath $ProductWxs -Encoding UTF8 -NoNewline
-Write-Step "✅ Product.wxs atualizado (3 placeholders)" $Colors.Success
+Write-Step "[OK] Product.wxs atualizado (3 placeholders)" $Colors.Success
 
 # Preencher Files.wxs
 Write-Step ""
@@ -113,7 +113,7 @@ for ($i = 1; $i -le 18; $i++) {
 }
 
 $filesContent | Out-File -FilePath $FilesWxs -Encoding UTF8 -NoNewline
-Write-Step "✅ Files.wxs atualizado (18 GUIDs)" $Colors.Success
+Write-Step "[OK] Files.wxs atualizado (18 GUIDs)" $Colors.Success
 
 # Preencher Registry.wxs
 Write-Step ""
@@ -134,7 +134,7 @@ $registryContent | Out-File -FilePath $RegistryWxs -Encoding UTF8 -NoNewline
 
 # Contar substituições
 $extIdCount = ([regex]::Matches($registryContent, $ExtensionId)).Count
-Write-Step "✅ Registry.wxs atualizado ($extIdCount Extension IDs + 12 GUIDs)" $Colors.Success
+Write-Step "[OK] Registry.wxs atualizado ($extIdCount Extension IDs + 12 GUIDs)" $Colors.Success
 
 # Validar se ainda existem placeholders
 Write-Step ""
@@ -143,7 +143,7 @@ $allContent = (Get-Content $ProductWxs -Raw) + (Get-Content $FilesWxs -Raw) + (G
 $remainingPlaceholders = ([regex]::Matches($allContent, '\[PREENCHER_[^\]]+\]')).Count
 
 if ($remainingPlaceholders -gt 0) {
-    Write-Step "⚠️  Ainda existem $remainingPlaceholders placeholders não preenchidos!" $Colors.Warning
+    Write-Step "[AVISO] Ainda existem $remainingPlaceholders placeholders nao preenchidos!" $Colors.Warning
     
     # Mostrar quais são
     $matches = [regex]::Matches($allContent, '\[PREENCHER_[^\]]+\]')
@@ -154,13 +154,13 @@ if ($remainingPlaceholders -gt 0) {
     }
     exit 1
 } else {
-    Write-Step "✅ Todos os placeholders foram preenchidos!" $Colors.Success
+    Write-Step "[OK] Todos os placeholders foram preenchidos!" $Colors.Success
 }
 
 # Resumo final
 Write-Step ""
 Write-Step "========================================" $Colors.Info
-Write-Step " ✅ PREENCHIMENTO CONCLUÍDO" $Colors.Success
+Write-Step " [OK] PREENCHIMENTO CONCLUIDO" $Colors.Success
 Write-Step "========================================" $Colors.Info
 Write-Step ""
 Write-Step "Configuração aplicada:" $Colors.Info
@@ -169,11 +169,11 @@ Write-Step "  Extension ID: $ExtensionId" -ForegroundColor White
 Write-Step "  UpgradeCode: {$UpgradeCode}" -ForegroundColor White
 Write-Step ""
 Write-Step "Arquivos atualizados:" $Colors.Info
-Write-Step "  ✓ Product.wxs (3 valores)" -ForegroundColor White
-Write-Step "  ✓ Files.wxs (18 GUIDs)" -ForegroundColor White
-Write-Step "  ✓ Registry.wxs ($extIdCount Extension IDs + 12 GUIDs)" -ForegroundColor White
+Write-Step "  [OK] Product.wxs (3 valores)" -ForegroundColor White
+Write-Step "  [OK] Files.wxs (18 GUIDs)" -ForegroundColor White
+Write-Step "  [OK] Registry.wxs ($extIdCount Extension IDs + 12 GUIDs)" -ForegroundColor White
 Write-Step ""
-Write-Step "📝 Log de GUIDs salvo em: build/guids-used.txt" $Colors.Info
+Write-Step "[INFO] Log de GUIDs salvo em: build/guids-used.txt" $Colors.Info
 Write-Step ""
 Write-Step "Próximos passos:" $Colors.Info
 Write-Step "  1. Compilar o MSI:" -ForegroundColor White
