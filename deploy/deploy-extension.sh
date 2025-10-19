@@ -105,6 +105,21 @@ if [ ! -f "$EXTENSION_DIR/corpmonitor.crx" ]; then
     exit 1
 fi
 
+# Verificar se update.xml foi preenchido
+echo "Validating update.xml..."
+if grep -q "\[EXTENSION_ID_AQUI\]" "$EXTENSION_DIR/update.xml"; then
+    echo -e "${RED}❌ update.xml contém placeholder [EXTENSION_ID_AQUI] não preenchido!${NC}"
+    echo -e "${YELLOW}Execute 'npm run build' novamente na pasta chrome-extension/${NC}"
+    exit 1
+fi
+
+if grep -q "\[HASH_SHA256_AQUI\]" "$EXTENSION_DIR/update.xml"; then
+    echo -e "${RED}❌ update.xml contém placeholder [HASH_SHA256_AQUI] não preenchido!${NC}"
+    echo -e "${YELLOW}Execute 'npm run build' novamente na pasta chrome-extension/${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ update.xml validado com Extension ID e hash SHA256${NC}"
 echo -e "${GREEN}✓ Extension built successfully${NC}"
 echo "   - corpmonitor.zip ($(du -h "$EXTENSION_DIR/corpmonitor.zip" | cut -f1))"
 echo "   - corpmonitor.crx ($(du -h "$EXTENSION_DIR/corpmonitor.crx" | cut -f1))"
