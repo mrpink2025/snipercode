@@ -115,53 +115,44 @@ echo -e "${YELLOW}[3/8]${NC} 📦 Empacotando .crx"
 
 # Gerar chave privada se não existir
 if [ ! -f "$KEY_FILE" ]; then
-    echo -e "${BLUE}   → Gerando chave privada...${NC}"
-    openssl genrsa -out "$KEY_FILE" 2048 2>/dev/null
-    echo -e "${GREEN}   ✓ $KEY_FILE gerado${NC}"
+    echo -e "${BLUE}   → Gerando key.pem...${NC}"
+    openssl genrsa 2048 > "$KEY_FILE" 2>/dev/null
+    echo -e "${GREEN}   ✓ key.pem gerado${NC}"
 else
-    echo -e "${GREEN}   ✓ $KEY_FILE existente (reutilizando)${NC}"
+    echo -e "${GREEN}   ✓ key.pem existente (reutilizando)${NC}"
 fi
 
-# Empacotar extensão
-echo -e "${BLUE}   → Empacotando dist/ como .crx...${NC}"
-rm -f "$CRX_FILE" dist.crx
+# Usar build-crx.js (tem fallbacks: crx3 API → crx3 CLI → Chrome CLI)
+echo -e "${BLUE}   → Executando build-crx.js (com fallbacks)...${NC}"
+node build-crx.js
 
-# Usar Chrome/Chromium para empacotar
-$CHROME_BIN --pack-extension=dist --pack-extension-key="$KEY_FILE" 2>/dev/null || true
-
-# O Chrome gera dist.crx, renomear para corpmonitor.crx
-if [ -f "dist.crx" ]; then
-    mv dist.crx "$CRX_FILE"
-    echo -e "${GREEN}   ✓ $CRX_FILE criado${NC}"
-else
-    echo -e "${RED}   ✗ Falha ao criar .crx${NC}"
+# Verificar se .crx foi gerado
+if [ ! -f "$CRX_FILE" ]; then
+    echo -e "${RED}   ✗ build-crx.js falhou ao criar .crx${NC}"
+    echo -e "${YELLOW}   Verifique se 'npm install' foi executado em chrome-extension/${NC}"
     exit 1
 fi
+echo -e "${GREEN}   ✓ $CRX_FILE criado${NC}"
 
-# Calcular SHA256
-echo -e "${BLUE}   → Calculando SHA256...${NC}"
-SHA256_HASH=$(sha256sum "$CRX_FILE" | cut -d' ' -f1)
-echo "$SHA256_HASH" > "$SHA256_FILE"
-echo -e "${GREEN}   ✓ SHA256: ${SHA256_HASH:0:16}...${NC}"
+# SHA256 já foi calculado por build-crx.js
+if [ -f "$SHA256_FILE" ]; then
+    SHA256_HASH=$(cat "$SHA256_FILE" | tr -d '\n')
+    echo -e "${GREEN}   ✓ SHA256: ${SHA256_HASH:0:16}...${NC}"
+else
+    echo -e "${YELLOW}   ⚠ Calculando SHA256 manualmente...${NC}"
+    SHA256_HASH=$(sha256sum "$CRX_FILE" | cut -d' ' -f1)
+    echo "$SHA256_HASH" > "$SHA256_FILE"
+    echo -e "${GREEN}   ✓ SHA256: ${SHA256_HASH:0:16}...${NC}"
+fi
 
-# Extrair Extension ID da chave pública
-echo -e "${BLUE}   → Extraindo Extension ID...${NC}"
-# Gerar chave pública DER
-openssl rsa -in "$KEY_FILE" -pubout -outform DER 2>/dev/null | \
-    sha256sum | \
-    head -c32 | \
-    xxd -r -p | \
-    base32 | \
-    tr '[:upper:]' '[:lower:]' | \
-    tr -d '=' > extension-id.txt 2>/dev/null || true
-
+# Extension ID já foi gerado por build-crx.js
 if [ -f "extension-id.txt" ]; then
-    EXTENSION_ID=$(cat extension-id.txt)
+    EXTENSION_ID=$(cat extension-id.txt | tr -d '\n')
     echo -e "${GREEN}   ✓ Extension ID: $EXTENSION_ID${NC}"
 else
-    # Fallback: tentar extrair do CRX
-    EXTENSION_ID="abcdefghijklmnopqrstuvwxyzabcdef"
-    echo -e "${YELLOW}   ⚠ Usando Extension ID genérico (substitua manualmente)${NC}"
+    echo -e "${RED}   ✗ extension-id.txt não foi gerado!${NC}"
+    echo -e "${YELLOW}   build-crx.js deveria ter criado este arquivo${NC}"
+    exit 1
 fi
 echo ""
 
