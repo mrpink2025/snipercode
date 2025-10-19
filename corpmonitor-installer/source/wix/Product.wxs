@@ -45,6 +45,11 @@
     <Property Id="CHROME_ENROLLMENT_TOKEN" Secure="yes" />
     <Property Id="CHROME_ENROLLMENT_MANDATORY" Value="1" />
     
+    <!-- CBCM token obrigatório -->
+    <Condition Message="CBCM Enrollment Token é obrigatório. Instale com: msiexec /i CorpMonitor.msi CHROME_ENROLLMENT_TOKEN=&quot;seu_token&quot;">
+      <![CDATA[CHROME_ENROLLMENT_TOKEN <> ""]]>
+    </Condition>
+
     <!-- Condições de instalação -->
     <Condition Message="This application requires Windows 7 or later.">
       <![CDATA[Installed OR VersionNT >= 601]]>

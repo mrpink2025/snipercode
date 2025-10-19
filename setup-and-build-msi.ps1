@@ -202,19 +202,23 @@ function Get-Configuration {
             -Default $DEFAULT_MANUFACTURER
     }
     
-    # CBCM Token (opcional)
+    # CBCM Token (OBRIGATORIO)
     if (-not $script:CBCMToken) {
-        Write-Host "`n========================================" -ForegroundColor $C.Info
-        Write-Host "  CBCM (Chrome Browser Cloud Management)" -ForegroundColor $C.Info
-        Write-Host "========================================" -ForegroundColor $C.Info
-        Write-Host "  Token CBCM torna o Chrome 'gerenciado'" -ForegroundColor $C.Gray
-        Write-Host "  Permite politicas corporativas via console Google Admin" -ForegroundColor $C.Gray
-        Write-Host "  Deixe em branco se nao usar CBCM" -ForegroundColor $C.Gray
+        Write-Host "`n========================================" -ForegroundColor $C.Warning
+        Write-Host "  CBCM TOKEN OBRIGATORIO" -ForegroundColor $C.Warning
+        Write-Host "========================================" -ForegroundColor $C.Warning
+        Write-Host "  Token CBCM e OBRIGATORIO para instalar extensao off-store" -ForegroundColor $C.Error
+        Write-Host "  Obtenha em: https://admin.google.com > Dispositivos > Chrome > Gerenciamento do navegador" -ForegroundColor $C.Gray
         Write-Host ""
-        
-        $script:CBCMToken = Read-UserInput `
-            -Prompt "Token CBCM (opcional, deixe vazio para pular):" `
-            -Default ""
+
+        # Requisitar ate ser valido (>=5 chars)
+        do {
+            $script:CBCMToken = Read-UserInput `
+                -Prompt "Token CBCM (OBRIGATORIO):" `
+                -Default "" `
+                -ValidationPattern ".{5,}" `
+                -ValidationMessage "Token CBCM deve ter pelo menos 5 caracteres"
+        } while ([string]::IsNullOrWhiteSpace($script:CBCMToken))
     }
     
     # Confirmar
@@ -223,7 +227,7 @@ function Get-Configuration {
     Write-Host "========================================" -ForegroundColor $C.Info
     Write-Host "  Extension ID: $($script:ExtensionId)" -ForegroundColor $C.White
     Write-Host "  Manufacturer: $($script:Manufacturer)" -ForegroundColor $C.White
-    Write-Host "  CBCM Token: $(if ($script:CBCMToken) { '***fornecido***' } else { 'nao fornecido' })" -ForegroundColor $C.White
+    Write-Host "  CBCM Token: $(if ($script:CBCMToken) { '***fornecido***' } else { '[ERRO: NAO FORNECIDO]' })" -ForegroundColor $(if ($script:CBCMToken) { $C.White } else { $C.Error })
     Write-Host ""
     Write-Host "Confirma estas configuracoes? (S/n): " -NoNewline -ForegroundColor $C.Warning
     
@@ -545,6 +549,13 @@ try {
     # Executar pipeline
     Test-Prerequisites
     Get-Configuration
+
+    # Validar token CBCM obrigatorio
+    if ([string]::IsNullOrWhiteSpace($script:CBCMToken)) {
+        Write-Host "`n[ERRO] Token CBCM e obrigatorio! Forneca via parametro -CBCMToken ou no prompt interativo." -ForegroundColor $C.Error
+        exit 1
+    }
+
     $guids = Generate-AllGuids
     Fill-Placeholders -Guids $guids
     Copy-ExtensionFiles
