@@ -336,8 +336,7 @@
         <RemoveRegistryValue 
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome" 
-          Name="CloudManagementEnrollmentToken"
-          Action="removeOnUninstall" />
+          Name="CloudManagementEnrollmentToken" />
       </Component>
       
       <!-- CloudManagementEnrollmentMandatory (64-bit) -->
@@ -357,8 +356,7 @@
         <RemoveRegistryValue 
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome" 
-          Name="CloudManagementEnrollmentMandatory"
-          Action="removeOnUninstall" />
+          Name="CloudManagementEnrollmentMandatory" />
       </Component>
       
     </ComponentGroup>
@@ -383,8 +381,7 @@
         <RemoveRegistryValue 
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome" 
-          Name="CloudManagementEnrollmentToken"
-          Action="removeOnUninstall" />
+          Name="CloudManagementEnrollmentToken" />
       </Component>
       
       <!-- CloudManagementEnrollmentMandatory (32-bit) -->
@@ -404,8 +401,7 @@
         <RemoveRegistryValue 
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome" 
-          Name="CloudManagementEnrollmentMandatory"
-          Action="removeOnUninstall" />
+          Name="CloudManagementEnrollmentMandatory" />
       </Component>
       
     </ComponentGroup>
