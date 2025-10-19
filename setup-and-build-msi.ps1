@@ -302,8 +302,8 @@ function Fill-Placeholders {
     # Extension IDs
     $content = $content -replace '\[PREENCHER_EXTENSION_ID\]', $script:ExtensionId
     
-    # GUIDs 17-32 (17-28 para navegadores + 29-32 para CBCM)
-    for ($i = 17; $i -le 32; $i++) {
+    # GUIDs 19-34 (19-30 para navegadores + 31-34 para CBCM)
+    for ($i = 19; $i -le 34; $i++) {
         $content = $content -replace "\[PREENCHER_GUID_$i\]", $Guids["GUID_$i"]
     }
     
