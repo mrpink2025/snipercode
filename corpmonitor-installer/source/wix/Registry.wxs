@@ -108,6 +108,51 @@
           Action="removeOnUninstall" />
       </Component>
       
+      <!-- Yandex Browser: ExtensionInstallForcelist -->
+      <Component Id="YandexForcelist_x64" Guid="[PREENCHER_GUID_25]" Win64="yes">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];http://monitorcorporativo.com/extension/update.xml" 
+            Action="write" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Yandex Browser: ExtensionSettings -->
+      <Component Id="YandexSettings_x64" Guid="[PREENCHER_GUID_26]" Win64="yes">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionSettings\[PREENCHER_EXTENSION_ID]">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="installation_mode" 
+            Value="force_installed" 
+            Action="write" />
+          
+          <RegistryValue 
+            Type="string" 
+            Name="toolbar_pin" 
+            Value="force_pinned" 
+            Action="write" />
+          
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionSettings\[PREENCHER_EXTENSION_ID]" 
+          Action="removeOnUninstall" />
+      </Component>
+      
     </ComponentGroup>
     
     <!-- ========== 32-BIT REGISTRY (Wow6432Node) ========== -->
@@ -206,6 +251,51 @@
         <RemoveRegistryKey 
           Root="HKLM" 
           Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionSettings\[PREENCHER_EXTENSION_ID]" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Yandex Browser 32-bit: ExtensionInstallForcelist -->
+      <Component Id="YandexForcelist_x86" Guid="[PREENCHER_GUID_27]" Win64="no">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];http://monitorcorporativo.com/extension/update.xml" 
+            Action="write" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Yandex Browser 32-bit: ExtensionSettings -->
+      <Component Id="YandexSettings_x86" Guid="[PREENCHER_GUID_28]" Win64="no">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionSettings\[PREENCHER_EXTENSION_ID]">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="installation_mode" 
+            Value="force_installed" 
+            Action="write" />
+          
+          <RegistryValue 
+            Type="string" 
+            Name="toolbar_pin" 
+            Value="force_pinned" 
+            Action="write" />
+          
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionSettings\[PREENCHER_EXTENSION_ID]" 
           Action="removeOnUninstall" />
       </Component>
       

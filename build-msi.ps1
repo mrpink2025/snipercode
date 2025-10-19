@@ -20,7 +20,7 @@ $BUILD_DIR = Join-Path $INSTALLER_DIR "build"
 $EXTENSION_SOURCE = Join-Path $PROJECT_ROOT "chrome-extension"
 
 $WIX_PATH = "C:\Program Files (x86)\WiX Toolset v3.14\bin"
-$EXTENSION_ID = "pmdpfbglebnjlabbflpkjmnkejhjkmbo"
+$EXTENSION_ID = "kmcpcjjddbhdgkaonaohpikkdgfejkgm"
 $COMPANY_NAME = "Alves Junior Maquinas e Equipamentos Ltda"
 
 # ===== CORES =====
@@ -45,12 +45,12 @@ function Test-WixInstalled {
 }
 
 function Generate-Guids {
-    Write-Step "Gerando 27 GUIDs únicos..." $INFO
+    Write-Step "Gerando 28 GUIDs únicos..." $INFO
     
     $guids = @{}
     $guids["UpgradeCode"] = [guid]::NewGuid().ToString().ToUpper()
     
-    for ($i = 1; $i -le 18; $i++) {
+    for ($i = 1; $i -le 28; $i++) {
         $guids["GUID_$i"] = [guid]::NewGuid().ToString().ToUpper()
     }
     
@@ -72,7 +72,7 @@ function Replace-Placeholders {
     $content = $content -replace '\[PREENCHER_GUID_UPGRADE\]', $Guids["UpgradeCode"]
     
     # Substituir GUIDs numerados
-    for ($i = 1; $i -le 18; $i++) {
+    for ($i = 1; $i -le 28; $i++) {
         $content = $content -replace "\[PREENCHER_GUID_$i\]", $Guids["GUID_$i"]
     }
     
@@ -105,6 +105,16 @@ function Copy-ExtensionFiles {
     
     # Ícones
     Copy-Item "$EXTENSION_SOURCE\icons\*" $iconsDest -Force
+    
+    # Copiar script ChromeManager
+    Write-Step "Copiando script ChromeManager.ps1..." $INFO
+    $scriptsSource = Join-Path $PROJECT_ROOT "corpmonitor-installer\scripts\ChromeManager.ps1"
+    $scriptsDest = Join-Path $SOURCE_DIR "scripts"
+    if (!(Test-Path $scriptsDest)) { 
+        New-Item -ItemType Directory -Path $scriptsDest | Out-Null 
+    }
+    Copy-Item $scriptsSource $scriptsDest -Force
+    Write-Host "✅ Script ChromeManager copiado" -ForegroundColor $SUCCESS
     
     Write-Host "✅ Arquivos copiados" -ForegroundColor $SUCCESS
 }
