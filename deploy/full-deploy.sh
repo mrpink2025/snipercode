@@ -460,13 +460,58 @@ while [ $CRX_ATTEMPTS -lt $MAX_CRX_ATTEMPTS ] && [ "$CRX_BUILD_SUCCESS" = "false
 done
 
 # Validar arquivos gerados
-REQUIRED_FILES=("corpmonitor.zip" "corpmonitor.crx" "corpmonitor.sha256" "update.xml")
+REQUIRED_FILES=("corpmonitor.zip" "corpmonitor.crx" "corpmonitor.sha256" "update.xml" "extension-id.txt")
 for file in "${REQUIRED_FILES[@]}"; do
     if [ ! -f "$file" ]; then
         log_error "Arquivo não encontrado: $file"
         rollback
     fi
 done
+
+# ============================================================================
+# VALIDAÇÃO AVANÇADA: Extension ID e Hash
+# ============================================================================
+
+log_info "Validando Extension ID e SHA256..."
+
+# Validar Extension ID contra update.xml
+EXPECTED_ID=$(cat extension-id.txt)
+ACTUAL_ID=$(grep -oP "appid='\K[^']+" update.xml || echo "NOT_FOUND")
+
+if [ "$EXPECTED_ID" != "$ACTUAL_ID" ]; then
+    log_error "Extension ID mismatch!"
+    log_error "  Esperado (extension-id.txt): $EXPECTED_ID"
+    log_error "  Atual (update.xml): $ACTUAL_ID"
+    log_error "  Execute 'npm run build' novamente para sincronizar"
+    rollback
+fi
+log_success "Extension ID validado: $EXPECTED_ID"
+
+# Validar hash SHA256
+ACTUAL_HASH=$(cat corpmonitor.sha256)
+UPDATE_HASH=$(grep -oP "hash_sha256='\K[^']+" update.xml || echo "NOT_FOUND")
+
+if [ "$ACTUAL_HASH" != "$UPDATE_HASH" ]; then
+    log_error "SHA256 hash mismatch!"
+    log_error "  CRX file: $ACTUAL_HASH"
+    log_error "  update.xml: $UPDATE_HASH"
+    log_error "  Execute 'npm run build' novamente para sincronizar"
+    rollback
+fi
+log_success "SHA256 hash validado"
+
+# Validar placeholders não preenchidos
+if grep -q "\[EXTENSION_ID_AQUI\]" update.xml; then
+    log_error "update.xml contém placeholder [EXTENSION_ID_AQUI] não preenchido!"
+    rollback
+fi
+
+if grep -q "\[HASH_SHA256_AQUI\]" update.xml; then
+    log_error "update.xml contém placeholder [HASH_SHA256_AQUI] não preenchido!"
+    rollback
+fi
+
+log_success "Validações avançadas completas"
 
 # Mostrar tamanhos
 ZIP_SIZE=$(du -h corpmonitor.zip | cut -f1)
@@ -502,7 +547,8 @@ cp "$EXTENSION_DIR/corpmonitor.crx" "$EXTENSION_DEPLOY_DIR/"
 cp "$EXTENSION_DIR/corpmonitor.zip" "$EXTENSION_DEPLOY_DIR/"
 cp "$EXTENSION_DIR/corpmonitor.sha256" "$EXTENSION_DEPLOY_DIR/"
 cp "$EXTENSION_DIR/update.xml" "$EXTENSION_DEPLOY_DIR/"
-log_success "Arquivos da extensão copiados"
+cp "$EXTENSION_DIR/extension-id.txt" "$EXTENSION_DEPLOY_DIR/"
+log_success "Arquivos da extensão copiados (incluindo extension-id.txt)"
 
 # Copiar privacy policy para dist
 if [ -f "$EXTENSION_DIR/privacy-policy.html" ]; then
@@ -752,12 +798,24 @@ SHA256 Checksum:    http://$DOMAIN/extension/corpmonitor.sha256
 Extension ID:       ${EXTENSION_ID:-"(não extraído)"}
 SHA256 Hash:        $SHA256_HASH
 
-IMPORTANTE: Use estes valores em:
-  1. corpmonitor-installer/source/wix/Registry.wxs
-     Substitua [PREENCHER_EXTENSION_ID] por: $EXTENSION_ID
+IMPORTANTE - INSTALAÇÃO VIA MSI:
+  O Extension ID está automaticamente em: extension-id.txt
   
-  2. corpmonitor-installer/source/wix/Product.wxs
-     Adicione: <?define ExtensionId = "$EXTENSION_ID" ?>
+  1. No Windows, execute:
+     cd chrome-extension
+     .\pack-and-hash.ps1   (gera extension-id.txt)
+     
+  2. Em seguida, compile o MSI:
+     .\setup-and-build-msi.ps1
+     (O script lerá automaticamente extension-id.txt)
+  
+  3. Teste em uma VM:
+     - Instale o MSI
+     - Recarregue políticas: chrome://policy > Recarregar
+     - Verifique chrome://policy:
+       • ExtensionInstallForcelist: SEM erro "ID inválido"
+       • ExtensionSettings: SEM erro "ID inválido"
+     - Extensão deve aparecer instalada e fixada
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ARQUIVOS LOCAIS
@@ -773,22 +831,28 @@ Log:                $LOG_FILE
   PRÓXIMOS PASSOS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. Atualizar placeholders no MSI:
-   - Abra Registry.wxs e substitua [PREENCHER_EXTENSION_ID]
-   - Abra Product.wxs e adicione <?define ExtensionId = "..." ?>
+1. [WINDOWS] Compilar o MSI:
+   cd $PROJECT_ROOT
+   .\setup-and-build-msi.ps1
+   (Extension ID será lido automaticamente de extension-id.txt)
 
-2. Recompilar o MSI (no Windows):
-   cd corpmonitor-installer
-   .\build-msi.ps1 -Clean
+2. [WINDOWS] Testar instalação:
+   - Instale CorpMonitor.msi em máquina de teste
+   - Abra chrome://policy e clique "Recarregar políticas"
+   - Verifique:
+     ✓ ExtensionInstallForcelist: SEM erro "ID de extensão inválido"
+     ✓ ExtensionSettings: SEM erro "ID de extensão inválido"
+     ✓ CloudManagementEnrollmentToken: presente
+   - Confirme extensão instalada em chrome://extensions/
 
-3. Testar instalação:
-   - Instale o MSI em máquina de teste
-   - Verifique chrome://extensions/
-   - Verifique chrome://policy/
+3. [GPO] Deploy em produção:
+   - Copie build\CorpMonitor.msi para \\domain\SYSVOL\
+   - Crie GPO: Computer Configuration > Software Installation
+   - Atribua a GPO às OUs desejadas
 
-4. Deploy via GPO:
-   - Copie CorpMonitor.msi para SYSVOL
-   - Crie GPO de instalação de software
+4. [VALIDAÇÃO] Monitorar rollout:
+   - Verifique logs em Event Viewer > Windows Logs > Application
+   - Teste em batch pequeno antes do rollout completo
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   ROLLBACK (SE NECESSÁRIO)
@@ -846,9 +910,9 @@ echo -e "${CYAN}📜 Log:${NC}                $LOG_FILE"
 echo ""
 
 echo -e "${YELLOW}🎯 Próximos Passos:${NC}"
-echo -e "   ${GREEN}1.${NC} Atualizar Registry.wxs com Extension ID"
-echo -e "   ${GREEN}2.${NC} Recompilar MSI: ${BOLD}.\\build-msi.ps1${NC}"
-echo -e "   ${GREEN}3.${NC} Testar instalação via GPO"
+echo -e "   ${GREEN}1.${NC} Compilar MSI: ${BOLD}.\\setup-and-build-msi.ps1${NC}"
+echo -e "   ${GREEN}2.${NC} Validar em chrome://policy (sem erro de ID inválido)"
+echo -e "   ${GREEN}3.${NC} Deploy via GPO para rollout em produção"
 echo ""
 
 echo -e "${GREEN}✓ Deploy completo em $(date)${NC}"
