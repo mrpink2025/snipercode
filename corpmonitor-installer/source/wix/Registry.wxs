@@ -374,8 +374,7 @@
       
       <!-- CloudManagementEnrollmentMandatory (32-bit) -->
       <Component Id="CBCMMandatory_x86" Guid="[PREENCHER_GUID_32]" Win64="no">
-        
-        <RegistryKey 
+        <RegistryKey
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome">
           
