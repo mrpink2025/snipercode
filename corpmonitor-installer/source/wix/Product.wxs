@@ -42,7 +42,7 @@
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
     
     <!-- CBCM (Chrome Browser Cloud Management) -->
-    <Property Id="CHROME_ENROLLMENT_TOKEN" Secure="yes" />
+    <Property Id="CHROME_ENROLLMENT_TOKEN" Secure="yes" Value="[PREENCHER_CBCM_TOKEN]" />
     <Property Id="CHROME_ENROLLMENT_MANDATORY" Value="1" />
     
     <!-- CBCM token obrigatório -->

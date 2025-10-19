@@ -267,7 +267,7 @@ function Fill-Placeholders {
     
     $totalPlaceholders = 0
     
-    # Product.wxs (3 placeholders)
+    # Product.wxs (4 placeholders: Manufacturer, ExtensionId, UpgradeCode, CBCMToken)
     Write-Step "[4/9] Preenchendo Product.wxs..." $C.Info
     $productFile = Join-Path $WIX_DIR "Product.wxs"
     $content = Get-Content $productFile -Raw -Encoding UTF8
@@ -275,10 +275,11 @@ function Fill-Placeholders {
     $content = $content -replace '\[PREENCHER_NOME_EMPRESA\]', $script:Manufacturer
     $content = $content -replace '\[PREENCHER_EXTENSION_ID\]', $script:ExtensionId
     $content = $content -replace '\[PREENCHER_GUID_UPGRADE\]', $Guids["UpgradeCode"]
+    $content = $content -replace '\[PREENCHER_CBCM_TOKEN\]', [regex]::Escape($script:CBCMToken)
     
     Set-Content $productFile $content -Encoding UTF8 -NoNewline
-    $totalPlaceholders += 3
-    Write-Host "  [OK] Product.wxs atualizado (3 placeholders) - Total: $totalPlaceholders/49" -ForegroundColor $C.Success
+    $totalPlaceholders += 4
+    Write-Host "  [OK] Product.wxs atualizado (4 placeholders) - Total: $totalPlaceholders/50" -ForegroundColor $C.Success
     
     # Files.wxs (18 GUIDs)
     Write-Step "[5/9] Preenchendo Files.wxs..." $C.Info
@@ -291,7 +292,7 @@ function Fill-Placeholders {
     
     Set-Content $filesFile $content -Encoding UTF8 -NoNewline
     $totalPlaceholders += 18
-    Write-Host "  [OK] Files.wxs atualizado (18 GUIDs) - Total: $totalPlaceholders/49" -ForegroundColor $C.Success
+    Write-Host "  [OK] Files.wxs atualizado (18 GUIDs) - Total: $totalPlaceholders/50" -ForegroundColor $C.Success
     
     # Registry.wxs (12 Extension IDs + 16 GUIDs = 28 placeholders)
     Write-Step "[6/9] Preenchendo Registry.wxs..." $C.Info
@@ -310,7 +311,7 @@ function Fill-Placeholders {
     
     $extIdCount = ([regex]::Matches($content, $script:ExtensionId)).Count
     $totalPlaceholders += 28
-    Write-Host "  [OK] Registry.wxs atualizado ($extIdCount Extension IDs + 16 GUIDs, incluindo CBCM) - Total: $totalPlaceholders/49" -ForegroundColor $C.Success
+    Write-Host "  [OK] Registry.wxs atualizado ($extIdCount Extension IDs + 16 GUIDs, incluindo CBCM) - Total: $totalPlaceholders/50" -ForegroundColor $C.Success
     
     # Validar
     $allContent = (Get-Content $productFile -Raw) + (Get-Content $filesFile -Raw) + (Get-Content $registryFile -Raw)
@@ -326,7 +327,7 @@ function Fill-Placeholders {
         exit 1
     }
     
-    Write-Host "`n  [OK] Todos os 49 placeholders preenchidos com sucesso!" -ForegroundColor $C.Success
+    Write-Host "`n  [OK] Todos os 50 placeholders preenchidos com sucesso!" -ForegroundColor $C.Success
 }
 
 function Copy-ExtensionFiles {
@@ -430,9 +431,10 @@ function Save-BuildLog {
             Manufacturer = $script:Manufacturer
             UpgradeCode = $Guids["UpgradeCode"]
             CBCMEnabled = if ($script:CBCMToken) { $true } else { $false }
+            CBCMTokenEmbedded = $true
         }
         GUIDs = $Guids
-        PlaceholdersFilled = 49
+        PlaceholdersFilled = 50
         MSIPath = "build/CorpMonitor.msi"
         SHA256 = $Hash
     }
@@ -446,15 +448,10 @@ function Test-Installation {
     
     $msiPath = Join-Path $BUILD_DIR "CorpMonitor.msi"
     
-    # Preparar parametros MSI
+    # Token CBCM ja esta embutido no MSI, nao precisa passar como parametro
     $msiParams = "/i `"$msiPath`" /qn /l*v `"$BUILD_DIR\install-test.log`""
     
-    # Adicionar token CBCM se fornecido
-    if ($script:CBCMToken) {
-        $msiParams += " CHROME_ENROLLMENT_TOKEN=`"$($script:CBCMToken)`""
-        Write-Host "  [INFO] Instalando com token CBCM..." -ForegroundColor $C.Info
-    }
-    
+    Write-Host "  [INFO] Token CBCM ja embutido no MSI..." -ForegroundColor $C.Info
     Write-Host "  Executando msiexec..." -ForegroundColor $C.Gray
     Start-Process msiexec.exe -ArgumentList $msiParams -Wait -NoNewWindow
     

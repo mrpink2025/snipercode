@@ -55,7 +55,9 @@ Execute o script sem parâmetros e ele perguntará o token:
 O script coletará:
 1. Extension ID
 2. Manufacturer
-3. **Token CBCM** (opcional, deixe vazio se não usar)
+3. **Token CBCM** (OBRIGATÓRIO)
+
+⚠️ **IMPORTANTE**: O token será **embutido no MSI** durante o build.
 
 ### Opção 2: Linha de Comando (Automação)
 
@@ -68,36 +70,40 @@ Passe o token diretamente via parâmetro:
     -CBCMToken "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"
 ```
 
-### Opção 3: Sem Token (Extensão sem CBCM)
+### 🔒 Token Embutido no MSI
 
-O MSI funciona normalmente mesmo sem token:
-
-```powershell
-.\setup-and-build-msi.ps1 `
-    -ExtensionId "kmcpcjjddbhdgkaonaohpikkdgfejkgm" `
-    -Manufacturer "CorpMonitor Ltda"
-```
-
-Neste caso, a extensão será forçada via GPO local, mas o Chrome **não** estará "gerenciado".
+O token CBCM é **embutido no MSI** durante o build:
+- ✅ Cliente não precisa fornecer o token na instalação
+- ✅ Instalação completamente silenciosa via duplo clique ou GPO
+- ✅ Chrome fica "gerenciado" automaticamente após instalação
+- ⚠️ Token fica dentro do MSI (legível com ferramentas MSI)
 
 ---
 
-## 📦 Como Instalar o MSI com Token
+## 📦 Como Instalar o MSI (Cliente Final)
 
-### Instalação Silenciosa com Token
+### Instalação Silenciosa (Recomendado para GPO)
 
 ```powershell
-msiexec /i CorpMonitor.msi /qn `
-    CHROME_ENROLLMENT_TOKEN="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"
+msiexec /i CorpMonitor.msi /qn
 ```
 
+⚠️ **Não é necessário** passar `CHROME_ENROLLMENT_TOKEN` - o token já está embutido!
+
 ### Instalação com Interface Gráfica
+
+Duplo clique em `CorpMonitor.msi` ou:
 
 ```powershell
 msiexec /i CorpMonitor.msi
 ```
 
-O token já estará embutido no MSI se foi passado no build.
+### Deploy via GPO
+
+1. Copie `CorpMonitor.msi` para compartilhamento de rede
+2. Computer Configuration > Policies > Software Settings > Software Installation
+3. New > Package > Selecione o MSI
+4. Assigned (instalação automática na inicialização)
 
 ---
 
@@ -262,10 +268,11 @@ graph TD
 
 ### MSI Security
 
-O token CBCM **não fica hardcoded** no MSI:
-- É passado em runtime via `CHROME_ENROLLMENT_TOKEN`
-- Mesmo MSI pode ser usado com tokens diferentes
-- Token só é escrito no Registry da máquina destino
+O token CBCM **fica embutido** no MSI:
+- ✅ Simplifica deploy (não precisa passar parâmetros)
+- ⚠️ Token é legível dentro do MSI (use MSI por cliente se necessário)
+- ✅ Token só é escrito no Registry da máquina destino após instalação
+- 🔒 Recomendado: Gere MSI separado para cada cliente com tokens diferentes
 
 ---
 
