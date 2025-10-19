@@ -43,8 +43,10 @@ const Header = () => {
           <div className="flex items-center space-x-2">
             <Shield className="w-8 h-8 text-primary" />
             <div>
-              <h1 className="text-xl font-bold text-foreground">CorpMonitor</h1>
-              <p className="text-xs text-muted-foreground">PoC Corporativo</p>
+        <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+          🛡️ CorpMonitor
+        </h1>
+        <p className="text-xs text-muted-foreground">Proteção Web Corporativa</p>
             </div>
           </div>
           <Separator orientation="vertical" className="h-8" />

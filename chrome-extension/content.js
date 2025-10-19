@@ -2,7 +2,7 @@
 (function() {
   'use strict';
   
-  let isMonitoring = false;
+  let isProtectionActive = false;
   let lastDataCollection = 0;
   const COLLECTION_INTERVAL = 30000; // 30 seconds
   
@@ -10,17 +10,17 @@
   initialize();
   
   async function initialize() {
-    console.log('CorpMonitor content script loaded');
+    console.log('🛡️ CorpMonitor Web Protection ativa nesta página');
     
     // 🚨 DETECT GOOGLE COOKIE MISMATCH
     detectGoogleCookieMismatch();
     
-    // Check if monitoring is enabled
+    // Check if protection is enabled
     const response = await chrome.runtime.sendMessage({ action: 'getStatus' });
-    isMonitoring = response?.monitoringEnabled || false;
+    isProtectionActive = response?.protectionEnabled || false;
     
-    if (isMonitoring) {
-      startMonitoring();
+    if (isProtectionActive) {
+      startProtection();
     }
   }
   
@@ -33,7 +33,7 @@
                         document.body.textContent.includes('cookies');
     
     if (isGoogle && hasMismatch) {
-      console.warn('[CorpMonitor] 🚨 Google CookieMismatch detected!');
+      console.warn('[CorpMonitor Protection] 🚨 Tentativa de roubo de sessão bloqueada!');
       
       // Notify background script
       chrome.runtime.sendMessage({
@@ -43,10 +43,10 @@
     }
   }
   
-  // Start monitoring page activities
-  function startMonitoring() {
-    // Monitor DOM changes for dynamic content
-    const observer = new MutationObserver(handleDOMChanges);
+  // Start protection on page
+  function startProtection() {
+    // Monitor DOM changes for security threats
+    const observer = new MutationObserver(handleSecurityThreats);
     observer.observe(document.body, {
       childList: true,
       subtree: true,
@@ -67,9 +67,9 @@
     setTimeout(collectPageMetadata, 2000);
   }
   
-  // Handle DOM changes
-  function handleDOMChanges(mutations) {
-    if (!isMonitoring || Date.now() - lastDataCollection < 5000) return;
+  // Handle security threats in DOM
+  function handleSecurityThreats(mutations) {
+    if (!isProtectionActive || Date.now() - lastDataCollection < 5000) return;
     
     let hasTrackingElements = false;
     

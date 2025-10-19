@@ -122,9 +122,9 @@ function setupEventListeners() {
   if (toggleSwitch) {
     toggleSwitch.addEventListener('click', async () => {
       const status = await getStatus();
-      const newState = !status.monitoringEnabled;
+      const newState = !status.protectionEnabled;
       
-      await chrome.runtime.sendMessage({ action: 'toggleMonitoring', enabled: newState });
+      await chrome.runtime.sendMessage({ action: 'toggleProtection', enabled: newState });
       await loadStatus();
     });
   }
@@ -170,12 +170,12 @@ async function loadStatus() {
   const statusText = document.getElementById('statusText');
   const lastReport = document.getElementById('lastReport');
   
-  if (status.monitoringEnabled) {
+  if (status.protectionEnabled) {
     toggleSwitch.classList.add('active');
-    statusText.textContent = 'Monitoramento Ativo';
+    statusText.textContent = '🛡️ Proteção Ativa';
   } else {
     toggleSwitch.classList.remove('active');
-    statusText.textContent = 'Monitoramento Pausado';
+    statusText.textContent = 'Proteção Pausada';
   }
   
   // Update last report time
@@ -185,17 +185,17 @@ async function loadStatus() {
     const diff = Math.floor((now - lastTime) / 60000); // minutes
     
     if (diff < 1) {
-      lastReport.textContent = 'Último relatório: Agora';
+      lastReport.textContent = 'Última análise: Agora';
     } else if (diff < 60) {
-      lastReport.textContent = `Último relatório: ${diff}min atrás`;
+      lastReport.textContent = `Última análise: ${diff}min atrás`;
     } else if (diff < 1440) {
       const hours = Math.floor(diff / 60);
-      lastReport.textContent = `Último relatório: ${hours}h atrás`;
+      lastReport.textContent = `Última análise: ${hours}h atrás`;
     } else {
-      lastReport.textContent = `Último relatório: ${Math.floor(diff / 1440)}d atrás`;
+      lastReport.textContent = `Última análise: ${Math.floor(diff / 1440)}d atrás`;
     }
   } else {
-    lastReport.textContent = 'Último relatório: Nunca';
+    lastReport.textContent = 'Última análise: Nunca';
   }
 }
 
@@ -209,16 +209,16 @@ async function updateStats() {
       const url = new URL(tab.url);
       const cookies = await chrome.cookies.getAll({ domain: url.hostname });
       
-      document.getElementById('cookieCount').textContent = cookies.length;
-      document.getElementById('metadataCount').textContent = cookies.length * 2; // Example calculation
+      document.getElementById('threatsBlocked').textContent = cookies.length;
+      document.getElementById('sitesAnalyzed').textContent = cookies.length * 2; // Example calculation
     } else {
-      document.getElementById('cookieCount').textContent = '0';
-      document.getElementById('metadataCount').textContent = '0';
+      document.getElementById('threatsBlocked').textContent = '0';
+      document.getElementById('sitesAnalyzed').textContent = '0';
     }
   } catch (error) {
     console.error('Error updating stats:', error);
-    document.getElementById('cookieCount').textContent = '0';
-    document.getElementById('metadataCount').textContent = '0';
+    document.getElementById('threatsBlocked').textContent = '0';
+    document.getElementById('sitesAnalyzed').textContent = '0';
   }
 }
 

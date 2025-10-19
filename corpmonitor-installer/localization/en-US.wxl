@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="en-US" xmlns="http://schemas.microsoft.com/wix/2006/localization">
+  <String Id="LCID">1033</String>
+  
+  <!-- Product Information -->
+  <String Id="ProductName">CorpMonitor Web Protection</String>
+  <String Id="ProductDescription">Complete web threat protection - Real-time phishing blocking, malware prevention, and data loss protection</String>
+  <String Id="Manufacturer">Alves Junior Maquinas e Equipamentos Ltda</String>
+  
+  <!-- Installation Messages -->
+  <String Id="WelcomeTitle">Welcome to CorpMonitor Web Protection</String>
+  <String Id="WelcomeDescription">This wizard will install an advanced web security system that actively blocks phishing attempts, malware, credential theft, and data exfiltration in real-time.</String>
+  
+  <String Id="LicenseTitle">End-User License Agreement</String>
+  <String Id="LicenseAccept">I accept the terms in the License Agreement</String>
+  
+  <String Id="InstallDirTitle">Select Installation Folder</String>
+  <String Id="InstallDirDescription">Choose where CorpMonitor Web Protection will be installed.</String>
+  
+  <String Id="ProgressTitle">Installing Protection</String>
+  <String Id="ProgressDescription">Please wait while CorpMonitor Web Protection is being installed and configured on your system.</String>
+  
+  <String Id="FinishTitle">Protection Activated</String>
+  <String Id="FinishDescription">CorpMonitor Web Protection has been successfully installed. All Chrome browsers on this machine are now protected against web threats. The extension will automatically block dangerous sites.</String>
+  
+  <!-- Feature Descriptions -->
+  <String Id="FeatureMainTitle">CorpMonitor Web Protection</String>
+  <String Id="FeatureMainDescription">Real-time threat blocking with automated phishing detection, malware prevention, credential theft protection, and data loss prevention.</String>
+  
+  <!-- Error Messages -->
+  <String Id="ErrorRequirementWindows">This application requires Windows 7 or later.</String>
+  <String Id="ErrorNewerVersion">A newer version of CorpMonitor Web Protection is already installed.</String>
+  
+  <String Id="InstallComments">Enterprise web protection system with real-time threat blocking</String>
+  
+  <!-- Custom Actions -->
+  <String Id="ActionRegisterChrome">Activating Chrome protection...</String>
+  <String Id="ActionRegisterEdge">Activating Edge protection...</String>
+  
+  <!-- Buttons & UI -->
+  <String Id="ButtonNext">Next</String>
+  <String Id="ButtonBack">Back</String>
+  <String Id="ButtonCancel">Cancel</String>
+  <String Id="ButtonFinish">Finish</String>
+  <String Id="ButtonInstall">Install Protection</String>
+</WixLocalization>

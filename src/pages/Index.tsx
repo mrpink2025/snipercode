@@ -28,10 +28,12 @@ const Index = () => {
           <div className="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-lg">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-medium text-primary">Demonstração da Extensão Chrome</h3>
-                <p className="text-sm text-primary/80 mt-1">
-                  Visualize como a extensão aparece para os usuários finais
-                </p>
+              <h3 className="font-medium text-primary flex items-center gap-2">
+                🛡️ Sistema de Proteção Ativo
+              </h3>
+              <p className="text-sm text-primary/80 mt-1">
+                Extensão Chrome protegendo contra phishing, malware e vazamento de dados em tempo real
+              </p>
               </div>
               <Button 
                 variant="outline" 

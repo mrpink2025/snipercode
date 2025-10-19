@@ -1,16 +1,18 @@
-# CorpMonitor Chrome Extension
+# 🛡️ CorpMonitor Web Protection - Chrome Extension
 
-Uma extensão Chrome corporativa para monitoramento de dados e conformidade de privacidade.
+Uma extensão Chrome corporativa para **proteção ativa** contra phishing, malware e vazamento de dados.
 
-## Funcionalidades
+## ✨ Recursos de Proteção
 
-- ✅ Monitoramento automático de cookies
-- ✅ Coleta de metadados de navegação
-- ✅ Interface de usuário intuitiva
-- ✅ Comunicação com API CorpMonitor
-- ✅ Sistema de consentimento do usuário
-- ✅ Relatórios em tempo real
-- ✅ Controles de ativação/desativação
+- ✅ **Bloqueio automático de phishing** (homograph attacks, typosquatting)
+- ✅ **Detecção de malware** via Google Safe Browsing
+- ✅ **Proteção contra roubo de credenciais** (cookies, tokens)
+- ✅ **Data Loss Prevention (DLP)** em tempo real
+- ✅ **Interface intuitiva** com status de proteção
+- ✅ **Comunicação com API CorpMonitor**
+- ✅ **Sistema de níveis de risco** (50-69: aviso | 70-89: banner | ≥90: bloqueio total)
+- ✅ **Whitelist dinâmica** para sites confiáveis
+- ✅ **Controles de ativação/desativação** (somente admin)
 
 ## Instalação Rápida
 
@@ -49,10 +51,10 @@ chrome-extension/
 
 ## Como Funciona
 
-1. **Background Script**: Monitora abas ativas e coleta dados de cookies
-2. **Content Script**: Coleta metadados da página e elementos de tracking
-3. **Popup Interface**: Permite controle do usuário e visualização de status
-4. **API Integration**: Envia dados coletados para o sistema CorpMonitor
+1. **Background Script**: Detecta e bloqueia ameaças em tempo real
+2. **Content Script**: Analisa páginas web em busca de indicadores de phishing
+3. **Popup Interface**: Exibe status de proteção e ameaças bloqueadas
+4. **API Integration**: Reporta ameaças bloqueadas para o console CorpMonitor
 
 ## Configuração Corporativa
 
@@ -72,30 +74,31 @@ A extensão requer as seguintes permissões:
 
 ## Segurança e Privacidade
 
-- ❌ **Não coleta dados sensíveis** (senhas, números de cartão, etc.)
-- ✅ **Coleta apenas metadados** necessários para conformidade
-- ✅ **Requer consentimento explícito** do usuário
+- ✅ **Bloqueio proativo** de sites maliciosos e phishing
+- ✅ **Proteção em tempo real** (<1 segundo de resposta)
+- ✅ **Análise de ameaças** com múltiplos indicadores
 - ✅ **Comunicação criptografada** com a API
-- ✅ **Auditoria completa** de todas as ações
+- ✅ **Auditoria completa** de todas as ações de bloqueio
 
-## Monitoramento Incluído
+## Proteção Incluída
 
-### Cookies
-- Nome e domínio dos cookies
-- Configurações de segurança (Secure, HttpOnly, SameSite)
-- Datas de expiração
-- **Hash dos valores** (não os valores reais)
+### Detecção de Phishing
+- Homograph attacks (caracteres unicode suspeitos)
+- Typosquatting (imitação de sites legítimos)
+- TLDs suspeitos (.tk, .ml, .ga, etc.)
+- **Bloqueio automático** de sites com risco crítico (≥90/100)
 
-### Metadados
-- URLs visitadas
-- Elementos de tracking detectados
-- Submissões de formulário (apenas estrutura)
-- LocalStorage/SessionStorage (apenas chaves)
+### Proteção de Credenciais
+- Detecção de tentativas de roubo de cookies
+- Monitoramento de tokens de autenticação
+- Alertas sobre sessões suspeitas
+- **Bloqueio preventivo** de exfiltração
 
-### Atividade
-- Cliques em elementos rastreados
-- Mudanças dinâmicas no DOM
-- Scripts de analytics carregados
+### Análise de Ameaças
+- Integração com Google Safe Browsing
+- Detecção de malware em tempo real
+- Análise de reputação de domínios
+- Sistema de níveis de risco (baixo, médio, alto, crítico)
 
 ## Comandos Úteis
 
@@ -115,10 +118,16 @@ npm run install-guide # Ver guia de instalação
 - Verifique se o modo desenvolvedor está ativo
 - Confirme que todos os arquivos estão na pasta dist/
 
-### Monitoramento não funciona
-- Verifique se o usuário deu consentimento
+### Proteção não funciona
+- Verifique se a extensão está habilitada
 - Confirme que a extensão tem as permissões necessárias
 - Verifique a conectividade com a API
+- Teste em uma aba anônima
+
+### Sites legítimos sendo bloqueados
+- Adicione o site à whitelist no console CorpMonitor
+- Reporte o falso positivo ao administrador
+- Aguarde análise da equipe de segurança
 
 ### Popup não abre
 - Verifique se os ícones estão na pasta correta

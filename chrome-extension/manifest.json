@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "CorpMonitor - Corporate Security Monitor",
+  "name": "CorpMonitor - Proteção Web Corporativa",
   "version": "1.0.2",
-  "description": "Enterprise security for corporate data governance, compliance monitoring, and threat detection under LGPD regulations.",
+  "description": "Proteção completa contra phishing, malware e vazamento de dados. Bloqueia ameaças em tempo real com conformidade LGPD.",
   
-  "homepage_url": "https://monitorcorporativo.com/privacy-policy.html",
+  "homepage_url": "https://monitorcorporativo.com/web-protection",
   
   "permissions": [
     "activeTab",

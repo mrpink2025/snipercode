@@ -10,8 +10,8 @@ const CONFIG = {
   BATCH_SIZE: 10
 };
 
-// Global state and caching - ✅ MUDADO: auto-ativado
-let monitoringEnabled = true;
+// Global state and caching - ✅ Proteção ativa por padrão
+let protectionEnabled = true;
 let lastReportTime = null;
 let machineId = null;
 let pendingIncidents = [];
@@ -31,7 +31,7 @@ function log(level, message, data = null) {
   const timestamp = new Date().toISOString();
   const logEntry = { timestamp, level, message, data };
   
-  console[level === 'error' ? 'error' : 'log'](`[CorpMonitor ${level.toUpperCase()}] ${message}`, data || '');
+  console[level === 'error' ? 'error' : 'log'](`[CorpMonitor Protection ${level.toUpperCase()}] ${message}`, data || '');
   
   // Store logs for debugging
   chrome.storage.local.get(['debugLogs']).then(({ debugLogs = [] }) => {
@@ -45,7 +45,7 @@ function log(level, message, data = null) {
 // Initialize extension with professional error handling
 chrome.runtime.onInstalled.addListener(async () => {
   try {
-    log('info', `🚀 CorpMonitor extension v${CONFIG.VERSION} installed`);
+    log('info', `🛡️ CorpMonitor Web Protection v${CONFIG.VERSION} ativada`);
     log('debug', 'Starting initialization sequence...');
     await initializeExtension();
     

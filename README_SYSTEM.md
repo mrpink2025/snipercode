@@ -1,4 +1,34 @@
-# CorpMonitor - Sistema Completo de Monitoramento de Segurança Corporativa
+# 🛡️ CorpMonitor - Sistema de Proteção Completa contra Riscos da Web
+
+> **Proteção Ativa em Tempo Real** | Bloqueio Automático de Phishing, Malware e Vazamento de Dados
+
+## 🚫 O Que Fazemos
+
+CorpMonitor **não apenas detecta - nós bloqueamos**. É uma solução corporativa de **proteção ativa** que impede ameaças antes que elas atinjam seus colaboradores:
+
+- **🛡️ Bloqueio Automático de Phishing**: Detecta e bloqueia sites falsos (homograph attacks, typosquatting) em tempo real
+- **🦠 Prevenção de Malware**: Integração com Google Safe Browsing para detectar e bloquear distribuição de malware
+- **🔐 Proteção contra Roubo de Credenciais**: Impede exfiltração de cookies, tokens e senhas
+- **📊 Data Loss Prevention (DLP)**: Bloqueia vazamento de dados corporativos sensíveis
+- **⚡ Resposta Instantânea**: Bloqueios automáticos sem necessidade de intervenção humana
+
+---
+
+## 🆚 Proteção Ativa vs. Monitoramento Passivo
+
+### Ferramenta Tradicional (Monitoramento)
+❌ Detecta ameaças **depois** que o dano já ocorreu  
+❌ Apenas alerta o administrador  
+❌ Usuário pode acessar site malicioso enquanto aguarda análise  
+❌ Resposta lenta (minutos ou horas)  
+
+### CorpMonitor (Proteção)
+✅ Bloqueia ameaças **antes** que o usuário acesse  
+✅ Protege o usuário automaticamente  
+✅ Impede acesso instantaneamente  
+✅ Resposta em tempo real (<1 segundo)  
+
+---
 
 ## 🎯 Sistema 100% Funcional Implementado
 

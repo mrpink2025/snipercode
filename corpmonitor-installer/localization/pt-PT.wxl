@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="pt-PT" xmlns="http://schemas.microsoft.com/wix/2006/localization">
+  <String Id="LCID">2070</String>
+  
+  <String Id="ProductName">CorpMonitor Protecção Web</String>
+  <String Id="ProductDescription">Protecção completa contra ameaças da web - Bloqueio de phishing em tempo real, prevenção de malware e protecção contra fuga de dados</String>
+  <String Id="Manufacturer">Alves Junior Maquinas e Equipamentos Ltda</String>
+  
+  <String Id="WelcomeTitle">Bem-vindo à Protecção Web CorpMonitor</String>
+  <String Id="WelcomeDescription">Este assistente instalará um sistema avançado de segurança web que bloqueia activamente tentativas de phishing, malware, roubo de credenciais e fuga de dados em tempo real.</String>
+  
+  <String Id="LicenseTitle">Contrato de Licença do Utilizador Final</String>
+  <String Id="LicenseAccept">Aceito os termos do Contrato de Licença</String>
+  
+  <String Id="InstallDirTitle">Seleccione a Pasta de Instalação</String>
+  <String Id="InstallDirDescription">Escolha onde a Protecção Web CorpMonitor será instalada.</String>
+  
+  <String Id="ProgressTitle">A Instalar Protecção</String>
+  <String Id="ProgressDescription">Aguarde enquanto a Protecção Web CorpMonitor está a ser instalada e configurada no seu sistema.</String>
+  
+  <String Id="FinishTitle">Protecção Activada</String>
+  <String Id="FinishDescription">A Protecção Web CorpMonitor foi instalada com êxito. Todos os navegadores Chrome desta máquina estão agora protegidos contra ameaças da web. A extensão bloqueará automaticamente sites perigosos.</String>
+  
+  <String Id="FeatureMainTitle">CorpMonitor Protecção Web</String>
+  <String Id="FeatureMainDescription">Bloqueio de ameaças em tempo real com detecção automática de phishing, prevenção de malware, protecção contra roubo de credenciais e prevenção contra perda de dados.</String>
+  
+  <String Id="ErrorRequirementWindows">Esta aplicação requer Windows 7 ou superior.</String>
+  <String Id="ErrorNewerVersion">Uma versão mais recente da Protecção Web CorpMonitor já está instalada.</String>
+  
+  <String Id="InstallComments">Sistema de protecção web corporativa com bloqueio de ameaças em tempo real</String>
+  
+  <String Id="ActionRegisterChrome">A activar protecção no Chrome...</String>
+  <String Id="ActionRegisterEdge">A activar protecção no Edge...</String>
+  
+  <String Id="ButtonNext">Seguinte</String>
+  <String Id="ButtonBack">Anterior</String>
+  <String Id="ButtonCancel">Cancelar</String>
+  <String Id="ButtonFinish">Concluir</String>
+  <String Id="ButtonInstall">Instalar Protecção</String>
+</WixLocalization>

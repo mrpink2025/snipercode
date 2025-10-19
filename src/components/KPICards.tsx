@@ -104,7 +104,7 @@ export const KPICards = ({ data, loading }: KPICardsProps) => {
       {/* Active Alerts - NEW */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Alertas Ativos</CardTitle>
+          <CardTitle className="text-sm font-medium">Bloqueios em Tempo Real</CardTitle>
           <Activity className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -112,7 +112,7 @@ export const KPICards = ({ data, loading }: KPICardsProps) => {
             {(data.activeAlerts ?? 0).toLocaleString()}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Domínios monitorados
+            Ações automáticas de proteção
           </p>
         </CardContent>
       </Card>
@@ -120,7 +120,7 @@ export const KPICards = ({ data, loading }: KPICardsProps) => {
       {/* Monitored Machines */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Máquinas Monitoradas</CardTitle>
+          <CardTitle className="text-sm font-medium">Dispositivos Protegidos</CardTitle>
           <Activity className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -128,7 +128,7 @@ export const KPICards = ({ data, loading }: KPICardsProps) => {
             {(data.monitoredMachines ?? 0).toLocaleString()}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Máquinas ativas
+            Endpoints com proteção ativa
           </p>
         </CardContent>
       </Card>
@@ -136,7 +136,7 @@ export const KPICards = ({ data, loading }: KPICardsProps) => {
       {/* Blocked Domains */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Domínios Bloqueados</CardTitle>
+          <CardTitle className="text-sm font-medium">Ameaças Bloqueadas</CardTitle>
           <Ban className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -144,7 +144,7 @@ export const KPICards = ({ data, loading }: KPICardsProps) => {
             {(data.blockedDomains ?? 0).toLocaleString()}
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Proteção ativa
+            Bloqueios em tempo real
           </p>
         </CardContent>
       </Card>
