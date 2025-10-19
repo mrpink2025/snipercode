@@ -278,8 +278,8 @@ function Fill-Placeholders {
     # Extension IDs
     $content = $content -replace '\[PREENCHER_EXTENSION_ID\]', $script:ExtensionId
     
-    # GUIDs 19-30
-    for ($i = 19; $i -le 30; $i++) {
+    # GUIDs 17-28 (conforme estrutura real do Registry.wxs)
+    for ($i = 17; $i -le 28; $i++) {
         $content = $content -replace "\[PREENCHER_GUID_$i\]", $Guids["GUID_$i"]
     }
     
