@@ -239,6 +239,7 @@ export type Database = {
           host: string
           id: string
           incident_id: string
+          is_phishing_suspected: boolean | null
           is_red_list: boolean
           local_storage: Json | null
           machine_id: string
@@ -260,6 +261,7 @@ export type Database = {
           host: string
           id?: string
           incident_id: string
+          is_phishing_suspected?: boolean | null
           is_red_list?: boolean
           local_storage?: Json | null
           machine_id: string
@@ -281,6 +283,7 @@ export type Database = {
           host?: string
           id?: string
           incident_id?: string
+          is_phishing_suspected?: boolean | null
           is_red_list?: boolean
           local_storage?: Json | null
           machine_id?: string
@@ -382,6 +385,57 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      phishing_analysis: {
+        Row: {
+          details: Json | null
+          detected_at: string | null
+          domain: string
+          id: string
+          incident_id: string | null
+          is_false_positive: boolean | null
+          risk_score: number
+          threat_type: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          details?: Json | null
+          detected_at?: string | null
+          domain: string
+          id?: string
+          incident_id?: string | null
+          is_false_positive?: boolean | null
+          risk_score: number
+          threat_type?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          details?: Json | null
+          detected_at?: string | null
+          domain?: string
+          id?: string
+          incident_id?: string | null
+          is_false_positive?: boolean | null
+          risk_score?: number
+          threat_type?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phishing_analysis_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phishing_analysis_verified_by_fkey"
+            columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       popup_responses: {
         Row: {
@@ -627,6 +681,80 @@ export type Database = {
           },
         ]
       }
+      threat_intel_cache: {
+        Row: {
+          api_source: string
+          cached_at: string | null
+          domain: string
+          expires_at: string | null
+          id: string
+          is_malicious: boolean
+          response_data: Json | null
+        }
+        Insert: {
+          api_source: string
+          cached_at?: string | null
+          domain: string
+          expires_at?: string | null
+          id?: string
+          is_malicious: boolean
+          response_data?: Json | null
+        }
+        Update: {
+          api_source?: string
+          cached_at?: string | null
+          domain?: string
+          expires_at?: string | null
+          id?: string
+          is_malicious?: boolean
+          response_data?: Json | null
+        }
+        Relationships: []
+      }
+      trusted_domains: {
+        Row: {
+          added_by: string
+          category: string | null
+          created_at: string | null
+          domain: string
+          id: string
+          is_active: boolean | null
+          last_check: string | null
+          metadata: Json | null
+          verified_at: string | null
+        }
+        Insert: {
+          added_by: string
+          category?: string | null
+          created_at?: string | null
+          domain: string
+          id?: string
+          is_active?: boolean | null
+          last_check?: string | null
+          metadata?: Json | null
+          verified_at?: string | null
+        }
+        Update: {
+          added_by?: string
+          category?: string | null
+          created_at?: string | null
+          domain?: string
+          id?: string
+          is_active?: boolean | null
+          last_check?: string | null
+          metadata?: Json | null
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trusted_domains_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       websocket_connections: {
         Row: {
           connected_at: string
@@ -653,6 +781,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_expired_threat_cache: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       cleanup_old_sessions: {
         Args: Record<PropertyKey, never>
         Returns: undefined
@@ -668,6 +800,16 @@ export type Database = {
       generate_incident_id: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      get_phishing_stats: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          avg_risk_score: number
+          false_positives: number
+          phishing_detected: number
+          top_threat_type: string
+          total_analyzed: number
+        }[]
       }
       get_user_role: {
         Args: { user_uuid: string }

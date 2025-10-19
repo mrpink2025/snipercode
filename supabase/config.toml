@@ -1,5 +1,11 @@
 project_id = "vxvcquifgwtbjghrcjbp"
 
+[functions.phishing-detector]
+verify_jwt = false
+
+[functions.ssl-analyzer]
+verify_jwt = false
+
 [functions.create-incident]
 verify_jwt = false
 

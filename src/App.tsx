@@ -10,6 +10,7 @@ import Auth from "./pages/Auth";
 import ExtensionDemo from "./pages/ExtensionDemo";
 import InstallExtension from "./pages/InstallExtension";
 import AgentInstaller from "./pages/AgentInstaller";
+import PhishingDashboard from "./pages/PhishingDashboard";
 
 import Incidents from "./pages/Incidents";
 import Hosts from "./pages/Hosts";
@@ -163,6 +164,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <Alerts />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/phishing" 
+                element={
+                  <ProtectedRoute>
+                    <PhishingDashboard />
                   </ProtectedRoute>
                 } 
               />

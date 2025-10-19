@@ -7,7 +7,8 @@ import {
   Database,
   Clock,
   MonitorSpeaker,
-  Bell
+  Bell,
+  ShieldAlert
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ const Sidebar = () => {
     { name: "Dashboard", href: "/", icon: LayoutDashboard, current: true },
     { name: "Incidentes", href: "/incidents", icon: AlertTriangle },
     { name: "Alertas", href: "/alerts", icon: Bell, badge: unacknowledgedCount > 0 ? unacknowledgedCount.toString() : undefined },
+    { name: "Anti-Phishing", href: "/phishing", icon: ShieldAlert },
     { name: "Hosts Monitorados", href: "/hosts", icon: Shield },
     { name: "Controle Remoto", href: "/remote-control", icon: MonitorSpeaker, adminOnly: true },
     { name: "Auditoria", href: "/audit", icon: FileText },
