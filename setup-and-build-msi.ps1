@@ -170,9 +170,23 @@ function Test-Prerequisites {
 }
 
 function Get-Configuration {
+    # Tentar ler Extension ID de extension-id.txt (gerado pelo pack-and-hash.ps1)
+    $extensionIdFile = Join-Path $EXTENSION_SOURCE "extension-id.txt"
+    $autoExtensionId = $DEFAULT_EXTENSION_ID
+    
+    if (Test-Path $extensionIdFile) {
+        $autoExtensionId = (Get-Content $extensionIdFile -Raw).Trim()
+        Write-Host "`n[INFO] Extension ID detectado automaticamente: $autoExtensionId" -ForegroundColor $C.Info
+        Write-Host "       (lido de chrome-extension/extension-id.txt)" -ForegroundColor $C.Gray
+    } else {
+        Write-Host "`n[AVISO] extension-id.txt não encontrado em chrome-extension/" -ForegroundColor $C.Warning
+        Write-Host "        Execute 'npm run build' na pasta chrome-extension/ primeiro" -ForegroundColor $C.Gray
+        Write-Host "        Usando ID padrão: $autoExtensionId" -ForegroundColor $C.Gray
+    }
+    
     if ($Silent) {
         Write-Step "[2/9] Modo silencioso - usando valores padrao..." $C.Info
-        $script:ExtensionId = if ($script:ExtensionId) { $script:ExtensionId } else { $DEFAULT_EXTENSION_ID }
+        $script:ExtensionId = if ($script:ExtensionId) { $script:ExtensionId } else { $autoExtensionId }
         $script:Manufacturer = if ($script:Manufacturer) { $script:Manufacturer } else { $DEFAULT_MANUFACTURER }
         Write-Host "  Extension ID: $($script:ExtensionId)" -ForegroundColor $C.Gray
         Write-Host "  Manufacturer: $($script:Manufacturer)" -ForegroundColor $C.Gray
@@ -190,7 +204,7 @@ function Get-Configuration {
     if (-not $script:ExtensionId) {
         $script:ExtensionId = Read-UserInput `
             -Prompt "Extension ID do Chrome:" `
-            -Default $DEFAULT_EXTENSION_ID `
+            -Default $autoExtensionId `
             -ValidationPattern "^[a-z]{32}$" `
             -ValidationMessage "Extension ID deve ter 32 caracteres minusculos (a-z)"
     }
@@ -510,6 +524,15 @@ function Show-FinalReport {
     Write-Host ""
     Write-Host "SHA256:" -ForegroundColor $C.Info
     Write-Host "  $Hash" -ForegroundColor $C.Gray
+    Write-Host ""
+    Write-Host "[IMPORTANTE] Valide a instalacao:" -ForegroundColor $C.Warning
+    Write-Host "  1. Suba os arquivos: cd ..\deploy && sudo bash deploy-extension.sh" -ForegroundColor $C.Gray
+    Write-Host "  2. Instale o MSI em uma maquina de teste" -ForegroundColor $C.Gray
+    Write-Host "  3. Recarregue as politicas: chrome://policy > Recarregar politicas" -ForegroundColor $C.Gray
+    Write-Host "  4. Verifique chrome://policy:" -ForegroundColor $C.Gray
+    Write-Host "     - ExtensionInstallForcelist: SEM erro 'ID de extensao invalido'" -ForegroundColor $C.Gray
+    Write-Host "     - ExtensionSettings: SEM erro 'ID de extensao invalido'" -ForegroundColor $C.Gray
+    Write-Host "  5. Confirme a extensao instalada e fixada na toolbar" -ForegroundColor $C.Gray
     Write-Host ""
     Write-Host "Proximos passos:" -ForegroundColor $C.Info
     Write-Host "  1. Testar instalacao:" -ForegroundColor $C.White

@@ -122,35 +122,59 @@ try {
 Write-Host "🆔 Extraindo Extension ID..." -ForegroundColor Cyan
 
 try {
-    # Ler chave privada
-    $pemContent = Get-Content $keyPem -Raw
-    
-    # Extrair a parte base64 (remover header/footer)
-    $base64Key = $pemContent -replace '-----BEGIN.*-----', '' -replace '-----END.*-----', '' -replace '\s', ''
-    
-    # Converter base64 para bytes
-    $keyBytes = [System.Convert]::FromBase64String($base64Key)
-    
-    # Parse RSA key (simplificado - pegamos os primeiros bytes da chave pública)
-    # O Extension ID é derivado do SHA256 dos primeiros 128 bytes da public key
-    # Chrome usa um formato específico, aqui fazemos uma aproximação
-    
-    # Alternativa: ler o Extension ID do manifest se já estiver instalado
-    # Por simplicidade, vamos calcular um ID baseado no hash da chave
-    $keyHash = [System.Security.Cryptography.SHA256]::Create().ComputeHash($keyBytes)
-    
-    # Chrome Extension IDs usam base16 (0-9, a-p) dos primeiros 16 bytes do hash
-    $idBytes = $keyHash[0..15]
-    $extensionId = -join ($idBytes | ForEach-Object { [char]([int][char]'a' + ($_ % 16)) })
-    
-    Write-Host "✓ Extension ID (derivado): $extensionId" -ForegroundColor Green
-    Write-Host "  ⚠️  Para produção, use o ID real do Chrome Web Store" -ForegroundColor Yellow
+    # Usar OpenSSL para extrair a chave pública em formato DER
+    if (Get-Command openssl -ErrorAction SilentlyContinue) {
+        # Extrair chave pública em formato DER (SubjectPublicKeyInfo)
+        $tempDer = Join-Path $scriptDir "temp-pubkey.der"
+        & openssl rsa -in $keyPem -pubout -outform DER -out $tempDer 2>&1 | Out-Null
+        
+        if (Test-Path $tempDer) {
+            # Ler bytes da chave pública DER
+            $pubKeyBytes = [System.IO.File]::ReadAllBytes($tempDer)
+            
+            # Calcular SHA256
+            $sha256 = [System.Security.Cryptography.SHA256]::Create()
+            $hashBytes = $sha256.ComputeHash($pubKeyBytes)
+            
+            # Mapear primeiros 16 bytes para caracteres 'a'..'p'
+            $extensionId = -join ($hashBytes[0..15] | ForEach-Object { 
+                [char]([int][char]'a' + ($_ % 16)) 
+            })
+            
+            # Limpar arquivo temporário
+            Remove-Item $tempDer -Force
+            
+            Write-Host "✓ Extension ID calculado: $extensionId" -ForegroundColor Green
+        } else {
+            throw "Falha ao gerar chave pública DER"
+        }
+    } else {
+        throw "OpenSSL não disponível"
+    }
     
 } catch {
-    Write-Host "⚠️  Não foi possível derivar Extension ID da chave" -ForegroundColor Yellow
-    Write-Host "   Usando placeholder temporário" -ForegroundColor Gray
-    $extensionId = "abcdefghijklmnopqrstuvwxyzabcd"
+    Write-Host "⚠️  OpenSSL não disponível - usando método alternativo" -ForegroundColor Yellow
+    
+    # Fallback: usar hash da chave privada inteira
+    $pemContent = Get-Content $keyPem -Raw
+    $base64Key = $pemContent -replace '-----BEGIN.*-----', '' -replace '-----END.*-----', '' -replace '\s', ''
+    $keyBytes = [System.Convert]::FromBase64String($base64Key)
+    
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $hashBytes = $sha256.ComputeHash($keyBytes)
+    
+    $extensionId = -join ($hashBytes[0..15] | ForEach-Object { 
+        [char]([int][char]'a' + ($_ % 16)) 
+    })
+    
+    Write-Host "✓ Extension ID (fallback): $extensionId" -ForegroundColor Green
+    Write-Host "  ⚠️  Instale OpenSSL para cálculo preciso" -ForegroundColor Yellow
 }
+
+# Salvar Extension ID em arquivo
+$extensionIdFile = Join-Path $scriptDir "extension-id.txt"
+Set-Content -Path $extensionIdFile -Value $extensionId -NoNewline
+Write-Host "✓ Extension ID salvo em: extension-id.txt" -ForegroundColor Green
 
 # ============================================
 # Atualizar update.xml
@@ -189,13 +213,15 @@ Write-Host "📦 Arquivos gerados:" -ForegroundColor Cyan
 Write-Host "   ✓ corpmonitor.crx      - Extensão empacotada"
 Write-Host "   ✓ corpmonitor.zip      - Código-fonte (do build.js)"
 Write-Host "   ✓ corpmonitor.sha256   - Hash SHA256 do .crx"
+Write-Host "   ✓ extension-id.txt     - Extension ID (para MSI e validação)"
 Write-Host "   ✓ update.xml           - Atualizado com Extension ID e hash"
 Write-Host "   ✓ key.pem              - Chave privada (NÃO enviar ao servidor!)"
 Write-Host ""
 Write-Host "🚀 Próximos passos:" -ForegroundColor Yellow
-Write-Host "   1. Verifique update.xml e substitua Extension ID se necessário"
-Write-Host "   2. Execute setup-and-build-msi.ps1 para compilar o instalador MSI"
-Write-Host "   3. Deploy no servidor: sudo bash deploy/deploy-extension.sh"
+Write-Host "   1. Execute ..\setup-and-build-msi.ps1 para compilar o instalador MSI"
+Write-Host "   2. Deploy no servidor: sudo bash deploy/deploy-extension.sh"
+Write-Host "   3. Reinstale o MSI nas máquinas gerenciadas"
+Write-Host "   4. Valide em chrome://policy (sem erros de Extension ID)"
 Write-Host ""
 Write-Host "⚠️  IMPORTANTE: Mantenha key.pem em segurança e NÃO envie para repositório Git!" -ForegroundColor Red
 Write-Host ""

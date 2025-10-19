@@ -119,7 +119,36 @@ if grep -q "\[HASH_SHA256_AQUI\]" "$EXTENSION_DIR/update.xml"; then
     exit 1
 fi
 
-echo -e "${GREEN}✓ update.xml validado com Extension ID e hash SHA256${NC}"
+# Validar Extension ID contra extension-id.txt
+if [ -f "$EXTENSION_DIR/extension-id.txt" ]; then
+    EXPECTED_ID=$(cat "$EXTENSION_DIR/extension-id.txt")
+    ACTUAL_ID=$(grep -oP "appid='\K[^']+" "$EXTENSION_DIR/update.xml" || echo "NOT_FOUND")
+    
+    if [ "$EXPECTED_ID" != "$ACTUAL_ID" ]; then
+        echo -e "${RED}❌ Extension ID mismatch!${NC}"
+        echo -e "   Esperado (extension-id.txt): $EXPECTED_ID"
+        echo -e "   Atual (update.xml): $ACTUAL_ID"
+        echo -e "${YELLOW}Execute 'npm run build' novamente na pasta chrome-extension/${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Extension ID validado: $EXPECTED_ID${NC}"
+else
+    echo -e "${YELLOW}⚠ extension-id.txt não encontrado, pulando validação de ID${NC}"
+fi
+
+# Validar hash SHA256
+ACTUAL_HASH=$(cat "$EXTENSION_DIR/corpmonitor.sha256" 2>/dev/null || echo "NOT_FOUND")
+UPDATE_HASH=$(grep -oP "hash_sha256='\K[^']+" "$EXTENSION_DIR/update.xml" || echo "NOT_FOUND")
+
+if [ "$ACTUAL_HASH" != "$UPDATE_HASH" ]; then
+    echo -e "${RED}❌ SHA256 hash mismatch!${NC}"
+    echo -e "   CRX file: $ACTUAL_HASH"
+    echo -e "   update.xml: $UPDATE_HASH"
+    echo -e "${YELLOW}Execute 'npm run build' novamente na pasta chrome-extension/${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ SHA256 hash validado${NC}"
 echo -e "${GREEN}✓ Extension built successfully${NC}"
 echo "   - corpmonitor.zip ($(du -h "$EXTENSION_DIR/corpmonitor.zip" | cut -f1))"
 echo "   - corpmonitor.crx ($(du -h "$EXTENSION_DIR/corpmonitor.crx" | cut -f1))"
