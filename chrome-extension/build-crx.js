@@ -258,7 +258,7 @@ async function buildCrx() {
 <gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
   <app appid='${extensionId}'>
     <updatecheck 
-      codebase='http://monitorcorporativo.com/extension/corpmonitor.crx' 
+      codebase='https://monitorcorporativo.com/extension/corpmonitor.crx' 
       version='${version}' 
       hash_sha256='${hashSum}' />
   </app>

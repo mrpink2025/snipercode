@@ -255,7 +255,7 @@ fi
 
 # Test extension CRX download
 echo -n "Testing extension CRX... "
-if curl -s -o /dev/null -w "%{http_code}" http://monitorcorporativo.com/extension/corpmonitor.crx | grep -q "200"; then
+if curl -s -o /dev/null -w "%{http_code}" https://monitorcorporativo.com/extension/corpmonitor.crx | grep -q "200"; then
     echo -e "${GREEN}✓ OK${NC}"
 else
     echo -e "${RED}❌ FAILED${NC}"
@@ -263,7 +263,7 @@ fi
 
 # Test update.xml
 echo -n "Testing update.xml... "
-if curl -s -o /dev/null -w "%{http_code}" http://monitorcorporativo.com/extension/update.xml | grep -q "200"; then
+if curl -s -o /dev/null -w "%{http_code}" https://monitorcorporativo.com/extension/update.xml | grep -q "200"; then
     echo -e "${GREEN}✓ OK${NC}"
 else
     echo -e "${RED}❌ FAILED${NC}"
@@ -271,7 +271,7 @@ fi
 
 # Test SHA256 checksum
 echo -n "Testing SHA256 checksum... "
-if curl -s -o /dev/null -w "%{http_code}" http://monitorcorporativo.com/extension/corpmonitor.sha256 | grep -q "200"; then
+if curl -s -o /dev/null -w "%{http_code}" https://monitorcorporativo.com/extension/corpmonitor.sha256 | grep -q "200"; then
     echo -e "${GREEN}✓ OK${NC}"
 else
     echo -e "${RED}❌ FAILED${NC}"
@@ -313,10 +313,10 @@ User: $USER
 
   Main Site:        https://monitorcorporativo.com
   Privacy Policy:   https://monitorcorporativo.com/privacy-policy.html
-  Extension CRX:    http://monitorcorporativo.com/extension/corpmonitor.crx
-  Extension ZIP:    http://monitorcorporativo.com/extension/corpmonitor.zip
-  Update XML:       http://monitorcorporativo.com/extension/update.xml
-  SHA256 Checksum:  http://monitorcorporativo.com/extension/corpmonitor.sha256
+  Extension CRX:    https://monitorcorporativo.com/extension/corpmonitor.crx
+  Extension ZIP:    https://monitorcorporativo.com/extension/corpmonitor.zip
+  Update XML:       https://monitorcorporativo.com/extension/update.xml
+  SHA256 Checksum:  https://monitorcorporativo.com/extension/corpmonitor.sha256
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -399,8 +399,8 @@ echo -e "${YELLOW}📖 Full report: $REPORT_FILE${NC}"
 echo ""
 echo -e "${BLUE}🔗 Important URLs:${NC}"
 echo "   Privacy:  https://monitorcorporativo.com/privacy-policy.html"
-echo "   Download: http://monitorcorporativo.com/extension/corpmonitor.crx"
-echo "   Updates:  http://monitorcorporativo.com/extension/update.xml"
+echo "   Download: https://monitorcorporativo.com/extension/corpmonitor.crx"
+echo "   Updates:  https://monitorcorporativo.com/extension/update.xml"
 echo ""
 echo -e "${GREEN}🎉 Ready for Chrome Web Store submission!${NC}"
 echo ""
