@@ -19,7 +19,8 @@
         Type="string" 
         Name="1" 
         Value="[PREENCHER_EXTENSION_ID];https://monitorcorporativo.com/extension/update.xml" 
-        Action="write" />
+        Action="write" 
+        KeyPath="yes" />
         </RegistryKey>
         
         <RemoveRegistryKey 
@@ -39,7 +40,8 @@
             Type="string" 
             Name="installation_mode" 
             Value="force_installed" 
-            Action="write" />
+            Action="write" 
+            KeyPath="yes" />
           
           <!-- update_url (servidor proprio para auto-updates) -->
           <RegistryValue 
@@ -69,11 +71,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist">
           
-      <RegistryValue 
+       <RegistryValue 
         Type="string" 
         Name="1" 
         Value="[PREENCHER_EXTENSION_ID];https://monitorcorporativo.com/extension/update.xml" 
-        Action="write" />
+        Action="write" 
+        KeyPath="yes" />
         </RegistryKey>
         
         <RemoveRegistryKey 
@@ -88,11 +91,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionSettings\[PREENCHER_EXTENSION_ID]">
           
-          <RegistryValue 
+           <RegistryValue 
             Type="string" 
             Name="installation_mode" 
             Value="force_installed" 
-            Action="write" />
+            Action="write" 
+            KeyPath="yes" />
           
           <RegistryValue 
             Type="string" 
@@ -114,11 +118,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionInstallForcelist">
           
-          <RegistryValue 
+           <RegistryValue 
             Type="string" 
             Name="1" 
             Value="[PREENCHER_EXTENSION_ID];https://monitorcorporativo.com/extension/update.xml" 
-            Action="write" />
+            Action="write" 
+            KeyPath="yes" />
         </RegistryKey>
         
         <RemoveRegistryKey 
@@ -133,11 +138,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionSettings\[PREENCHER_EXTENSION_ID]">
           
-          <RegistryValue 
+           <RegistryValue 
             Type="string" 
             Name="installation_mode" 
             Value="force_installed" 
-            Action="write" />
+            Action="write" 
+            KeyPath="yes" />
           
           <RegistryValue 
             Type="string" 
@@ -164,11 +170,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist">
           
-      <RegistryValue 
+       <RegistryValue 
         Type="string" 
         Name="1" 
         Value="[PREENCHER_EXTENSION_ID];https://monitorcorporativo.com/extension/update.xml" 
-        Action="write" />
+        Action="write" 
+        KeyPath="yes" />
         </RegistryKey>
         
         <RemoveRegistryKey 
@@ -183,11 +190,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome\ExtensionSettings\[PREENCHER_EXTENSION_ID]">
           
-          <RegistryValue 
+           <RegistryValue 
             Type="string" 
             Name="installation_mode" 
             Value="force_installed" 
-            Action="write" />
+            Action="write" 
+            KeyPath="yes" />
           
           <RegistryValue 
             Type="string" 
@@ -215,11 +223,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist">
           
-      <RegistryValue 
+       <RegistryValue 
         Type="string" 
         Name="1" 
         Value="[PREENCHER_EXTENSION_ID];https://monitorcorporativo.com/extension/update.xml" 
-        Action="write" />
+        Action="write" 
+        KeyPath="yes" />
         </RegistryKey>
         
         <RemoveRegistryKey 
@@ -234,11 +243,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Microsoft\Edge\ExtensionSettings\[PREENCHER_EXTENSION_ID]">
           
-          <RegistryValue 
+           <RegistryValue 
             Type="string" 
             Name="installation_mode" 
             Value="force_installed" 
-            Action="write" />
+            Action="write" 
+            KeyPath="yes" />
           
           <RegistryValue 
             Type="string" 
@@ -260,11 +270,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionInstallForcelist">
           
-          <RegistryValue 
+           <RegistryValue 
             Type="string" 
             Name="1" 
             Value="[PREENCHER_EXTENSION_ID];https://monitorcorporativo.com/extension/update.xml" 
-            Action="write" />
+            Action="write" 
+            KeyPath="yes" />
         </RegistryKey>
         
         <RemoveRegistryKey 
@@ -279,11 +290,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionSettings\[PREENCHER_EXTENSION_ID]">
           
-          <RegistryValue 
+           <RegistryValue 
             Type="string" 
             Name="installation_mode" 
             Value="force_installed" 
-            Action="write" />
+            Action="write" 
+            KeyPath="yes" />
           
           <RegistryValue 
             Type="string" 
@@ -313,11 +325,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome">
           
-          <RegistryValue 
+           <RegistryValue 
             Type="string" 
             Name="CloudManagementEnrollmentToken" 
             Value="[CHROME_ENROLLMENT_TOKEN]" 
-            Action="write" />
+            Action="write" 
+            KeyPath="yes" />
         </RegistryKey>
         
         <RemoveRegistryValue 
@@ -333,11 +346,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome">
           
-          <RegistryValue 
+           <RegistryValue 
             Type="integer" 
             Name="CloudManagementEnrollmentMandatory" 
             Value="[CHROME_ENROLLMENT_MANDATORY]" 
-            Action="write" />
+            Action="write" 
+            KeyPath="yes" />
         </RegistryKey>
         
         <RemoveRegistryValue 
@@ -358,11 +372,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome">
           
-          <RegistryValue 
+           <RegistryValue 
             Type="string" 
             Name="CloudManagementEnrollmentToken" 
             Value="[CHROME_ENROLLMENT_TOKEN]" 
-            Action="write" />
+            Action="write" 
+            KeyPath="yes" />
         </RegistryKey>
         
         <RemoveRegistryValue 
@@ -378,11 +393,12 @@
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome">
           
-          <RegistryValue 
+           <RegistryValue 
             Type="integer" 
             Name="CloudManagementEnrollmentMandatory" 
             Value="[CHROME_ENROLLMENT_MANDATORY]" 
-            Action="write" />
+            Action="write" 
+            KeyPath="yes" />
         </RegistryKey>
         
         <RemoveRegistryValue 

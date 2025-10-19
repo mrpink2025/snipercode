@@ -376,15 +376,15 @@ function Build-MsiPackage {
         
         # Compilar cada .wxs
         Write-Host "  - Compilando Product.wxs..." -ForegroundColor $C.Gray
-        & "$WIX_PATH\candle.exe" -arch x64 -out "build\Product.wixobj" "source\wix\Product.wxs" 2>&1 | Out-Null
+        & "$WIX_PATH\candle.exe" -arch x64 -out "build\Product.wixobj" "source\wix\Product.wxs" 2>&1 | Tee-Object -File "build\candle-product.log" | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Product.wxs" }
         
         Write-Host "  - Compilando Files.wxs..." -ForegroundColor $C.Gray
-        & "$WIX_PATH\candle.exe" -arch x64 -out "build\Files.wixobj" "source\wix\Files.wxs" 2>&1 | Out-Null
+        & "$WIX_PATH\candle.exe" -arch x64 -out "build\Files.wixobj" "source\wix\Files.wxs" 2>&1 | Tee-Object -File "build\candle-files.log" | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Files.wxs" }
         
         Write-Host "  - Compilando Registry.wxs..." -ForegroundColor $C.Gray
-        & "$WIX_PATH\candle.exe" -arch x64 -out "build\Registry.wixobj" "source\wix\Registry.wxs" 2>&1 | Out-Null
+        & "$WIX_PATH\candle.exe" -arch x64 -out "build\Registry.wixobj" "source\wix\Registry.wxs" 2>&1 | Tee-Object -File "build\candle-registry.log" | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Registry.wxs" }
         
         # Linkar
@@ -396,7 +396,7 @@ function Build-MsiPackage {
             -spdb `
             "build\Product.wixobj" `
             "build\Files.wixobj" `
-            "build\Registry.wixobj" 2>&1 | Out-Null
+            "build\Registry.wixobj" 2>&1 | Tee-Object -File "build\light.log" | Out-Null
         
         if ($LASTEXITCODE -ne 0) { throw "Falha ao linkar MSI" }
         
