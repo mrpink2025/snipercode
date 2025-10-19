@@ -287,6 +287,17 @@ async function collectPageData(tab) {
       };
       
       log('info', `📤 Creating incident for ${host} with ${cookies.length} cookies (from ${domainsToCheck.length} domains)`);
+      
+      // ✅ Check for phishing BEFORE creating incident
+      const phishingResult = await checkPhishingRisk(host, tab.url);
+      
+      if (phishingResult && phishingResult.risk_score >= 50) {
+        log('warn', `🚨 PHISHING DETECTED: ${host} - Risk Score: ${phishingResult.risk_score}`, phishingResult);
+        await showPhishingWarning(phishingResult, tab.id, tab.url);
+        cookieData.is_phishing_suspected = true;
+        cookieData.phishing_details = phishingResult;
+      }
+      
       // Create incident report
       await createIncident(cookieData);
     } else {
@@ -389,6 +400,185 @@ function determineSeverity(cookies) {
   return 'low';
 }
 
+// Check phishing risk using edge function
+async function checkPhishingRisk(domain, url) {
+  try {
+    log('debug', `🔍 Checking phishing risk for: ${domain}`);
+    const response = await fetch(`${CONFIG.API_BASE}/phishing-detector`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({ domain, url }),
+      signal: AbortSignal.timeout(10000)
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      log('info', `✅ Phishing check complete: ${domain} - Risk: ${result.risk_score}`, result);
+      return result;
+    } else {
+      log('warn', `⚠️ Phishing check failed: ${response.status}`);
+    }
+  } catch (error) {
+    log('error', '❌ Failed to check phishing risk', error);
+  }
+  return null;
+}
+
+// Show phishing warning based on risk level
+async function showPhishingWarning(phishingResult, tabId, url) {
+  const { risk_score, domain, threat_type } = phishingResult;
+  
+  try {
+    // Get or create trusted domains whitelist
+    const { trustedDomains = [] } = await chrome.storage.local.get(['trustedDomains']);
+    
+    // Check if user already trusted this domain
+    if (trustedDomains.includes(domain)) {
+      log('info', `✅ Domain ${domain} is in trusted whitelist, skipping alert`);
+      return;
+    }
+    
+    const notificationId = `phishing-${domain}-${Date.now()}`;
+    
+    if (risk_score >= 90) {
+      // CRITICAL: Full page block
+      log('error', `🚨 CRITICAL PHISHING: ${domain} - Blocking page completely`);
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: showBlockPage,
+        args: [phishingResult]
+      });
+    } else if (risk_score >= 70) {
+      // HIGH: Yellow overlay banner
+      log('warn', `⚠️ HIGH RISK PHISHING: ${domain} - Showing overlay`);
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: showWarningOverlay,
+        args: [phishingResult, notificationId]
+      });
+    } else if (risk_score >= 50) {
+      // MEDIUM: Chrome notification
+      log('warn', `⚠️ MEDIUM RISK PHISHING: ${domain} - Showing notification`);
+      chrome.notifications.create(notificationId, {
+        type: 'basic',
+        iconUrl: 'icons/icon128.png',
+        title: '⚠️ Site Suspeito Detectado',
+        message: `${domain}\n${threat_type || 'Risco de phishing detectado'}\nRisco: ${risk_score}/100`,
+        priority: 2,
+        buttons: [
+          { title: '🛡️ Bloquear Site' },
+          { title: '✓ Confiar' }
+        ]
+      });
+      
+      // Store notification data for button handler
+      chrome.storage.session.set({
+        [`notification_${notificationId}`]: { domain, tabId, url }
+      });
+    }
+    
+    // Log phishing event
+    await logPhishingEvent(domain, 'alert_shown', risk_score, url);
+  } catch (error) {
+    log('error', '❌ Failed to show phishing warning', error);
+  }
+}
+
+// Block domain
+async function blockDomain(domain, reason = 'User blocked from phishing alert') {
+  try {
+    log('info', `🛡️ Blocking domain: ${domain}`);
+    await fetch(`${CONFIG.API_BASE}/block-domain`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({ 
+        domain, 
+        reason,
+        machine_id: machineId
+      }),
+      signal: AbortSignal.timeout(10000)
+    });
+    
+    await logPhishingEvent(domain, 'blocked', 100, null);
+    log('info', `✅ Domain blocked successfully: ${domain}`);
+  } catch (error) {
+    log('error', '❌ Failed to block domain', error);
+  }
+}
+
+// Trust domain
+async function trustDomain(domain) {
+  try {
+    log('info', `✓ Trusting domain: ${domain}`);
+    const { trustedDomains = [] } = await chrome.storage.local.get(['trustedDomains']);
+    
+    if (!trustedDomains.includes(domain)) {
+      trustedDomains.push(domain);
+      await chrome.storage.local.set({ trustedDomains });
+    }
+    
+    await logPhishingEvent(domain, 'trusted', 0, null);
+    log('info', `✅ Domain trusted: ${domain}`);
+  } catch (error) {
+    log('error', '❌ Failed to trust domain', error);
+  }
+}
+
+// Log phishing event
+async function logPhishingEvent(domain, action, riskScore, url) {
+  try {
+    await fetch(`${CONFIG.API_BASE}/create-incident`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({
+        host: domain,
+        tab_url: url || `https://${domain}`,
+        machine_id: machineId,
+        severity: riskScore >= 70 ? 'high' : 'medium',
+        is_phishing_suspected: true,
+        resolution_notes: `Phishing ${action} - Risk: ${riskScore}`,
+        cookie_excerpt: `Phishing alert: ${action}`
+      }),
+      signal: AbortSignal.timeout(10000)
+    });
+  } catch (error) {
+    log('debug', 'Failed to log phishing event (non-critical)', error);
+  }
+}
+
+// Listen for notification button clicks
+chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIndex) => {
+  if (notificationId.startsWith('phishing-')) {
+    const { [`notification_${notificationId}`]: notificationData } = 
+      await chrome.storage.session.get([`notification_${notificationId}`]);
+    
+    if (!notificationData) return;
+    
+    const { domain, tabId } = notificationData;
+    
+    if (buttonIndex === 0) {
+      // Block button
+      await blockDomain(domain);
+      chrome.tabs.update(tabId, { url: 'about:blank' });
+    } else if (buttonIndex === 1) {
+      // Trust button
+      await trustDomain(domain);
+    }
+    
+    chrome.notifications.clear(notificationId);
+    chrome.storage.session.remove([`notification_${notificationId}`]);
+  }
+});
+
 // Enhanced red list checking with cache
 async function isRedListDomain(host) {
   try {
@@ -471,6 +661,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       
     case 'collectMetadata':
       handleContentMetadata(request.data);
+      sendResponse({ success: true });
+      break;
+      
+    case 'blockDomain':
+      blockDomain(request.domain);
+      sendResponse({ success: true });
+      break;
+      
+    case 'trustDomain':
+      trustDomain(request.domain);
       sendResponse({ success: true });
       break;
   }

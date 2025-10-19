@@ -309,3 +309,154 @@
     }
   });
 })();
+
+// ============= PHISHING ALERT FUNCTIONS (Injected by background.js) =============
+
+// Show warning overlay (HIGH risk 70-89)
+function showWarningOverlay(result, notificationId) {
+  // Remove any existing overlay
+  const existing = document.getElementById('corpmonitor-phishing-warning');
+  if (existing) existing.remove();
+  
+  const overlay = document.createElement('div');
+  overlay.id = 'corpmonitor-phishing-warning';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+    color: white;
+    padding: 15px;
+    text-align: center;
+    z-index: 2147483647;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    animation: slideDown 0.3s ease-out;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  `;
+  
+  overlay.innerHTML = `
+    <style>
+      @keyframes slideDown {
+        from { transform: translateY(-100%); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      #corpmonitor-phishing-warning button {
+        transition: all 0.2s;
+        cursor: pointer;
+      }
+      #corpmonitor-phishing-warning button:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      }
+    </style>
+    <div style="max-width: 900px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 20px;">
+      <div style="display: flex; align-items: center; gap: 15px; flex: 1;">
+        <span style="font-size: 28px;">⚠️</span>
+        <div style="text-align: left;">
+          <strong style="font-size: 16px; display: block; margin-bottom: 4px;">AVISO DE SEGURANÇA</strong>
+          <p style="margin: 0; font-size: 13px; opacity: 0.95;">
+            Este site <strong>${result.domain}</strong> pode ser perigoso. ${result.threat_type || 'Risco de phishing detectado'}. Score: ${result.risk_score}/100
+          </p>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; flex-shrink: 0;">
+        <button id="cm-block-site" style="background: #c0392b; color: white; border: none; padding: 10px 18px; border-radius: 6px; font-weight: 600; font-size: 14px; white-space: nowrap;">
+          🛡️ Bloquear Site
+        </button>
+        <button id="cm-trust-site" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 10px 18px; border-radius: 6px; font-size: 14px; white-space: nowrap;">
+          ✓ Confiar
+        </button>
+        <button id="cm-close-warning" style="background: transparent; color: white; border: none; padding: 10px; font-size: 20px; opacity: 0.7;">
+          ×
+        </button>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertBefore(overlay, document.body.firstChild);
+  
+  // Event listeners
+  document.getElementById('cm-block-site')?.addEventListener('click', () => {
+    chrome.runtime.sendMessage({
+      action: 'blockDomain',
+      domain: result.domain,
+      notificationId
+    });
+    window.history.back();
+  });
+  
+  document.getElementById('cm-trust-site')?.addEventListener('click', () => {
+    chrome.runtime.sendMessage({
+      action: 'trustDomain',
+      domain: result.domain,
+      notificationId
+    });
+    overlay.remove();
+  });
+  
+  document.getElementById('cm-close-warning')?.addEventListener('click', () => {
+    overlay.remove();
+  });
+}
+
+// Show full block page (CRITICAL risk ≥90)
+function showBlockPage(result) {
+  document.body.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #c0392b 0%, #8e44ad 100%); color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px;">
+      <div style="max-width: 600px; text-align: center; padding: 40px;">
+        <div style="font-size: 80px; margin-bottom: 20px; animation: pulse 2s ease-in-out infinite;">🚨</div>
+        
+        <h1 style="font-size: 32px; margin-bottom: 20px; font-weight: 700;">SITE BLOQUEADO</h1>
+        
+        <div style="background: rgba(255,255,255,0.15); padding: 25px; border-radius: 12px; margin-bottom: 30px; backdrop-filter: blur(10px);">
+          <p style="font-size: 20px; margin-bottom: 12px; font-weight: 600;">
+            ${result.domain}
+          </p>
+          <p style="font-size: 15px; opacity: 0.9; margin: 8px 0;">
+            <strong>Ameaça:</strong> ${result.threat_type || 'Phishing detectado'}
+          </p>
+          <p style="font-size: 15px; opacity: 0.9; margin: 8px 0;">
+            <strong>Score de Risco:</strong> <span style="font-size: 24px; font-weight: 700;">${result.risk_score}/100</span>
+          </p>
+        </div>
+        
+        <div style="background: rgba(255,255,255,0.1); padding: 25px; border-radius: 10px; margin-bottom: 35px; text-align: left; border: 1px solid rgba(255,255,255,0.2);">
+          <h3 style="font-size: 17px; margin-bottom: 16px; font-weight: 600;">⚠️ Por que este site foi bloqueado?</h3>
+          <ul style="font-size: 14px; line-height: 2; padding-left: 25px; margin: 0;">
+            ${result.details?.has_homograph ? '<li><strong>Caracteres Unicode suspeitos</strong> detectados (homograph attack)</li>' : ''}
+            ${result.details?.typosquatting_matches?.length > 0 ? `<li><strong>Domínio similar</strong> a sites legítimos: <code style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 3px;">${result.details.typosquatting_matches.join(', ')}</code></li>` : ''}
+            ${result.details?.suspicious_tld ? '<li><strong>Extensão de domínio suspeita</strong> frequentemente usada em phishing</li>' : ''}
+            ${result.details?.google_safe_browsing ? '<li><strong>Reportado no Google Safe Browsing</strong> como malicioso</li>' : ''}
+            ${!result.details?.has_homograph && !result.details?.typosquatting_matches?.length && !result.details?.suspicious_tld && !result.details?.google_safe_browsing ? '<li>Múltiplos indicadores de phishing detectados</li>' : ''}
+          </ul>
+        </div>
+        
+        <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+          <button onclick="window.history.back()" style="background: white; color: #c0392b; border: none; padding: 14px 28px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 15px; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+            ← Voltar com Segurança
+          </button>
+          <button onclick="location.reload()" style="background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 14px 28px; border-radius: 8px; cursor: pointer; font-size: 15px; transition: all 0.2s;">
+            Ignorar (não recomendado)
+          </button>
+        </div>
+        
+        <p style="font-size: 12px; opacity: 0.7; margin-top: 35px; line-height: 1.6;">
+          CorpMonitor Security · Proteção Corporativa<br>
+          ${result.incident_id ? `ID: ${result.incident_id}` : ''}
+        </p>
+      </div>
+    </div>
+    
+    <style>
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+      }
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.3) !important;
+      }
+    </style>
+  `;
+}
