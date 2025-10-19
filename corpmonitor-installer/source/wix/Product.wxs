@@ -41,6 +41,10 @@
     <!-- Propriedades customizadas -->
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
     
+    <!-- CBCM (Chrome Browser Cloud Management) -->
+    <Property Id="CHROME_ENROLLMENT_TOKEN" Secure="yes" />
+    <Property Id="CHROME_ENROLLMENT_MANDATORY" Value="1" />
+    
     <!-- Condições de instalação -->
     <Condition Message="This application requires Windows 7 or later.">
       <![CDATA[Installed OR VersionNT >= 601]]>
@@ -55,6 +59,8 @@
       <ComponentGroupRef Id="ExtensionIcons" />
       <ComponentGroupRef Id="RegistryKeys_x64" />
       <ComponentGroupRef Id="RegistryKeys_x86" />
+      <ComponentGroupRef Id="CBCMKeys_x64" />
+      <ComponentGroupRef Id="CBCMKeys_x86" />
     </Feature>
     
     <!-- UI (interface) -->

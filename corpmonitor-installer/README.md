@@ -1,10 +1,50 @@
 # 📦 CorpMonitor MSI Installer
 
-Instalador MSI para distribuição em massa da extensão CorpMonitor para Chrome/Edge.
+Instalador MSI para distribuição em massa da extensão CorpMonitor para Chrome/Edge com suporte a **CBCM (Chrome Browser Cloud Management)**.
 
 ---
 
-## 🚀 Início Rápido
+## 🚀 Início Rápido (NOVO - Script Automatizado)
+
+### **Método 1: Script Automatizado (Recomendado)**
+
+```powershell
+# No diretório raiz do projeto (onde está setup-and-build-msi.ps1)
+.\setup-and-build-msi.ps1
+```
+
+Este script faz **TUDO automaticamente**:
+1. ✅ Valida pré-requisitos (WiX, arquivos, etc.)
+2. ✅ Coleta Extension ID e Manufacturer (modo interativo)
+3. ✅ Gera 34 GUIDs únicos
+4. ✅ Preenche todos os 49 placeholders
+5. ✅ Copia arquivos da extensão
+6. ✅ Compila MSI com WiX
+7. ✅ Gera hash SHA256
+8. ✅ Mostra relatório final
+
+**Com suporte CBCM (opcional):**
+```powershell
+.\setup-and-build-msi.ps1 -CBCMToken "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"
+```
+
+**Modo silencioso (CI/CD):**
+```powershell
+.\setup-and-build-msi.ps1 `
+    -ExtensionId "kmcpcjjddbhdgkaonaohpikkdgfejkgm" `
+    -Manufacturer "CorpMonitor Ltda" `
+    -CBCMToken "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" `
+    -Silent
+```
+
+**📖 CBCM Setup completo:** Veja [CBCM_SETUP.md](CBCM_SETUP.md)
+
+---
+
+### **Método 2: Scripts Individuais (Legado)**
+
+<details>
+<summary>Clique para expandir</summary>
 
 ### **1. Instalar Ferramentas**
 
@@ -19,7 +59,7 @@ Instalador MSI para distribuição em massa da extensão CorpMonitor para Chrome
 ### **2. Gerar GUIDs e Preencher Placeholders**
 
 ```powershell
-cd scripts
+cd corpmonitor-installer/scripts
 .\generate-guids.ps1
 ```
 
@@ -28,23 +68,25 @@ Siga as instruções em: **`docs/PREENCHER_PLACEHOLDERS.md`**
 ### **3. Compilar MSI**
 
 ```batch
-cd scripts
+cd corpmonitor-installer/scripts
 build.bat
 ```
 
 ### **4. Assinar MSI (quando tiver certificado EV)**
 
 ```batch
-cd scripts
+cd corpmonitor-installer/scripts
 sign.bat
 ```
 
 ### **5. Testar Instalação**
 
 ```batch
-cd scripts
+cd corpmonitor-installer/scripts
 test-install.bat
 ```
+
+</details>
 
 ---
 
@@ -79,112 +121,122 @@ corpmonitor-installer/
 
 ### **Software:**
 - Windows 10/11 ou Windows Server 2016+
-- WiX Toolset v3.11+
-- Windows SDK (para SignTool)
+- WiX Toolset v3.14+ (testado com v3.14)
+- Windows SDK (para SignTool, opcional)
 - PowerShell 5.1+
+
+### **Para CBCM (Chrome Browser Cloud Management):**
+- Google Workspace ou Cloud Identity (gratuito para device management)
+- Token de enrollment obtido no Google Admin Console
+- Veja: [CBCM_SETUP.md](CBCM_SETUP.md) para detalhes completos
 
 ### **Para Assinatura (opcional, mas recomendado):**
 - Certificado EV Code Signing ($400-500/ano)
 - Token USB físico (obrigatório para EV desde 2023)
 
 ### **Para Deploy em Massa:**
-- Active Directory configurado
-- Acesso a Group Policy Management Console
-- Share de rede acessível por todas as máquinas
+- Active Directory + GPO **OU** CBCM (não precisa de ambos)
+- Share de rede acessível por todas as máquinas (se usar GPO)
 
 ---
 
-## 📝 Placeholders Obrigatórios
+## 📝 Placeholders (Preenchidos Automaticamente)
 
-Antes de compilar, preencha:
+O script `setup-and-build-msi.ps1` preenche **automaticamente** todos os placeholders:
 
-| Placeholder | Localização | Como Obter |
-|------------|-------------|------------|
-| `[PREENCHER_EXTENSION_ID]` | `Product.wxs`, `Registry.wxs` | `chrome://extensions/` (32 chars) |
-| `[PREENCHER_NOME_EMPRESA]` | `Product.wxs` | Nome da sua empresa |
-| `[PREENCHER_GUID_UPGRADE]` | `Product.wxs` | `[guid]::NewGuid()` (PowerShell) |
-| `[PREENCHER_GUID_1..24]` | `Files.wxs`, `Registry.wxs` | `generate-guids.ps1` |
-| `[PREENCHER_CERTIFICATE_THUMBPRINT]` | `sign.bat` | `certutil -store -user My` |
+| Placeholder | Total | Localização | Preenchimento |
+|------------|-------|-------------|---------------|
+| `[PREENCHER_EXTENSION_ID]` | ~12x | `Product.wxs`, `Registry.wxs` | Coleta interativa ou `-ExtensionId` |
+| `[PREENCHER_NOME_EMPRESA]` | 1x | `Product.wxs` | Coleta interativa ou `-Manufacturer` |
+| `[PREENCHER_GUID_UPGRADE]` | 1x | `Product.wxs` | Gerado automaticamente |
+| `[PREENCHER_GUID_1..34]` | 34x | `Files.wxs`, `Registry.wxs` | Gerados automaticamente (34 GUIDs) |
+| **Total** | **49** | - | **100% automatizado** |
 
-**Leia:** `docs/PREENCHER_PLACEHOLDERS.md` para detalhes.
+> **Nota:** GUIDs 29-32 são para componentes CBCM (novos!)
+
+**Método manual legado:** `docs/PREENCHER_PLACEHOLDERS.md`
 
 ---
 
-## 🏗️ Processo de Build
+## 🏗️ Processo de Build (Automatizado)
 
-### **Passo 1: Preparar Ambiente**
-
-```batch
-:: Instalar WiX Toolset
-winget install WiXToolset
-
-:: Verificar instalação
-"C:\Program Files (x86)\WiX Toolset v3.11\bin\candle.exe" -?
-```
-
-### **Passo 2: Obter Extension ID**
-
-```plaintext
-1. Abra Chrome
-2. Chrome → Extensões → Modo desenvolvedor
-3. "Carregar sem compactação" → Selecionar chrome-extension/
-4. Copiar ID da extensão (32 caracteres)
-```
-
-### **Passo 3: Gerar GUIDs**
+### **Método Simples (Recomendado)**
 
 ```powershell
-cd corpmonitor-installer\scripts
-.\generate-guids.ps1
+# No diretório raiz do projeto
+.\setup-and-build-msi.ps1
 ```
 
-Copie os GUIDs gerados para os arquivos WiX.
+**O que acontece:**
+1. ✅ Valida WiX Toolset instalado
+2. ✅ Pergunta Extension ID e Manufacturer (ou usa defaults)
+3. ✅ Pergunta token CBCM (opcional, pode deixar vazio)
+4. ✅ Gera 34 GUIDs únicos
+5. ✅ Preenche todos os 49 placeholders
+6. ✅ Copia arquivos da extensão
+7. ✅ Compila MSI
+8. ✅ Gera SHA256 hash
+9. ✅ Salva log JSON com todos os GUIDs usados
 
-### **Passo 4: Editar Arquivos WiX**
+**Resultado:** `corpmonitor-installer/build/CorpMonitor.msi`
 
-```xml
-<!-- Product.wxs -->
-<?define Manufacturer = "Minha Empresa Ltda" ?>
-<?define ExtensionId = "abcdefghijklmnopqrstuvwxyz123456" ?>
-<?define UpgradeCode = "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}" ?>
+---
+
+### **Opções Avançadas**
+
+```powershell
+# Build + Teste de instalação
+.\setup-and-build-msi.ps1 -Test
+
+# Limpar build anterior
+.\setup-and-build-msi.ps1 -Clean
+
+# Modo silencioso (CI/CD)
+.\setup-and-build-msi.ps1 `
+    -ExtensionId "kmcpcjjddbhdgkaonaohpikkdgfejkgm" `
+    -Manufacturer "CorpMonitor Ltda" `
+    -CBCMToken "XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" `
+    -Silent -Test
+
+# Build sem CBCM
+.\setup-and-build-msi.ps1 -Silent
 ```
 
-### **Passo 5: Compilar**
+---
+
+### **Assinatura (Opcional)**
 
 ```batch
 cd corpmonitor-installer\scripts
-build.bat
-```
-
-Resultado: `build\CorpMonitor.msi`
-
-### **Passo 6: Assinar (quando tiver certificado)**
-
-```batch
-:: 1. Conectar token USB com certificado EV
-:: 2. Obter thumbprint
-certutil -store -user My
-
-:: 3. Editar scripts\sign.bat com o thumbprint
-:: 4. Assinar
-cd scripts
 sign.bat
 ```
 
-### **Passo 7: Testar Localmente**
-
-```batch
-cd scripts
-test-install.bat
-```
-
-Verifique no Chrome: `chrome://extensions/`
+Requer certificado EV Code Signing.
 
 ---
 
-## 🚀 Distribuição em Massa (GPO)
+## 🚀 Distribuição em Massa
 
-### **Opção 1: Group Policy (Recomendado)**
+### **🔐 Opção 1: CBCM (Chrome Browser Cloud Management) - NOVO**
+
+**Vantagens:**
+- ✅ Não precisa de Active Directory/GPO
+- ✅ Chrome mostra "Browser is managed"
+- ✅ Gerenciamento via Google Admin Console
+- ✅ Funciona em Windows, Mac, Linux
+- ✅ Deploy remoto sem infraestrutura local
+
+**Setup:**
+1. Obtenha token CBCM no Google Admin Console
+2. Build MSI com token: `.\setup-and-build-msi.ps1 -CBCMToken "XXXXX..."`
+3. Distribua MSI (GPO, Intune, SCCM, manual)
+4. Máquinas se registram automaticamente no Chrome Management
+
+**📖 Guia completo:** [CBCM_SETUP.md](CBCM_SETUP.md)
+
+---
+
+### **Opção 2: Group Policy (Tradicional)**
 
 ```powershell
 # 1. Copiar MSI para share de rede
@@ -203,7 +255,7 @@ Copy-Item build\CorpMonitor.msi \\dc-server\sysvol\domain\software\
 Invoke-Command -ComputerName PC001 -ScriptBlock { gpupdate /force }
 ```
 
-### **Opção 2: Microsoft Intune**
+### **Opção 3: Microsoft Intune**
 
 ```plaintext
 1. Portal Intune → Apps → Windows → Add
@@ -213,7 +265,7 @@ Invoke-Command -ComputerName PC001 -ScriptBlock { gpupdate /force }
 5. Install behavior: System
 ```
 
-### **Opção 3: SCCM (System Center Configuration Manager)**
+### **Opção 4: SCCM (System Center Configuration Manager)**
 
 ```plaintext
 1. Software Library → Applications → Create Application
@@ -375,9 +427,15 @@ $results | Export-Csv deployment-status.csv -NoTypeInformation
 
 ## 📚 Documentação Adicional
 
-- [Preencher Placeholders](docs/PREENCHER_PLACEHOLDERS.md)
+### **CorpMonitor Docs:**
+- 🆕 **[CBCM Setup Guide](CBCM_SETUP.md)** - Chrome Browser Cloud Management
+- [Preencher Placeholders (método manual)](docs/PREENCHER_PLACEHOLDERS.md)
+- [Browser Compatibility](docs/BROWSER_COMPATIBILITY.md)
+
+### **Referências Externas:**
 - [WiX Toolset Docs](https://wixtoolset.org/docs/)
 - [Chrome Enterprise Policies](https://chromeenterprise.google/policies/)
+- [Chrome Browser Cloud Management](https://support.google.com/chrome/a/answer/9116814)
 - [Code Signing Best Practices](https://docs.microsoft.com/en-us/windows-hardware/drivers/install/code-signing-best-practices)
 
 ---
@@ -394,5 +452,19 @@ Problemas? Verifique:
 
 ---
 
-**Última atualização:** 2025-10-13  
-**Versão do Instalador:** 1.0.1
+---
+
+## 🎯 Novidades da Versão 1.1.0
+
+- ✅ **Script automatizado** `setup-and-build-msi.ps1` (faz tudo em 1 comando)
+- ✅ **Suporte CBCM** (Chrome Browser Cloud Management)
+- ✅ **34 GUIDs** (antes 30) - 4 novos para CBCM
+- ✅ **49 placeholders** preenchidos automaticamente
+- ✅ **Documentação CBCM** completa ([CBCM_SETUP.md](CBCM_SETUP.md))
+- ✅ **Modo silencioso** para CI/CD (`-Silent`)
+- ✅ **Teste automatizado** (`-Test`)
+
+---
+
+**Última atualização:** 2025-10-19  
+**Versão do Instalador:** 1.1.0 (CBCM Support)

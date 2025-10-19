@@ -21,6 +21,7 @@
 param(
     [string]$ExtensionId = "",
     [string]$Manufacturer = "",
+    [string]$CBCMToken = "",
     [switch]$Silent,
     [switch]$Test,
     [switch]$Clean
@@ -175,6 +176,7 @@ function Get-Configuration {
         $script:Manufacturer = if ($script:Manufacturer) { $script:Manufacturer } else { $DEFAULT_MANUFACTURER }
         Write-Host "  Extension ID: $($script:ExtensionId)" -ForegroundColor $C.Gray
         Write-Host "  Manufacturer: $($script:Manufacturer)" -ForegroundColor $C.Gray
+        Write-Host "  CBCM Token: $(if ($script:CBCMToken) { '***fornecido***' } else { 'nao fornecido' })" -ForegroundColor $C.Gray
         return
     }
     
@@ -200,12 +202,28 @@ function Get-Configuration {
             -Default $DEFAULT_MANUFACTURER
     }
     
+    # CBCM Token (opcional)
+    if (-not $script:CBCMToken) {
+        Write-Host "`n========================================" -ForegroundColor $C.Info
+        Write-Host "  CBCM (Chrome Browser Cloud Management)" -ForegroundColor $C.Info
+        Write-Host "========================================" -ForegroundColor $C.Info
+        Write-Host "  Token CBCM torna o Chrome 'gerenciado'" -ForegroundColor $C.Gray
+        Write-Host "  Permite politicas corporativas via console Google Admin" -ForegroundColor $C.Gray
+        Write-Host "  Deixe em branco se nao usar CBCM" -ForegroundColor $C.Gray
+        Write-Host ""
+        
+        $script:CBCMToken = Read-UserInput `
+            -Prompt "Token CBCM (opcional, deixe vazio para pular):" `
+            -Default ""
+    }
+    
     # Confirmar
     Write-Host "`n========================================" -ForegroundColor $C.Info
     Write-Host "  CONFIRMAR CONFIGURACAO" -ForegroundColor $C.Info
     Write-Host "========================================" -ForegroundColor $C.Info
     Write-Host "  Extension ID: $($script:ExtensionId)" -ForegroundColor $C.White
     Write-Host "  Manufacturer: $($script:Manufacturer)" -ForegroundColor $C.White
+    Write-Host "  CBCM Token: $(if ($script:CBCMToken) { '***fornecido***' } else { 'nao fornecido' })" -ForegroundColor $C.White
     Write-Host ""
     Write-Host "Confirma estas configuracoes? (S/n): " -NoNewline -ForegroundColor $C.Warning
     
@@ -219,21 +237,22 @@ function Get-Configuration {
 }
 
 function Generate-AllGuids {
-    Write-Step "[3/9] Gerando 30 GUIDs unicos..." $C.Info
+    Write-Step "[3/9] Gerando 34 GUIDs unicos..." $C.Info
     
     $guids = @{}
     $guids["UpgradeCode"] = [guid]::NewGuid().ToString().ToUpper()
     
-    for ($i = 1; $i -le 30; $i++) {
-        Show-Progress -Current $i -Total 30 -Activity "Gerando GUIDs"
+    for ($i = 1; $i -le 34; $i++) {
+        Show-Progress -Current $i -Total 34 -Activity "Gerando GUIDs"
         $guids["GUID_$i"] = [guid]::NewGuid().ToString().ToUpper()
         Start-Sleep -Milliseconds 10 # Pequena pausa para mostrar progresso
     }
     
-    Write-Host "`n  [OK] 30 GUIDs gerados (UpgradeCode + 30 componentes)" -ForegroundColor $C.Success
+    Write-Host "`n  [OK] 34 GUIDs gerados (UpgradeCode + 34 componentes)" -ForegroundColor $C.Success
     Write-Host "  Preview:" -ForegroundColor $C.Gray
     Write-Host "    UpgradeCode: {$($guids['UpgradeCode'])}" -ForegroundColor $C.Gray
     Write-Host "    GUID_1: {$($guids['GUID_1'])}" -ForegroundColor $C.Gray
+    Write-Host "    GUID_34 (CBCM): {$($guids['GUID_34'])}" -ForegroundColor $C.Gray
     Write-Host "    ..." -ForegroundColor $C.Gray
     
     return $guids
@@ -255,7 +274,7 @@ function Fill-Placeholders {
     
     Set-Content $productFile $content -Encoding UTF8 -NoNewline
     $totalPlaceholders += 3
-    Write-Host "  [OK] Product.wxs atualizado (3 placeholders) - Total: $totalPlaceholders/45" -ForegroundColor $C.Success
+    Write-Host "  [OK] Product.wxs atualizado (3 placeholders) - Total: $totalPlaceholders/49" -ForegroundColor $C.Success
     
     # Files.wxs (18 GUIDs)
     Write-Step "[5/9] Preenchendo Files.wxs..." $C.Info
@@ -268,9 +287,9 @@ function Fill-Placeholders {
     
     Set-Content $filesFile $content -Encoding UTF8 -NoNewline
     $totalPlaceholders += 18
-    Write-Host "  [OK] Files.wxs atualizado (18 GUIDs) - Total: $totalPlaceholders/45" -ForegroundColor $C.Success
+    Write-Host "  [OK] Files.wxs atualizado (18 GUIDs) - Total: $totalPlaceholders/49" -ForegroundColor $C.Success
     
-    # Registry.wxs (12 Extension IDs + 12 GUIDs = 24 placeholders)
+    # Registry.wxs (12 Extension IDs + 16 GUIDs = 28 placeholders)
     Write-Step "[6/9] Preenchendo Registry.wxs..." $C.Info
     $registryFile = Join-Path $WIX_DIR "Registry.wxs"
     $content = Get-Content $registryFile -Raw -Encoding UTF8
@@ -278,16 +297,16 @@ function Fill-Placeholders {
     # Extension IDs
     $content = $content -replace '\[PREENCHER_EXTENSION_ID\]', $script:ExtensionId
     
-    # GUIDs 17-28 (conforme estrutura real do Registry.wxs)
-    for ($i = 17; $i -le 28; $i++) {
+    # GUIDs 17-32 (17-28 para navegadores + 29-32 para CBCM)
+    for ($i = 17; $i -le 32; $i++) {
         $content = $content -replace "\[PREENCHER_GUID_$i\]", $Guids["GUID_$i"]
     }
     
     Set-Content $registryFile $content -Encoding UTF8 -NoNewline
     
     $extIdCount = ([regex]::Matches($content, $script:ExtensionId)).Count
-    $totalPlaceholders += 24
-    Write-Host "  [OK] Registry.wxs atualizado ($extIdCount Extension IDs + 12 GUIDs) - Total: $totalPlaceholders/45" -ForegroundColor $C.Success
+    $totalPlaceholders += 28
+    Write-Host "  [OK] Registry.wxs atualizado ($extIdCount Extension IDs + 16 GUIDs, incluindo CBCM) - Total: $totalPlaceholders/49" -ForegroundColor $C.Success
     
     # Validar
     $allContent = (Get-Content $productFile -Raw) + (Get-Content $filesFile -Raw) + (Get-Content $registryFile -Raw)
@@ -303,7 +322,7 @@ function Fill-Placeholders {
         exit 1
     }
     
-    Write-Host "`n  [OK] Todos os 45 placeholders preenchidos com sucesso!" -ForegroundColor $C.Success
+    Write-Host "`n  [OK] Todos os 49 placeholders preenchidos com sucesso!" -ForegroundColor $C.Success
 }
 
 function Copy-ExtensionFiles {
@@ -406,9 +425,10 @@ function Save-BuildLog {
             ExtensionId = $script:ExtensionId
             Manufacturer = $script:Manufacturer
             UpgradeCode = $Guids["UpgradeCode"]
+            CBCMEnabled = if ($script:CBCMToken) { $true } else { $false }
         }
         GUIDs = $Guids
-        PlaceholdersFilled = 45
+        PlaceholdersFilled = 49
         MSIPath = "build/CorpMonitor.msi"
         SHA256 = $Hash
     }
@@ -422,8 +442,17 @@ function Test-Installation {
     
     $msiPath = Join-Path $BUILD_DIR "CorpMonitor.msi"
     
+    # Preparar parametros MSI
+    $msiParams = "/i `"$msiPath`" /qn /l*v `"$BUILD_DIR\install-test.log`""
+    
+    # Adicionar token CBCM se fornecido
+    if ($script:CBCMToken) {
+        $msiParams += " CHROME_ENROLLMENT_TOKEN=`"$($script:CBCMToken)`""
+        Write-Host "  [INFO] Instalando com token CBCM..." -ForegroundColor $C.Info
+    }
+    
     Write-Host "  Executando msiexec..." -ForegroundColor $C.Gray
-    Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn /l*v `"$BUILD_DIR\install-test.log`"" -Wait -NoNewWindow
+    Start-Process msiexec.exe -ArgumentList $msiParams -Wait -NoNewWindow
     
     Start-Sleep -Seconds 2
     
@@ -432,12 +461,23 @@ function Test-Installation {
     if (Test-Path $installPath) {
         Write-Host "  [OK] Arquivos instalados em: $installPath" -ForegroundColor $C.Success
         
-        # Verificar Registry
+        # Verificar Registry - ExtensionInstallForcelist
         $regKey = "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist"
         if (Test-Path $regKey) {
-            Write-Host "  [OK] Registry Chrome configurado" -ForegroundColor $C.Success
+            Write-Host "  [OK] Registry Chrome ExtensionInstallForcelist configurado" -ForegroundColor $C.Success
         } else {
-            Write-Host "  [AVISO] Registry Chrome NAO encontrado" -ForegroundColor $C.Warning
+            Write-Host "  [AVISO] Registry Chrome ExtensionInstallForcelist NAO encontrado" -ForegroundColor $C.Warning
+        }
+        
+        # Verificar Registry - CBCM Token
+        if ($script:CBCMToken) {
+            $cbcmKey = "HKLM:\SOFTWARE\Policies\Google\Chrome"
+            $tokenValue = Get-ItemProperty -Path $cbcmKey -Name "CloudManagementEnrollmentToken" -ErrorAction SilentlyContinue
+            if ($tokenValue) {
+                Write-Host "  [OK] Token CBCM instalado no Registry" -ForegroundColor $C.Success
+            } else {
+                Write-Host "  [AVISO] Token CBCM NAO encontrado no Registry" -ForegroundColor $C.Warning
+            }
         }
     } else {
         Write-Host "  [ERRO] Instalacao falhou!" -ForegroundColor $C.Error
