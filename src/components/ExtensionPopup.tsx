@@ -72,74 +72,25 @@ const ExtensionPopup = () => {
         </div>
 
         {/* Status Section */}
-        {corporateMode ? (
-          <div
-            style={{
-              textAlign: 'center',
-              padding: '15px',
-              background: 'rgba(39, 174, 96, 0.2)',
-              borderRadius: '8px',
-              marginBottom: '20px',
-            }}
-          >
-            <strong style={{ fontSize: '14px' }}>🏢 Modo Corporativo</strong>
-            <p style={{ fontSize: '12px', marginTop: '5px', opacity: 0.9 }}>
-              Monitoramento sempre ativo
-            </p>
+        <div
+          style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            borderRadius: '12px',
+            padding: '16px',
+            marginBottom: '20px',
+            textAlign: 'center',
+          }}
+        >
+          <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>
+            🛡️ Sistema Seguro!
           </div>
-        ) : (
-          <div
-            style={{
-              background: 'rgba(255, 255, 255, 0.1)',
-              borderRadius: '12px',
-              padding: '16px',
-              marginBottom: '20px',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '12px',
-              }}
-            >
-              <div>
-                <div style={{ fontSize: '14px', opacity: 0.9 }}>
-                  {isMonitoring ? '🛡️ Proteção Ativa' : 'Proteção Pausada'}
-                </div>
-                <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '8px' }}>
-                  Última análise: {lastReport}
-                </div>
-              </div>
-              <div
-                onClick={handleToggle}
-                style={{
-                  position: 'relative',
-                  width: '48px',
-                  height: '24px',
-                  background: isMonitoring ? '#4ade80' : 'rgba(255, 255, 255, 0.3)',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  transition: 'background 0.3s',
-                }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '2px',
-                    left: isMonitoring ? '26px' : '2px',
-                    width: '20px',
-                    height: '20px',
-                    background: 'white',
-                    borderRadius: '50%',
-                    transition: 'left 0.3s',
-                  }}
-                />
-              </div>
-            </div>
+          <div style={{ fontSize: '12px', opacity: 0.9 }}>
+            Proteção ativa e monitoramento em tempo real
           </div>
-        )}
+          <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '8px' }}>
+            Última análise: {lastReport}
+          </div>
+        </div>
 
         {/* Stats Grid */}
         <div
