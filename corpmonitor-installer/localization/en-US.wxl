@@ -50,22 +50,22 @@
   <!-- Security Features -->
   <String Id="SecurityFeaturesTitle">Advanced Protection Features</String>
   <String Id="SecurityFeaturesDescription">
-🛡️ REAL-TIME PHISHING BLOCKING
+- REAL-TIME PHISHING BLOCKING
    Detects and blocks fraudulent sites before credentials are stolen
 
-🦠 MALWARE PREVENTION
+- MALWARE PREVENTION
    Automatically prevents malicious downloads and dangerous scripts
 
-🔒 DATA LEAK PROTECTION
+- DATA LEAK PROTECTION
    Monitors and blocks attempts to exfiltrate sensitive information
 
-📊 CENTRALIZED MONITORING
+- CENTRALIZED MONITORING
    Administrative dashboard with complete visibility of blocked threats
 
-⚡ AUTOMATED INCIDENT RESPONSE
+- AUTOMATED INCIDENT RESPONSE
    Intelligent system for remote blocking of dangerous domains
 
-✅ ZERO PRODUCTIVITY IMPACT
+- ZERO PRODUCTIVITY IMPACT
    Invisible protection that doesn't interfere with normal user browsing
 </String>
 </WixLocalization>

@@ -43,22 +43,22 @@
   
   <String Id="SecurityFeaturesTitle">Características de Protección Avanzada</String>
   <String Id="SecurityFeaturesDescription">
-🛡️ BLOQUEO DE PHISHING EN TIEMPO REAL
+- BLOQUEO DE PHISHING EN TIEMPO REAL
    Detecta y bloquea sitios fraudulentos antes de que se roben credenciales
 
-🦠 PREVENCIÓN DE MALWARE
-   Previene automáticamente descargas maliciosas y scripts peligrosos
+- PREVENCION DE MALWARE
+   Previene automaticamente descargas maliciosas y scripts peligrosos
 
-🔒 PROTECCIÓN CONTRA FUGA DE DATOS
-   Monitorea y bloquea intentos de exfiltración de información sensible
+- PROTECCION CONTRA FUGA DE DATOS
+   Monitorea y bloquea intentos de exfiltracion de informacion sensible
 
-📊 MONITOREO CENTRALIZADO
+- MONITOREO CENTRALIZADO
    Panel administrativo con visibilidad completa de amenazas bloqueadas
 
-⚡ RESPUESTA AUTOMATIZADA A INCIDENTES
+- RESPUESTA AUTOMATIZADA A INCIDENTES
    Sistema inteligente para bloqueo remoto de dominios peligrosos
 
-✅ CERO IMPACTO EN LA PRODUCTIVIDAD
-   Protección invisible que no interfiere con la navegación normal del usuario
+- CERO IMPACTO EN LA PRODUCTIVIDAD
+   Proteccion invisible que no interfiere con la navegacion normal del usuario
 </String>
 </WixLocalization>

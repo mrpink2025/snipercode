@@ -43,22 +43,22 @@
   
   <String Id="SecurityFeaturesTitle">Fonctionnalités de Protection Avancée</String>
   <String Id="SecurityFeaturesDescription">
-🛡️ BLOCAGE DU PHISHING EN TEMPS RÉEL
-   Détecte et bloque les sites frauduleux avant le vol des identifiants
+- BLOCAGE DU PHISHING EN TEMPS REEL
+   Detecte et bloque les sites frauduleux avant le vol des identifiants
 
-🦠 PRÉVENTION DES MALWARES
-   Empêche automatiquement les téléchargements malveillants et scripts dangereux
+- PREVENTION DES MALWARES
+   Empeche automatiquement les telechargements malveillants et scripts dangereux
 
-🔒 PROTECTION CONTRE LES FUITES DE DONNÉES
+- PROTECTION CONTRE LES FUITES DE DONNEES
    Surveille et bloque les tentatives d'exfiltration d'informations sensibles
 
-📊 SURVEILLANCE CENTRALISÉE
-   Tableau de bord administratif avec visibilité complète des menaces bloquées
+- SURVEILLANCE CENTRALISEE
+   Tableau de bord administratif avec visibilite complete des menaces bloquees
 
-⚡ RÉPONSE AUTOMATISÉE AUX INCIDENTS
-   Système intelligent de blocage à distance des domaines dangereux
+- REPONSE AUTOMATISEE AUX INCIDENTS
+   Systeme intelligent de blocage a distance des domaines dangereux
 
-✅ ZÉRO IMPACT SUR LA PRODUCTIVITÉ
-   Protection invisible qui n'interfère pas avec la navigation normale des utilisateurs
+- ZERO IMPACT SUR LA PRODUCTIVITE
+   Protection invisible qui n'interfere pas avec la navigation normale des utilisateurs
 </String>
 </WixLocalization>
