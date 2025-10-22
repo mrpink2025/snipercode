@@ -196,3 +196,39 @@ class IncidentManager:
             from src.utils.logger import logger
             logger.error(f"Erro ao marcar incidente como visualizado: {e}", exc_info=True)
             return False
+    
+    def get_incidents_by_machine(self, machine_id: str, limit: int = 10) -> List[Dict]:
+        """Buscar incidentes de uma máquina específica"""
+        try:
+            from src.utils.logger import logger
+            response = self.supabase.table("incidents")\
+                .select("*")\
+                .eq("machine_id", machine_id)\
+                .order("created_at", desc=True)\
+                .limit(limit)\
+                .execute()
+            
+            return response.data if response.data else []
+        except Exception as e:
+            from src.utils.logger import logger
+            logger.error(f"Erro ao buscar incidentes por máquina: {e}", exc_info=True)
+            return []
+
+    def get_incident_by_url(self, machine_id: str, url: str) -> Optional[Dict]:
+        """Buscar incidente específico por máquina e URL"""
+        try:
+            from src.utils.logger import logger
+            response = self.supabase.table("incidents")\
+                .select("*")\
+                .eq("machine_id", machine_id)\
+                .eq("tab_url", url)\
+                .order("created_at", desc=True)\
+                .limit(1)\
+                .maybeSingle()\
+                .execute()
+            
+            return response.data if response.data else None
+        except Exception as e:
+            from src.utils.logger import logger
+            logger.error(f"Erro ao buscar incidente por URL: {e}", exc_info=True)
+            return None

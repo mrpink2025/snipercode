@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       active_sessions: {
         Row: {
+          browser_fingerprint: Json | null
           client_ip: unknown
           created_at: string
           domain: string
@@ -29,6 +30,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          browser_fingerprint?: Json | null
           client_ip?: unknown
           created_at?: string
           domain: string
@@ -42,6 +44,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          browser_fingerprint?: Json | null
           client_ip?: unknown
           created_at?: string
           domain?: string
@@ -236,6 +239,7 @@ export type Database = {
       incidents: {
         Row: {
           assigned_to: string | null
+          browser_fingerprint: Json | null
           client_ip: unknown
           cookie_excerpt: string
           created_at: string
@@ -259,6 +263,7 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          browser_fingerprint?: Json | null
           client_ip?: unknown
           cookie_excerpt: string
           created_at?: string
@@ -282,6 +287,7 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          browser_fingerprint?: Json | null
           client_ip?: unknown
           cookie_excerpt?: string
           created_at?: string

