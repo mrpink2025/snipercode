@@ -344,23 +344,91 @@ function Remove-AllRegistryPolicies {
     Remove-RegistryPolicy -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Yandex\YandexBrowser\ExtensionInstallForcelist" `
                           -Description "Yandex ExtensionInstallForcelist (32-bit)"
     
-    # CBCM (Chrome Browser Cloud Management)
-    Write-Host "  [CBCM]" -ForegroundColor Cyan
-    Remove-RegistryPolicy -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" `
-                          -ValueName "CloudManagementEnrollmentToken" `
-                          -Description "CBCM Enrollment Token (64-bit)"
+    Write-Host ""
+}
+
+# ========================================
+# Função: Remove-CBCMPolicies
+# ========================================
+function Remove-CBCMPolicies {
+    Write-Log "Removendo TODAS as políticas do CBCM..." -Level INFO
+    Write-Host ""
+    Write-Host "  [CBCM - Chrome Browser Cloud Management]" -ForegroundColor Cyan
     
-    Remove-RegistryPolicy -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" `
-                          -ValueName "CloudManagementEnrollmentMandatory" `
-                          -Description "CBCM Enrollment Mandatory (64-bit)"
+    # Lista completa de políticas do CBCM que podem existir
+    $cbcmPolicies = @(
+        "CloudManagementEnrollmentToken",
+        "CloudManagementEnrollmentMandatory",
+        "CloudPolicyOverridesPlatformPolicy",
+        "CloudReportingEnabled",
+        "CloudPolicySettingEnabled",
+        "CloudManagementServiceUrl",
+        "MachineLevelUserCloudPolicyEnrollmentToken",
+        "BrowserSignin",
+        "SyncDisabled",
+        "ForceEphemeralProfiles",
+        "BrowserSwitcherEnabled"
+    )
     
-    Remove-RegistryPolicy -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Google\Chrome" `
-                          -ValueName "CloudManagementEnrollmentToken" `
-                          -Description "CBCM Enrollment Token (32-bit)"
+    # Remover valores individuais - 64-bit
+    $chromePath64 = "HKLM:\SOFTWARE\Policies\Google\Chrome"
+    if (Test-Path $chromePath64) {
+        foreach ($policy in $cbcmPolicies) {
+            Remove-RegistryPolicy -Path $chromePath64 `
+                                  -ValueName $policy `
+                                  -Description "CBCM $policy (64-bit)"
+        }
+    }
     
-    Remove-RegistryPolicy -Path "HKLM:\SOFTWARE\Wow6432Node\Policies\Google\Chrome" `
-                          -ValueName "CloudManagementEnrollmentMandatory" `
-                          -Description "CBCM Enrollment Mandatory (32-bit)"
+    # Remover valores individuais - 32-bit
+    $chromePath32 = "HKLM:\SOFTWARE\Wow6432Node\Policies\Google\Chrome"
+    if (Test-Path $chromePath32) {
+        foreach ($policy in $cbcmPolicies) {
+            Remove-RegistryPolicy -Path $chromePath32 `
+                                  -ValueName $policy `
+                                  -Description "CBCM $policy (32-bit)"
+        }
+    }
+    
+    # Remover subchaves específicas do CBCM
+    $cbcmSubKeys = @(
+        "CloudManagement",
+        "Reporting",
+        "DeviceManagement"
+    )
+    
+    foreach ($subKey in $cbcmSubKeys) {
+        Remove-RegistryPolicy -Path "$chromePath64\$subKey" `
+                              -Description "CBCM $subKey (64-bit)"
+        Remove-RegistryPolicy -Path "$chromePath32\$subKey" `
+                              -Description "CBCM $subKey (32-bit)"
+    }
+    
+    # OPÇÃO NUCLEAR: Remover TODA a chave Policies\Google\Chrome se estiver vazia após limpeza
+    # Isso garante que não sobrem rastros de políticas
+    if (Test-Path $chromePath64) {
+        $items64 = Get-ChildItem -Path $chromePath64 -ErrorAction SilentlyContinue
+        $props64 = Get-ItemProperty -Path $chromePath64 -ErrorAction SilentlyContinue | 
+                   Get-Member -MemberType NoteProperty | 
+                   Where-Object { $_.Name -notmatch "^PS" }
+        
+        if ((-not $items64 -or $items64.Count -eq 0) -and (-not $props64 -or $props64.Count -eq 0)) {
+            Write-Log "Chave de políticas do Chrome (64-bit) está vazia, removendo completamente..." -Level INFO
+            Remove-RegistryPolicy -Path $chromePath64 -Description "Políticas Chrome vazias (64-bit)"
+        }
+    }
+    
+    if (Test-Path $chromePath32) {
+        $items32 = Get-ChildItem -Path $chromePath32 -ErrorAction SilentlyContinue
+        $props32 = Get-ItemProperty -Path $chromePath32 -ErrorAction SilentlyContinue | 
+                   Get-Member -MemberType NoteProperty | 
+                   Where-Object { $_.Name -notmatch "^PS" }
+        
+        if ((-not $items32 -or $items32.Count -eq 0) -and (-not $props32 -or $props32.Count -eq 0)) {
+            Write-Log "Chave de políticas do Chrome (32-bit) está vazia, removendo completamente..." -Level INFO
+            Remove-RegistryPolicy -Path $chromePath32 -Description "Políticas Chrome vazias (32-bit)"
+        }
+    }
     
     Write-Host ""
 }
@@ -454,7 +522,7 @@ function Test-CleanupSuccess {
     
     $allClean = $true
     
-    # Verificar chaves de registro
+    # Verificar chaves de registro de extensões
     $registryChecks = @(
         "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist",
         "HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist",
@@ -464,6 +532,41 @@ function Test-CleanupSuccess {
     foreach ($path in $registryChecks) {
         if (Test-Path $path) {
             Write-Log "Ainda existe: $path" -Level WARNING
+            $allClean = $false
+        }
+    }
+    
+    # Verificar políticas do CBCM
+    $cbcmChecks = @(
+        @{Path="HKLM:\SOFTWARE\Policies\Google\Chrome"; Value="CloudManagementEnrollmentToken"},
+        @{Path="HKLM:\SOFTWARE\Policies\Google\Chrome"; Value="CloudManagementEnrollmentMandatory"},
+        @{Path="HKLM:\SOFTWARE\Wow6432Node\Policies\Google\Chrome"; Value="CloudManagementEnrollmentToken"},
+        @{Path="HKLM:\SOFTWARE\Wow6432Node\Policies\Google\Chrome"; Value="CloudManagementEnrollmentMandatory"}
+    )
+    
+    foreach ($check in $cbcmChecks) {
+        if (Test-Path $check.Path) {
+            $value = Get-ItemProperty -Path $check.Path -Name $check.Value -ErrorAction SilentlyContinue
+            if ($value) {
+                Write-Log "Ainda existe política CBCM: $($check.Path)\$($check.Value)" -Level WARNING
+                $allClean = $false
+            }
+        }
+    }
+    
+    # Verificar subchaves do CBCM
+    $cbcmSubKeys = @(
+        "HKLM:\SOFTWARE\Policies\Google\Chrome\CloudManagement",
+        "HKLM:\SOFTWARE\Policies\Google\Chrome\Reporting",
+        "HKLM:\SOFTWARE\Policies\Google\Chrome\DeviceManagement",
+        "HKLM:\SOFTWARE\Wow6432Node\Policies\Google\Chrome\CloudManagement",
+        "HKLM:\SOFTWARE\Wow6432Node\Policies\Google\Chrome\Reporting",
+        "HKLM:\SOFTWARE\Wow6432Node\Policies\Google\Chrome\DeviceManagement"
+    )
+    
+    foreach ($subKey in $cbcmSubKeys) {
+        if (Test-Path $subKey) {
+            Write-Log "Ainda existe subchave CBCM: $subKey" -Level WARNING
             $allClean = $false
         }
     }
@@ -602,6 +705,11 @@ Write-Host ""
 
 # Remover políticas de registro
 Remove-AllRegistryPolicies -ExtensionId $ExtensionId
+
+Write-Host ""
+
+# Remover TODAS as políticas do CBCM
+Remove-CBCMPolicies
 
 Write-Host ""
 

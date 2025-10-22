@@ -18,8 +18,20 @@ Este script PowerShell remove **completamente** todas as políticas de grupo (GP
 #### **Registro do Windows:**
 - ✅ `ExtensionInstallForcelist` (Chrome, Edge, Yandex)
 - ✅ `ExtensionSettings` (Chrome, Edge, Yandex)
-- ✅ `CloudManagementEnrollmentToken` (CBCM)
-- ✅ `CloudManagementEnrollmentMandatory` (CBCM)
+- ✅ **TODAS as políticas do CBCM (Chrome Browser Cloud Management):**
+  - `CloudManagementEnrollmentToken`
+  - `CloudManagementEnrollmentMandatory`
+  - `CloudPolicyOverridesPlatformPolicy`
+  - `CloudReportingEnabled`
+  - `CloudPolicySettingEnabled`
+  - `CloudManagementServiceUrl`
+  - `MachineLevelUserCloudPolicyEnrollmentToken`
+  - `BrowserSignin`
+  - `SyncDisabled`
+  - `ForceEphemeralProfiles`
+  - `BrowserSwitcherEnabled`
+  - Subchaves: `CloudManagement`, `Reporting`, `DeviceManagement`
+- ✅ **Remove completamente a chave de políticas do Chrome se estiver vazia**
 - ✅ Chaves de registro 64-bit e 32-bit (Wow6432Node)
 
 #### **Dados de Usuário:**
@@ -133,8 +145,15 @@ Fechar navegadores agora? (S/N): S
     [✓] Removido: Chrome ExtensionInstallForcelist (32-bit)
   [Edge 64-bit]
     [→] Não encontrado: Edge ExtensionInstallForcelist (64-bit)
-  [CBCM]
-    [✓] Removido: CBCM Enrollment Token (64-bit)
+
+[→] Removendo TODAS as políticas do CBCM...
+  [CBCM - Chrome Browser Cloud Management]
+    [✓] Removido: CBCM CloudManagementEnrollmentToken (64-bit)
+    [✓] Removido: CBCM CloudManagementEnrollmentMandatory (64-bit)
+    [✓] Removido: CBCM CloudPolicyOverridesPlatformPolicy (64-bit)
+    [✓] Removido: CBCM CloudReportingEnabled (64-bit)
+    [→] Chave de políticas do Chrome (64-bit) está vazia, removendo completamente...
+    [✓] Removido: Políticas Chrome vazias (64-bit)
 
 [→] Removendo dados de extensão dos perfis de usuário...
     [✓] Removido: Chrome\Default\Extensions\phk...
@@ -166,6 +185,59 @@ Arquivos gerados:
 
 Pressione Enter para sair
 ```
+
+---
+
+## 🌐 Sobre a Remoção do CBCM
+
+### O que é CBCM?
+
+**CBCM (Chrome Browser Cloud Management)** é um serviço do Google que permite gerenciar navegadores Chrome de forma centralizada na nuvem, sem necessidade de Active Directory.
+
+### O que o script remove do CBCM?
+
+Este script remove **TODAS** as políticas do CBCM instaladas localmente, incluindo:
+
+1. **Tokens de Inscrição:**
+   - Remove o token que conecta o navegador ao console de gerenciamento
+   - O navegador deixará de reportar ao CBCM após reinicialização
+
+2. **Políticas de Gerenciamento:**
+   - `CloudManagementEnrollmentMandatory` - Inscrição obrigatória
+   - `CloudPolicyOverridesPlatformPolicy` - Sobrescrever políticas locais
+   - `CloudReportingEnabled` - Relatórios ao servidor
+
+3. **Subchaves Completas:**
+   - `HKLM:\SOFTWARE\Policies\Google\Chrome\CloudManagement`
+   - `HKLM:\SOFTWARE\Policies\Google\Chrome\Reporting`
+   - `HKLM:\SOFTWARE\Policies\Google\Chrome\DeviceManagement`
+
+4. **Limpeza Total:**
+   - Se após remover todas as políticas a chave `Policies\Google\Chrome` estiver vazia, ela é **completamente removida**
+   - Isso garante que não sobrem rastros de configurações antigas
+
+### ⚠️ O que acontece após remover o CBCM?
+
+- ✅ O navegador **não estará mais gerenciado** pelo console CBCM
+- ✅ Políticas aplicadas via CBCM **deixam de funcionar**
+- ✅ Extensões forçadas via CBCM **podem ser desinstaladas** pelo usuário
+- ✅ O Chrome volta ao estado "não gerenciado" (pode ver em `chrome://policy/`)
+- ⚠️ Para reativar o CBCM, será necessário **reinstalar** o token de inscrição
+
+### Como verificar se o CBCM foi removido?
+
+```
+1. Abrir Chrome
+2. Ir para: chrome://policy/
+3. Na seção "Chrome Policies", deve aparecer:
+   Status: "No machine policies set"
+4. Em "Policy precedence", NÃO deve aparecer "Cloud" como fonte
+```
+
+Se ainda aparecer políticas ou "Managed by your organization":
+- Reiniciar o navegador completamente
+- Executar `gpupdate /force` 
+- Verificar se há políticas de domínio (AD) sobrepondo
 
 ---
 
@@ -240,10 +312,18 @@ Get-Process | Where-Object { $_.Name -like "*chrome*" -or $_.Name -like "*edge*"
 **Possíveis causas:**
 1. **Cache do navegador:** Fechar completamente o navegador e reabrir
 2. **GPO de domínio:** Verificar se há políticas de domínio (AD) sobrepondo
-3. **Outro instalador:** Verificar se há outro software gerenciando políticas
+3. **CBCM ainda ativo:** Token de inscrição não foi removido corretamente
+4. **Outro instalador:** Verificar se há outro software gerenciando políticas
 
 **Soluções:**
 ```powershell
+# Verificar se políticas do CBCM ainda existem
+Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" -Name "CloudManagementEnrollmentToken" -ErrorAction SilentlyContinue
+
+# Se retornar algo, remover manualmente
+Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" -Name "CloudManagementEnrollmentToken" -Force
+Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" -Name "CloudManagementEnrollmentMandatory" -Force
+
 # Forçar atualização de GPO
 gpupdate /force
 
@@ -252,6 +332,20 @@ Restart-Computer -Force
 
 # Verificar se há outras políticas (domain-wide)
 gpresult /h gpreport.html
+```
+
+**Verificar especificamente o CBCM:**
+```powershell
+# Ver todas as propriedades da chave de políticas do Chrome
+Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" -ErrorAction SilentlyContinue | Format-List
+
+# Verificar subchaves do CBCM
+Test-Path "HKLM:\SOFTWARE\Policies\Google\Chrome\CloudManagement"
+Test-Path "HKLM:\SOFTWARE\Policies\Google\Chrome\Reporting"
+
+# Se existirem, remover manualmente
+Remove-Item -Path "HKLM:\SOFTWARE\Policies\Google\Chrome\CloudManagement" -Recurse -Force
+Remove-Item -Path "HKLM:\SOFTWARE\Policies\Google\Chrome\Reporting" -Recurse -Force
 ```
 
 ---
@@ -426,8 +520,10 @@ Para problemas ou dúvidas, entre em contato com:
 ### v1.0 (2025-10-22)
 - ✅ Lançamento inicial
 - ✅ Suporte para Chrome, Edge e Yandex
+- ✅ **Remoção COMPLETA de todas as políticas do CBCM (Chrome Browser Cloud Management)**
 - ✅ Backup automático de registro
 - ✅ Detecção automática de Extension ID
 - ✅ Limpeza de dados de usuário
 - ✅ Validação pós-limpeza
 - ✅ Modo dry-run (-WhatIf)
+- ✅ **Remoção da chave de políticas completa do Chrome quando vazia**
