@@ -11,7 +11,7 @@ const CONFIG = {
 };
 
 // Global state and caching - ✅ Proteção ativa por padrão
-let protectionEnabled = true;
+let monitoringEnabled = true;
 let lastReportTime = null;
 let machineId = null;
 let pendingIncidents = [];

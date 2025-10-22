@@ -118,11 +118,11 @@ function setupEventListeners() {
   const settingsBtn = document.getElementById('settingsBtn');
   const privacyLink = document.getElementById('privacyLink');
   
-  // Toggle monitoring
+  // Toggle monitoring (pode não existir em modo corporativo)
   if (toggleSwitch) {
     toggleSwitch.addEventListener('click', async () => {
       const status = await getStatus();
-      const newState = !status.protectionEnabled;
+      const newState = !status.monitoringEnabled;
       
       await chrome.runtime.sendMessage({ action: 'toggleProtection', enabled: newState });
       await loadStatus();
@@ -165,12 +165,19 @@ async function getStatus() {
 async function loadStatus() {
   const status = await getStatus();
   
-  // Update toggle switch
+  // ✅ VERIFICAÇÃO: Garantir que elementos existem antes de acessar
   const toggleSwitch = document.getElementById('toggleSwitch');
   const statusText = document.getElementById('statusText');
   const lastReport = document.getElementById('lastReport');
   
-  if (status.protectionEnabled) {
+  // Verificar se elementos existem (podem não existir em modo corporativo)
+  if (!toggleSwitch || !statusText || !lastReport) {
+    console.warn('⚠️ Alguns elementos do popup não encontrados (modo corporativo)');
+    return;
+  }
+  
+  // ✅ CORREÇÃO: Usar monitoringEnabled ao invés de protectionEnabled
+  if (status.monitoringEnabled) {
     toggleSwitch.classList.add('active');
     statusText.textContent = '🛡️ Proteção Ativa';
   } else {
