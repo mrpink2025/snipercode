@@ -119,21 +119,17 @@ if (-not $ForcePath) {
         
         Write-Host "  Testando: $testVersion..." -ForegroundColor Gray -NoNewline
         
-        try {
-            # Capturar saida textual ao inves de ExitCode
-            $output = & $testPath /? 2>&1 | Out-String
-            
-            # Validar se a saida contem indicadores de SignTool valido
-            if ($output -match "(Sign Tool|Usage: signtool|Microsoft.*Sign Tool)") {
-                $validSignTool = $testPath
-                $sdkVersion = $testVersion
-                Write-Host " OK" -ForegroundColor Green
-                break
-            } else {
-                Write-Host " FALHOU (sem saida reconhecida)" -ForegroundColor Red
-            }
-        } catch {
-            Write-Host " ERRO ($($_.Exception.Message))" -ForegroundColor Red
+        # Capturar saida (stdout + stderr) sem try/catch
+        $output = & $testPath /? 2>&1 | Out-String
+        
+        # Validar se a saida contem indicadores de SignTool valido
+        if ($output -match "(Sign Tool|Usage: signtool|Microsoft.*Sign Tool)") {
+            $validSignTool = $testPath
+            $sdkVersion = $testVersion
+            Write-Host " OK" -ForegroundColor Green
+            break
+        } else {
+            Write-Host " FALHOU (sem saida reconhecida)" -ForegroundColor Red
         }
     }
 
