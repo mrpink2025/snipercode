@@ -134,16 +134,37 @@ $LocalizationFiles = @(
 Push-Location $BuildDir
 
 # Compilar .wxs -> .wixobj
-& "$WixPath\candle.exe" `
+$candleProduct = & "$WixPath\candle.exe" `
     -out Product.wixobj Product.wxs `
-    -ext WixUIExtension 2>&1 | Out-Null
+    -ext WixUIExtension 2>&1
 
-& "$WixPath\candle.exe" `
-    -out Registry.wixobj Registry.wxs 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERRO ao compilar Product.wxs:" -ForegroundColor Red
+    Write-Host $candleProduct -ForegroundColor Yellow
+    Pop-Location
+    exit 1
+}
 
-& "$WixPath\candle.exe" `
+$candleRegistry = & "$WixPath\candle.exe" `
+    -out Registry.wixobj Registry.wxs 2>&1
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERRO ao compilar Registry.wxs:" -ForegroundColor Red
+    Write-Host $candleRegistry -ForegroundColor Yellow
+    Pop-Location
+    exit 1
+}
+
+$candleUI = & "$WixPath\candle.exe" `
     -out UI.wixobj UI.wxs `
-    -ext WixUIExtension 2>&1 | Out-Null
+    -ext WixUIExtension 2>&1
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERRO ao compilar UI.wxs:" -ForegroundColor Red
+    Write-Host $candleUI -ForegroundColor Yellow
+    Pop-Location
+    exit 1
+}
 
 Write-Host "  OK Objetos WiX gerados" -ForegroundColor Green
 Write-Host ""
@@ -158,13 +179,27 @@ foreach ($lang in $LocalizationFiles) {
     Write-Host "    + $lang" -ForegroundColor Gray
 }
 
-& "$WixPath\light.exe" `
+$lightResult = & "$WixPath\light.exe" `
     -out CorpMonitor.msi `
     -cultures:"pt-BR;en-US;es-ES;pt-PT;fr-FR" `
     @LocalizationArgs `
     -ext WixUIExtension `
     -sice:ICE61 `
-    Product.wixobj Registry.wixobj UI.wixobj 2>&1 | Out-Null
+    Product.wixobj Registry.wixobj UI.wixobj 2>&1
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERRO ao linkar MSI:" -ForegroundColor Red
+    Write-Host $lightResult -ForegroundColor Yellow
+    Pop-Location
+    exit 1
+}
+
+if (-not (Test-Path "$BuildDir\CorpMonitor.msi")) {
+    Write-Host "ERRO: MSI nao foi gerado!" -ForegroundColor Red
+    Write-Host "Verifique os erros acima." -ForegroundColor Yellow
+    Pop-Location
+    exit 1
+}
 
 Pop-Location
 

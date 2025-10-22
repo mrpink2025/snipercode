@@ -23,11 +23,11 @@ Escolha seu idioma preferido para o assistente de instalação:</Text>
         <!-- Lista de idiomas -->
         <Control Id="LanguageList" Type="ListBox" X="15" Y="70" Width="340" Height="120" Property="UI_LANGUAGE">
           <ListBox Property="UI_LANGUAGE">
-            <ListItem Text="🇧🇷 Português (Brasil)" Value="1046" />
-            <ListItem Text="🇺🇸 English (United States)" Value="1033" />
-            <ListItem Text="🇪🇸 Español (España)" Value="1034" />
-            <ListItem Text="🇵🇹 Português (Portugal)" Value="2070" />
-            <ListItem Text="🇫🇷 Français (France)" Value="1036" />
+            <ListItem Text="Portugues (Brasil)" Value="1046" />
+            <ListItem Text="English (United States)" Value="1033" />
+            <ListItem Text="Espanol (Espana)" Value="1034" />
+            <ListItem Text="Portugues (Portugal)" Value="2070" />
+            <ListItem Text="Francais (France)" Value="1036" />
           </ListBox>
         </Control>
         
