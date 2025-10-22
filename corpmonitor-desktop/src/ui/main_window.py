@@ -1450,12 +1450,403 @@ class MainWindow(ctk.CTk):
     def show_machine_details(self, machine: Dict):
         """Mostrar detalhes detalhados da máquina em janela modal"""
         logger.info(f"Ver detalhes da máquina: {machine['machine_id']}")
-        # TODO: Implementar diálogo com todas as informações
+        
+        machine_id = machine['machine_id']
+        
+        # Criar janela modal
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(f"Detalhes da Máquina - {machine_id}")
+        dialog.geometry("700x600")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Centralizar
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 350
+        y = (dialog.winfo_screenheight() // 2) - 300
+        dialog.geometry(f"700x600+{x}+{y}")
+        
+        # Frame principal
+        main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Header
+        header_frame = ctk.CTkFrame(main_frame, fg_color="#1e293b", corner_radius=10)
+        header_frame.pack(fill="x", pady=(0, 20))
+        
+        header_content = ctk.CTkFrame(header_frame, fg_color="transparent")
+        header_content.pack(fill="x", padx=15, pady=15)
+        
+        # Machine ID
+        machine_label = ctk.CTkLabel(
+            header_content,
+            text=f"🖥️ {machine_id}",
+            font=ctk.CTkFont(size=18, weight="bold")
+        )
+        machine_label.pack(anchor="w")
+        
+        # Status
+        is_active = machine.get('is_recently_active', False)
+        status_text = "🟢 ATIVA" if is_active else "⚫ INATIVA"
+        status_label = ctk.CTkLabel(
+            header_content,
+            text=status_text,
+            font=ctk.CTkFont(size=12)
+        )
+        status_label.pack(anchor="w", pady=(5, 0))
+        
+        # Última atividade
+        last_activity = datetime.fromisoformat(machine['last_activity'].replace('Z', '+00:00'))
+        time_ago = self.format_time_ago(last_activity)
+        time_label = ctk.CTkLabel(
+            header_content,
+            text=f"🕒 Última atividade: {time_ago}",
+            font=ctk.CTkFont(size=11),
+            text_color="gray"
+        )
+        time_label.pack(anchor="w", pady=(2, 0))
+        
+        # KPIs
+        kpi_frame = ctk.CTkFrame(main_frame, fg_color="#0f172a", corner_radius=10)
+        kpi_frame.pack(fill="x", pady=(0, 20))
+        
+        kpi_content = ctk.CTkFrame(kpi_frame, fg_color="transparent")
+        kpi_content.pack(fill="x", padx=15, pady=15)
+        
+        ctk.CTkLabel(
+            kpi_content,
+            text=f"📑 {machine['tabs_count']} abas abertas",
+            font=ctk.CTkFont(size=13)
+        ).pack(side="left", padx=10)
+        
+        ctk.CTkLabel(
+            kpi_content,
+            text=f"🌐 {machine['domains_count']} domínios únicos",
+            font=ctk.CTkFont(size=13)
+        ).pack(side="left", padx=10)
+        
+        # Seção de incidentes
+        incidents_label = ctk.CTkLabel(
+            main_frame,
+            text="━━━━━ Incidentes Recentes ━━━━━",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="gray"
+        )
+        incidents_label.pack(pady=(0, 10))
+        
+        # Lista scrollável de incidentes
+        incidents_scroll = ctk.CTkScrollableFrame(main_frame, fg_color="transparent")
+        incidents_scroll.pack(fill="both", expand=True, pady=(0, 20))
+        
+        # Carregar incidentes em thread
+        def load_incidents():
+            try:
+                incidents = self.incident_manager.get_incidents_by_machine(machine_id, limit=10)
+                
+                if not incidents:
+                    self.safe_after(0, lambda: ctk.CTkLabel(
+                        incidents_scroll,
+                        text="Nenhum incidente encontrado",
+                        text_color="gray"
+                    ).pack(pady=20))
+                    return
+                
+                for incident in incidents:
+                    def create_incident_card(inc):
+                        card = ctk.CTkFrame(incidents_scroll, fg_color="#1e293b", corner_radius=6)
+                        card.pack(fill="x", pady=5)
+                        
+                        content = ctk.CTkFrame(card, fg_color="transparent")
+                        content.pack(fill="x", padx=10, pady=8)
+                        
+                        # Severity badge
+                        severity = inc.get('severity', 'NORMAL')
+                        if severity == 'RED':
+                            severity_color = '#dc2626'
+                            severity_text = 'CRÍTICO'
+                        else:
+                            severity_color = '#84cc16'
+                            severity_text = 'NORMAL'
+                        
+                        severity_badge = ctk.CTkLabel(
+                            content,
+                            text=severity_text,
+                            fg_color=severity_color,
+                            corner_radius=4,
+                            padx=6,
+                            pady=2,
+                            font=ctk.CTkFont(size=9, weight="bold")
+                        )
+                        severity_badge.pack(side="left")
+                        
+                        # Status badge
+                        status = inc.get('status', 'new')
+                        status_badge = ctk.CTkLabel(
+                            content,
+                            text=status.upper(),
+                            fg_color="#334155",
+                            corner_radius=4,
+                            padx=6,
+                            pady=2,
+                            font=ctk.CTkFont(size=9)
+                        )
+                        status_badge.pack(side="left", padx=5)
+                        
+                        # Host
+                        host_label = ctk.CTkLabel(
+                            content,
+                            text=inc.get('host', 'N/A'),
+                            font=ctk.CTkFont(size=11)
+                        )
+                        host_label.pack(side="left", padx=5)
+                        
+                        # Timestamp
+                        created_at = inc.get('created_at', '')
+                        if created_at:
+                            dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                            time_text = self.format_time_ago(dt)
+                        else:
+                            time_text = 'N/A'
+                        
+                        time_label = ctk.CTkLabel(
+                            content,
+                            text=time_text,
+                            font=ctk.CTkFont(size=10),
+                            text_color="gray"
+                        )
+                        time_label.pack(side="right")
+                    
+                    self.safe_after(0, lambda i=incident: create_incident_card(i))
+            
+            except Exception as e:
+                logger.error(f"Erro ao carregar incidentes da máquina: {e}", exc_info=True)
+        
+        threading.Thread(target=load_incidents, daemon=True).start()
+        
+        # Botões de ação
+        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        btn_frame.pack(fill="x")
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="🌐 Ver Todas as Abas",
+            width=180,
+            height=35,
+            fg_color="#8b5cf6",
+            hover_color="#7c3aed",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            command=lambda: (dialog.destroy(), self.show_machine_sessions(machine))
+        ).pack(side="left")
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="❌ Fechar",
+            width=120,
+            height=35,
+            fg_color="#64748b",
+            hover_color="#475569",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            command=dialog.destroy
+        ).pack(side="right")
     
     def show_machine_sessions(self, machine: Dict):
         """Mostrar todas as abas/sessões abertas da máquina"""
         logger.info(f"Ver sessões da máquina: {machine['machine_id']}")
-        # TODO: Implementar diálogo listando todas as abas com URLs completas
+        
+        machine_id = machine['machine_id']
+        
+        # Criar janela modal
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(f"Abas Abertas - {machine_id}")
+        dialog.geometry("900x700")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Centralizar
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 450
+        y = (dialog.winfo_screenheight() // 2) - 350
+        dialog.geometry(f"900x700+{x}+{y}")
+        
+        # Frame principal
+        main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Header
+        header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 20))
+        
+        title_label = ctk.CTkLabel(
+            header_frame,
+            text=f"🌐 Abas Abertas - {machine_id}",
+            font=ctk.CTkFont(size=18, weight="bold")
+        )
+        title_label.pack(side="left")
+        
+        # Total de abas
+        total_label = ctk.CTkLabel(
+            header_frame,
+            text=f"Total: {machine['tabs_count']} abas",
+            font=ctk.CTkFont(size=12),
+            text_color="gray"
+        )
+        total_label.pack(side="left", padx=20)
+        
+        # Campo de busca
+        search_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        search_frame.pack(fill="x", pady=(0, 15))
+        
+        search_entry = ctk.CTkEntry(
+            search_frame,
+            placeholder_text="Buscar por domínio ou URL...",
+            width=700
+        )
+        search_entry.pack(side="left", padx=(0, 10))
+        
+        # Variável para armazenar sessões
+        all_sessions = []
+        
+        def filter_sessions():
+            """Filtrar e exibir sessões"""
+            search_term = search_entry.get().strip().lower()
+            
+            # Limpar lista
+            for widget in sessions_scroll.winfo_children():
+                widget.destroy()
+            
+            filtered = [s for s in all_sessions if search_term in s['domain'].lower() or search_term in s['url'].lower()]
+            
+            if not filtered:
+                no_data = ctk.CTkLabel(
+                    sessions_scroll,
+                    text="Nenhuma sessão encontrada",
+                    text_color="gray"
+                )
+                no_data.pack(pady=20)
+                return
+            
+            for session in filtered:
+                create_session_card(session)
+        
+        def create_session_card(session: Dict):
+            """Criar card de sessão"""
+            card = ctk.CTkFrame(sessions_scroll, fg_color="#1e293b", corner_radius=8)
+            card.pack(fill="x", pady=5)
+            
+            content = ctk.CTkFrame(card, fg_color="transparent")
+            content.pack(fill="x", padx=15, pady=12)
+            
+            # Domínio
+            domain_label = ctk.CTkLabel(
+                content,
+                text=f"🌐 {session['domain']}",
+                font=ctk.CTkFont(size=14, weight="bold")
+            )
+            domain_label.pack(anchor="w")
+            
+            # URL completa
+            url = session['url']
+            url_display = url if len(url) <= 80 else url[:77] + "..."
+            url_label = ctk.CTkLabel(
+                content,
+                text=url_display,
+                font=ctk.CTkFont(size=11),
+                text_color="gray"
+            )
+            url_label.pack(anchor="w", pady=(2, 0))
+            
+            # Metadados
+            meta_frame = ctk.CTkFrame(content, fg_color="transparent")
+            meta_frame.pack(fill="x", pady=(5, 0))
+            
+            # Tab ID
+            tab_id_label = ctk.CTkLabel(
+                meta_frame,
+                text=f"Tab ID: {session['tab_id']}",
+                font=ctk.CTkFont(size=10),
+                text_color="#94a3b8"
+            )
+            tab_id_label.pack(side="left")
+            
+            ctk.CTkLabel(
+                meta_frame,
+                text="•",
+                font=ctk.CTkFont(size=10),
+                text_color="#475569"
+            ).pack(side="left", padx=5)
+            
+            # Última atividade
+            last_activity = datetime.fromisoformat(session['last_activity'].replace('Z', '+00:00'))
+            time_ago = self.format_time_ago(last_activity)
+            time_label = ctk.CTkLabel(
+                meta_frame,
+                text=time_ago,
+                font=ctk.CTkFont(size=10),
+                text_color="#94a3b8"
+            )
+            time_label.pack(side="left")
+            
+            # Status ativo/inativo
+            is_active = session.get('is_active', False)
+            status_badge = ctk.CTkLabel(
+                meta_frame,
+                text="🟢 Ativa" if is_active else "⚫ Inativa",
+                font=ctk.CTkFont(size=10),
+                fg_color="#22c55e" if is_active else "#64748b",
+                corner_radius=4,
+                padx=6,
+                pady=2
+            )
+            status_badge.pack(side="right")
+        
+        search_btn = ctk.CTkButton(
+            search_frame,
+            text="🔍",
+            width=60,
+            command=filter_sessions
+        )
+        search_btn.pack(side="left")
+        
+        # Bind Enter key
+        search_entry.bind("<Return>", lambda e: filter_sessions())
+        
+        # Lista scrollável de sessões
+        sessions_scroll = ctk.CTkScrollableFrame(main_frame)
+        sessions_scroll.pack(fill="both", expand=True, pady=(0, 15))
+        
+        # Carregar sessões em thread
+        def load_sessions():
+            try:
+                details = self.machine_manager.get_machine_details(machine_id)
+                nonlocal all_sessions
+                all_sessions = details.get('sessions', [])
+                
+                if not all_sessions:
+                    self.safe_after(0, lambda: ctk.CTkLabel(
+                        sessions_scroll,
+                        text="Nenhuma sessão ativa",
+                        text_color="gray"
+                    ).pack(pady=20))
+                    return
+                
+                self.safe_after(0, filter_sessions)
+            
+            except Exception as e:
+                logger.error(f"Erro ao carregar sessões: {e}", exc_info=True)
+        
+        threading.Thread(target=load_sessions, daemon=True).start()
+        
+        # Botão fechar
+        ctk.CTkButton(
+            main_frame,
+            text="❌ Fechar",
+            width=150,
+            height=35,
+            fg_color="#64748b",
+            hover_color="#475569",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            command=dialog.destroy
+        ).pack()
     
     def show_add_monitored_domain_dialog(self):
         """Exibir diálogo para adicionar domínio monitorado"""
