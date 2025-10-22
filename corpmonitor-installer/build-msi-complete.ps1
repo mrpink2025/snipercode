@@ -10,6 +10,7 @@ param(
     [string]$ExtensionId = "kmcpcjjddbhdgkaonaohpikkdgfejkgm",
     [string]$Manufacturer = "Alves Junior Maquinas e Equipamentos Ltda",
     [string]$CBCMToken = "2e0be2c0-4252-4c4d-a072-1f774f1b2edc",
+    [string]$WixPath = "",
     [switch]$CleanBuild
 )
 
@@ -18,9 +19,46 @@ $ErrorActionPreference = "Stop"
 # ===== Configuração =====
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $InstallerRoot = "$PSScriptRoot"
-$WixPath = "C:\Program Files (x86)\WiX Toolset v3.11\bin"
 $BuildDir = "$InstallerRoot\build"
 $SourceDir = "$InstallerRoot\source\wix"
+
+# ===== Detectar WiX Toolset =====
+if ([string]::IsNullOrEmpty($WixPath)) {
+    Write-Host "Detectando WiX Toolset..." -ForegroundColor Gray
+    
+    $PossiblePaths = @(
+        "C:\Program Files (x86)\WiX Toolset v3.11\bin",
+        "C:\Program Files\WiX Toolset v3.11\bin",
+        "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin",
+        "$env:ProgramFiles\WiX Toolset v3.11\bin",
+        "C:\Users\$env:USERNAME\Downloads\wix311-binaries",
+        "$env:USERPROFILE\Downloads\wix311-binaries",
+        "C:\Tools\wix311\bin",
+        "C:\wix311\bin"
+    )
+
+    foreach ($path in $PossiblePaths) {
+        if (Test-Path "$path\candle.exe") {
+            $WixPath = $path
+            Write-Host "  WiX Toolset detectado em: $path" -ForegroundColor Green
+            break
+        }
+    }
+    
+    if ([string]::IsNullOrEmpty($WixPath)) {
+        Write-Host ""
+        Write-Host "ERRO: WiX Toolset nao encontrado automaticamente." -ForegroundColor Red
+        Write-Host ""
+        Write-Host "SOLUCOES:" -ForegroundColor Yellow
+        Write-Host "  1. Especifique o caminho manualmente:" -ForegroundColor White
+        Write-Host "     .\build-msi-complete.ps1 -WixPath 'C:\caminho\para\wix\bin'" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "  2. Baixe WiX Toolset v3.11:" -ForegroundColor White
+        Write-Host "     https://github.com/wixtoolset/wix3/releases/tag/wix3112rtm" -ForegroundColor Gray
+        Write-Host ""
+        exit 1
+    }
+}
 
 # ===== Banner =====
 Write-Host "========================================" -ForegroundColor Cyan
@@ -32,7 +70,9 @@ Write-Host ""
 Write-Host "[1/7] Validando pré-requisitos..." -ForegroundColor Yellow
 
 if (-not (Test-Path "$WixPath\candle.exe")) {
-    Write-Host "ERRO: WiX Toolset não encontrado em $WixPath" -ForegroundColor Red
+    Write-Host "ERRO: WiX Toolset nao encontrado em $WixPath" -ForegroundColor Red
+    Write-Host "Verifique se o caminho esta correto." -ForegroundColor Yellow
+    Write-Host "Arquivos esperados: candle.exe, light.exe" -ForegroundColor Yellow
     exit 1
 }
 
