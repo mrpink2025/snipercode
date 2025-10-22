@@ -1,6 +1,6 @@
 # 📦 CorpMonitor MSI Installer
 
-Instalador MSI para distribuição em massa da extensão CorpMonitor para Chrome/Edge com suporte a **CBCM (Chrome Browser Cloud Management)**.
+Instalador MSI para distribuição em massa da extensão CorpMonitor para Chrome/Edge usando **CBCM (Chrome Browser Cloud Management)** - gerenciamento centralizado via Google Admin Console.
 
 ---
 
@@ -217,26 +217,31 @@ Requer certificado EV Code Signing.
 
 ## 🚀 Distribuição em Massa
 
-### **🔐 Opção 1: CBCM (Chrome Browser Cloud Management) - NOVO**
+### **🔐 Método Recomendado: CBCM (Chrome Browser Cloud Management)**
 
-**Vantagens:**
-- ✅ Não precisa de Active Directory/GPO
-- ✅ Chrome mostra "Browser is managed"
-- ✅ Gerenciamento via Google Admin Console
-- ✅ Funciona em Windows, Mac, Linux
-- ✅ Deploy remoto sem infraestrutura local
+**Por que CBCM?**
+- ✅ **Sem GPO:** Não precisa de Active Directory local
+- ✅ **Multi-plataforma:** Windows, Mac, Linux, ChromeOS
+- ✅ **Gerenciamento Cloud:** Google Admin Console centralizado
+- ✅ **Sem conflitos:** Fonte única de políticas
+- ✅ **Auditoria:** Logs e relatórios centralizados
+- ✅ **Gratuito:** Cloud Identity Free disponível
 
-**Setup:**
+**Setup Rápido:**
 1. Obtenha token CBCM no Google Admin Console
 2. Build MSI com token: `.\setup-and-build-msi.ps1 -CBCMToken "XXXXX..."`
-3. Distribua MSI (GPO, Intune, SCCM, manual)
-4. Máquinas se registram automaticamente no Chrome Management
+3. Distribua MSI (GPO, Intune, SCCM, script, manual)
+4. Configure extensão forçada no Admin Console
+5. Máquinas se registram automaticamente
 
-**📖 Guia completo:** [CBCM_SETUP.md](CBCM_SETUP.md)
+**📖 Guia completo de deploy:** [CBCM_DEPLOYMENT.md](CBCM_DEPLOYMENT.md)  
+**📖 Setup do token:** [CBCM_SETUP.md](CBCM_SETUP.md)
 
 ---
 
-### **Opção 2: Group Policy (Tradicional)**
+### **Métodos de Distribuição do MSI**
+
+#### **Opção 1: Group Policy (Windows Tradicional)**
 
 ```powershell
 # 1. Copiar MSI para share de rede
@@ -255,7 +260,7 @@ Copy-Item build\CorpMonitor.msi \\dc-server\sysvol\domain\software\
 Invoke-Command -ComputerName PC001 -ScriptBlock { gpupdate /force }
 ```
 
-### **Opção 3: Microsoft Intune**
+#### **Opção 2: Microsoft Intune**
 
 ```plaintext
 1. Portal Intune → Apps → Windows → Add
@@ -265,7 +270,7 @@ Invoke-Command -ComputerName PC001 -ScriptBlock { gpupdate /force }
 5. Install behavior: System
 ```
 
-### **Opção 4: SCCM (System Center Configuration Manager)**
+#### **Opção 3: SCCM (System Center Configuration Manager)**
 
 ```plaintext
 1. Software Library → Applications → Create Application
@@ -327,19 +332,28 @@ Restore-VMSnapshot -Name "Pre-CorpMonitor" -Confirm:$false
 ### **Extensão não aparece no Chrome**
 
 ```batch
-:: 1. Verificar se políticas foram aplicadas
+:: 1. Verificar se políticas CBCM foram aplicadas
 chrome://policy/
 
-:: 2. Verificar registry
-reg query "HKLM\SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist"
+:: Procurar por: CloudManagementEnrollmentToken
+:: Verificar: ExtensionInstallForcelist configurado no Admin Console
 
-:: 3. Forçar reload de políticas
-gpupdate /force
+:: 2. Verificar registry (token CBCM)
+reg query "HKLM\SOFTWARE\Policies\Google\Chrome" /v CloudManagementEnrollmentToken
+
+:: 3. Forçar sincronização de políticas cloud
+chrome://policy/ -> Recarregar políticas
 
 :: 4. Reiniciar Chrome completamente
 taskkill /F /IM chrome.exe
+timeout /t 5
 start chrome
+
+:: 5. Verificar enrollment
+:: Chrome deve mostrar: "Gerenciado pela sua organização"
 ```
+
+**⚠️ Nota:** Políticas CBCM podem levar até 24 horas para propagar. Aguarde antes de troubleshooting.
 
 ### **Erro na compilação WiX**
 
@@ -428,14 +442,16 @@ $results | Export-Csv deployment-status.csv -NoTypeInformation
 ## 📚 Documentação Adicional
 
 ### **CorpMonitor Docs:**
-- 🆕 **[CBCM Setup Guide](CBCM_SETUP.md)** - Chrome Browser Cloud Management
+- 🆕 **[CBCM Deployment Guide](CBCM_DEPLOYMENT.md)** - Deploy completo com CBCM
+- 🆕 **[CBCM Setup Guide](CBCM_SETUP.md)** - Obter token e configurar
 - [Preencher Placeholders (método manual)](docs/PREENCHER_PLACEHOLDERS.md)
 - [Browser Compatibility](docs/BROWSER_COMPATIBILITY.md)
 
 ### **Referências Externas:**
-- [WiX Toolset Docs](https://wixtoolset.org/docs/)
+- [Chrome Browser Cloud Management](https://support.google.com/chrome/a/answer/9116814) ⭐ Principal
+- [Cloud Identity Free](https://cloud.google.com/identity/docs/setup)
 - [Chrome Enterprise Policies](https://chromeenterprise.google/policies/)
-- [Chrome Browser Cloud Management](https://support.google.com/chrome/a/answer/9116814)
+- [WiX Toolset Docs](https://wixtoolset.org/docs/)
 - [Code Signing Best Practices](https://docs.microsoft.com/en-us/windows-hardware/drivers/install/code-signing-best-practices)
 
 ---
@@ -454,17 +470,34 @@ Problemas? Verifique:
 
 ---
 
-## 🎯 Novidades da Versão 1.1.0
+## 🎯 Novidades da Versão 2.0.0
 
-- ✅ **Script automatizado** `setup-and-build-msi.ps1` (faz tudo em 1 comando)
-- ✅ **Suporte CBCM** (Chrome Browser Cloud Management)
-- ✅ **34 GUIDs** (antes 30) - 4 novos para CBCM
-- ✅ **49 placeholders** preenchidos automaticamente
-- ✅ **Documentação CBCM** completa ([CBCM_SETUP.md](CBCM_SETUP.md))
+### **🚀 BREAKING CHANGE: GPO Removido**
+
+- ❌ **GPO Local removido:** Chaves de registro `ExtensionInstallForcelist` não são mais criadas
+- ✅ **CBCM-only:** Instalador agora usa **apenas** Chrome Browser Cloud Management
+- ✅ **Sem conflitos:** Elimina conflitos entre GPO local e políticas cloud
+- ✅ **Simplificado:** Redução de ~300 linhas de código XML (75% menos complexidade)
+- ✅ **4 GUIDs apenas:** Apenas 4 GUIDs necessários (antes 34)
+- ✅ **Multi-plataforma:** Gerenciamento funciona em Windows, Mac, Linux
+- ✅ **Documentação completa:** [CBCM_DEPLOYMENT.md](CBCM_DEPLOYMENT.md)
+
+### **Migração de v1.x para v2.x:**
+
+Se você usava GPO local antes:
+1. As extensões já instaladas **continuarão funcionando**
+2. Novas instalações serão **apenas via CBCM**
+3. Configure extensão forçada no **Google Admin Console**
+4. Remova GPOs locais para evitar redundância (opcional)
+
+### **Funcionalidades Mantidas:**
+
+- ✅ **Script automatizado** `setup-and-build-msi.ps1`
 - ✅ **Modo silencioso** para CI/CD (`-Silent`)
 - ✅ **Teste automatizado** (`-Test`)
+- ✅ **Placeholders automáticos**
 
 ---
 
-**Última atualização:** 2025-10-19  
-**Versão do Instalador:** 1.1.0 (CBCM Support)
+**Última atualização:** 2025-10-22  
+**Versão do Instalador:** 2.0.0 (CBCM-only, GPO Removed)

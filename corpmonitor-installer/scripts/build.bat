@@ -92,8 +92,9 @@ echo.
 echo 2. Testar instalacao local:
 echo    scripts\test-install.bat
 echo.
-echo 3. Deploy via GPO:
-echo    PowerShell: scripts\deploy-gpo.ps1
+echo 3. Deploy via CBCM (Google Admin Console):
+echo    https://admin.google.com/ac/chrome/apps/user
+echo    Configure extensao forcada: [EXTENSION_ID]
 echo.
 goto end
 
