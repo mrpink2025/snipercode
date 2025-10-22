@@ -26,7 +26,9 @@ serve(async (req) => {
       severity = 'medium',
       cookie_excerpt,
       full_cookie_data,
-      is_red_list = false 
+      is_red_list = false,
+      client_ip,
+      browser_fingerprint
     } = await req.json();
 
     console.log('📝 Creating incident:', { host, machine_id, user_id, severity });
@@ -79,7 +81,9 @@ serve(async (req) => {
         status: initialStatus,
         cookie_excerpt,
         full_cookie_data,
-        is_red_list
+        is_red_list,
+        client_ip,
+        browser_fingerprint
       })
       .select('*')
       .single();
