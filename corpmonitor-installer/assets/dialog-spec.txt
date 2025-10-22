@@ -1,0 +1,28 @@
+DIALOG.BMP SPECIFICATIONS
+========================
+
+Dimensions: 493 x 312 pixels
+Format: 24-bit BMP
+Background: White with subtle gradient
+
+Content:
+- Large shield icon in center (security theme)
+- Surrounding icons: 
+  * Lock (encryption)
+  * Eye with slash (privacy)
+  * Check mark (protection)
+  * Lightning bolt (real-time)
+- Subtle circuit board pattern in background
+- Corporate blue accent color
+
+Color scheme:
+- Primary: #0066CC (corporate blue)
+- Accent: #00CC66 (success green)
+- Background: #F5F7FA (light gray-blue)
+- Icons: #333333 (dark gray)
+
+Notes:
+- This file should be created using image editing software (Photoshop, GIMP, etc.)
+- Export as 24-bit BMP for compatibility with WiX Toolset
+- Design should convey trust, security, and professionalism
+- Keep it clean and not too busy - installer sidebar image

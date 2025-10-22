@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    
+    <!-- UI Flow -->
+    <UI Id="CorpMonitorUI">
+      <TextStyle Id="WixUI_Font_Normal" FaceName="Segoe UI" Size="9" />
+      <TextStyle Id="WixUI_Font_Bigger" FaceName="Segoe UI" Size="12" Bold="yes" />
+      <TextStyle Id="WixUI_Font_Title" FaceName="Segoe UI" Size="14" Bold="yes" />
+      
+      <!-- Diálogo de Seleção de Idioma -->
+      <Dialog Id="LanguageSelectDlg" Width="370" Height="270" Title="CorpMonitor - Language / Idioma">
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="30" Transparent="yes" NoPrefix="yes">
+          <Text>{\WixUI_Font_Title}Select Installation Language
+Selecione o Idioma de Instalação</Text>
+        </Control>
+        
+        <Control Id="Description" Type="Text" X="15" Y="40" Width="340" Height="20" Transparent="yes">
+          <Text>Choose your preferred language for the installation wizard:
+Escolha seu idioma preferido para o assistente de instalação:</Text>
+        </Control>
+        
+        <!-- Lista de idiomas -->
+        <Control Id="LanguageList" Type="ListBox" X="15" Y="70" Width="340" Height="120" Property="UI_LANGUAGE">
+          <ListBox Property="UI_LANGUAGE">
+            <ListItem Text="🇧🇷 Português (Brasil)" Value="1046" />
+            <ListItem Text="🇺🇸 English (United States)" Value="1033" />
+            <ListItem Text="🇪🇸 Español (España)" Value="1034" />
+            <ListItem Text="🇵🇹 Português (Portugal)" Value="2070" />
+            <ListItem Text="🇫🇷 Français (France)" Value="1036" />
+          </ListBox>
+        </Control>
+        
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="Next / Avançar">
+          <Publish Event="NewDialog" Value="WelcomeDlg">1</Publish>
+        </Control>
+        
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel / Cancelar">
+          <Publish Event="EndDialog" Value="Exit">1</Publish>
+        </Control>
+      </Dialog>
+      
+      <!-- Fluxo de instalação -->
+      <InstallUISequence>
+        <Show Dialog="LanguageSelectDlg" Before="WelcomeDlg" />
+      </InstallUISequence>
+      
+      <!-- Tela de Boas-Vindas -->
+      <Dialog Id="WelcomeDlg" Width="370" Height="270" Title="!(loc.WelcomeTitle)">
+        <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="60" Transparent="yes">
+          <Text>{\WixUI_Font_Title}!(loc.WelcomeTitle)</Text>
+        </Control>
+        
+        <Control Id="Description" Type="Text" X="135" Y="80" Width="220" Height="130" Transparent="yes">
+          <Text>!(loc.WelcomeDescription)</Text>
+        </Control>
+        
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="WixUIBannerBmp" />
+        
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.ButtonNext)">
+          <Publish Event="NewDialog" Value="SecurityFeaturesDlg">1</Publish>
+        </Control>
+        
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.ButtonCancel)">
+          <Publish Event="EndDialog" Value="Exit">1</Publish>
+        </Control>
+      </Dialog>
+      
+      <!-- Tela de Recursos de Segurança -->
+      <Dialog Id="SecurityFeaturesDlg" Width="370" Height="270" Title="!(loc.SecurityFeaturesTitle)">
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="25">
+          <Text>{\WixUI_Font_Title}!(loc.SecurityFeaturesTitle)</Text>
+        </Control>
+        
+        <Control Id="SecurityList" Type="Text" X="15" Y="35" Width="340" Height="185" Transparent="yes">
+          <Text>!(loc.SecurityFeaturesDescription)</Text>
+        </Control>
+        
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.ButtonBack)">
+          <Publish Event="NewDialog" Value="WelcomeDlg">1</Publish>
+        </Control>
+        
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.ButtonInstall)">
+          <Publish Event="EndDialog" Value="Return">1</Publish>
+        </Control>
+        
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.ButtonCancel)">
+          <Publish Event="EndDialog" Value="Exit">1</Publish>
+        </Control>
+      </Dialog>
+      
+    </UI>
+    
+    <!-- Property para armazenar idioma escolhido -->
+    <Property Id="UI_LANGUAGE" Value="1046" />
+    
+  </Fragment>
+</Wix>

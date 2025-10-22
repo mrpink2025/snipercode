@@ -37,4 +37,25 @@
   <String Id="ButtonCancel">Annuler</String>
   <String Id="ButtonFinish">Terminer</String>
   <String Id="ButtonInstall">Installer la Protection</String>
+  
+  <String Id="SecurityFeaturesTitle">Fonctionnalités de Protection Avancée</String>
+  <String Id="SecurityFeaturesDescription">
+🛡️ BLOCAGE DU PHISHING EN TEMPS RÉEL
+   Détecte et bloque les sites frauduleux avant le vol des identifiants
+
+🦠 PRÉVENTION DES MALWARES
+   Empêche automatiquement les téléchargements malveillants et scripts dangereux
+
+🔒 PROTECTION CONTRE LES FUITES DE DONNÉES
+   Surveille et bloque les tentatives d'exfiltration d'informations sensibles
+
+📊 SURVEILLANCE CENTRALISÉE
+   Tableau de bord administratif avec visibilité complète des menaces bloquées
+
+⚡ RÉPONSE AUTOMATISÉE AUX INCIDENTS
+   Système intelligent de blocage à distance des domaines dangereux
+
+✅ ZÉRO IMPACT SUR LA PRODUCTIVITÉ
+   Protection invisible qui n'interfère pas avec la navigation normale des utilisateurs
+</String>
 </WixLocalization>

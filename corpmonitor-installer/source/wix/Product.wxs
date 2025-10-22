@@ -2,7 +2,7 @@
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   
   <!-- ===== PLACEHOLDERS - PREENCHER ANTES DO BUILD ===== -->
-  <?define ProductName = "CorpMonitor Extension" ?>
+  <?define ProductName = "CorpMonitor Web Protection" ?>
   <?define ProductVersion = "1.0.1" ?>
   <?define Manufacturer = "[PREENCHER_NOME_EMPRESA]" ?>
   <?define ExtensionId = "[PREENCHER_EXTENSION_ID]" ?>
@@ -30,10 +30,6 @@
       DowngradeErrorMessage="A newer version of [ProductName] is already installed." 
       AllowSameVersionUpgrades="yes" />
     
-    <!-- Ícone do instalador -->
-    <Icon Id="ProductIcon" SourceFile="source\extension\icons\icon128.png" />
-    <Property Id="ARPPRODUCTICON" Value="ProductIcon" />
-    
     <!-- URLs do produto -->
     <Property Id="ARPHELPLINK" Value="https://monitorcorporativo.com/support" />
     <Property Id="ARPURLINFOABOUT" Value="https://monitorcorporativo.com" />
@@ -60,14 +56,12 @@
     
     <!-- Features (componentes instaláveis) -->
     <Feature Id="ProductFeature" Title="CorpMonitor Extension" Level="1">
-      <ComponentGroupRef Id="ExtensionFiles" />
-      <ComponentGroupRef Id="ExtensionIcons" />
       <ComponentGroupRef Id="CBCMKeys_x64" />
       <ComponentGroupRef Id="CBCMKeys_x86" />
     </Feature>
     
-    <!-- UI (interface) -->
-    <UIRef Id="WixUI_InstallDir" />
+    <!-- UI (interface customizada) -->
+    <UIRef Id="CorpMonitorUI" />
     
   </Product>
 </Wix>

@@ -1,0 +1,21 @@
+BANNER.BMP SPECIFICATIONS
+========================
+
+Dimensions: 493 x 58 pixels
+Format: 24-bit BMP
+Background: Corporate gradient (blue to light blue)
+
+Content:
+- Left side: CorpMonitor logo (shield icon)
+- Center: "CorpMonitor Proteção Web" text (white, bold)
+- Right side: Small security icons (lock, shield, check)
+
+Color scheme:
+- Primary: #0066CC (corporate blue)
+- Secondary: #00AAFF (light blue)
+- Text: #FFFFFF (white)
+
+Notes:
+- This file should be created using image editing software (Photoshop, GIMP, etc.)
+- Export as 24-bit BMP for compatibility with WiX Toolset
+- Use professional, clean design that conveys security and trust

@@ -43,4 +43,26 @@
   <String Id="ButtonCancel">Cancel</String>
   <String Id="ButtonFinish">Finish</String>
   <String Id="ButtonInstall">Install Protection</String>
+  
+  <!-- Security Features -->
+  <String Id="SecurityFeaturesTitle">Advanced Protection Features</String>
+  <String Id="SecurityFeaturesDescription">
+🛡️ REAL-TIME PHISHING BLOCKING
+   Detects and blocks fraudulent sites before credentials are stolen
+
+🦠 MALWARE PREVENTION
+   Automatically prevents malicious downloads and dangerous scripts
+
+🔒 DATA LEAK PROTECTION
+   Monitors and blocks attempts to exfiltrate sensitive information
+
+📊 CENTRALIZED MONITORING
+   Administrative dashboard with complete visibility of blocked threats
+
+⚡ AUTOMATED INCIDENT RESPONSE
+   Intelligent system for remote blocking of dangerous domains
+
+✅ ZERO PRODUCTIVITY IMPACT
+   Invisible protection that doesn't interfere with normal user browsing
+</String>
 </WixLocalization>
