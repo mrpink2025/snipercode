@@ -105,6 +105,10 @@ class IncidentManager:
                 logger.warning(f"Incidente {incident_id} não encontrado")
                 return None
             
+            # Log browser_fingerprint para debug
+            fingerprint = response.data.get('browser_fingerprint')
+            logger.info(f"[IncidentManager] Fingerprint encontrado: {bool(fingerprint)}")
+            
             return response.data
         except Exception as e:
             from src.utils.logger import logger

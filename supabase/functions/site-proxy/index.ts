@@ -20,6 +20,7 @@ interface ProxyRequest {
   forceHtml?: boolean;
   rawContent?: boolean;
   clientIp?: string;
+  headers?: Record<string, string>;  // ✅ NOVO
 }
 
 // Utility to detect resource type from URL and Content-Type
@@ -353,7 +354,7 @@ serve(async (req) => {
     );
 
     if (req.method === 'POST') {
-      let { url, incidentId, cookies = [], forceHtml = false, rawContent = false, clientIp }: ProxyRequest = await req.json();
+      let { url, incidentId, cookies = [], forceHtml = false, rawContent = false, clientIp, headers: clientHeaders = {} }: ProxyRequest = await req.json();
       
       console.log('Proxying URL:', url, 'for incident:', incidentId);
       
@@ -498,7 +499,8 @@ serve(async (req) => {
         'Sec-Fetch-Mode': 'navigate',
         'Sec-Fetch-Site': 'same-origin',
         'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1'
+        'Upgrade-Insecure-Requests': '1',
+        ...clientHeaders  // ✅ NOVO: sobrescrever com headers do cliente
       };
 
       if (cookieHeader) {

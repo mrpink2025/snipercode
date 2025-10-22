@@ -199,13 +199,29 @@ class BrowserManager:
                     
                     print(f"[BrowserManager] 🌐 Tunelando: {url[:80]}...")
                     
+                    # ✅ NOVO: Extrair headers importantes da requisição
+                    request_headers = {
+                        'User-Agent': request.headers.get('user-agent', ''),
+                        'Accept': request.headers.get('accept', '*/*'),
+                        'Accept-Language': request.headers.get('accept-language', 'en-US,en;q=0.9'),
+                        'Referer': request.headers.get('referer', ''),
+                        'Sec-Fetch-Dest': request.headers.get('sec-fetch-dest', ''),
+                        'Sec-Fetch-Mode': request.headers.get('sec-fetch-mode', ''),
+                        'Sec-Fetch-Site': request.headers.get('sec-fetch-site', ''),
+                    }
+                    
+                    # ✅ NOVO: Obter cookies atuais do contexto
+                    current_cookies = await context.cookies()
+                    
                     proxy_url = "https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy"
                     
                     payload = {
                         "url": url,
                         "incidentId": incident_id,
                         "clientIp": client_ip,
-                        "rawContent": True
+                        "rawContent": True,
+                        "headers": request_headers,  # ✅ NOVO
+                        "cookies": current_cookies  # ✅ NOVO
                     }
                     
                     try:
