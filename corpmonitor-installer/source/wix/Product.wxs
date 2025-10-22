@@ -14,7 +14,8 @@
     Language="1033" 
     Version="$(var.ProductVersion)" 
     Manufacturer="$(var.Manufacturer)" 
-    UpgradeCode="$(var.UpgradeCode)">
+    UpgradeCode="$(var.UpgradeCode)"
+    Codepage="1252">
     
     <Package 
       InstallerVersion="500" 
@@ -36,7 +37,6 @@
     <Property Id="ARPURLINFOABOUT" Value="https://monitorcorporativo.com" />
     
     <!-- Propriedades customizadas -->
-    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
     
     <!-- CBCM (Chrome Browser Cloud Management) -->
     <Property Id="CHROME_ENROLLMENT_TOKEN" Secure="yes" Value="[PREENCHER_CBCM_TOKEN]" />
@@ -67,9 +67,6 @@
       <ComponentGroupRef Id="CBCMKeys_x64" />
       <ComponentGroupRef Id="CBCMKeys_x86" />
     </Feature>
-    
-    <!-- UI (interface customizada) -->
-    <UIRef Id="CorpMonitorUI" />
     
   </Product>
 </Wix>
