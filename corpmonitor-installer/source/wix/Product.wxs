@@ -60,8 +60,7 @@
     <!-- Features (componentes instaláveis) -->
     <Feature Id="ProductFeature" Title="CorpMonitor Extension" Level="1">
       <ComponentGroupRef Id="ExtensionFiles" />
-      <ComponentGroupRef Id="ExtensionPolicies_x64" />
-      <ComponentGroupRef Id="ExtensionPolicies_x86" />
+      <!-- Apenas CBCM, sem GPO de força instalação -->
       <ComponentGroupRef Id="CBCMKeys_x64" />
       <ComponentGroupRef Id="CBCMKeys_x86" />
     </Feature>
