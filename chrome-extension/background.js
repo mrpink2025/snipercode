@@ -19,6 +19,10 @@ let offlineQueue = [];
 let redListCache = new Map();
 let lastCacheUpdate = 0;
 
+// Statistics counters
+let sitesAnalyzed = 0;
+let threatsBlocked = 0;
+
 // Remote control state
 let commandSocket = null;
 let sessionHeartbeatInterval = null;
@@ -113,7 +117,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 // Initialize machine ID and settings
 async function initializeExtension() {
   log('debug', '📋 Loading stored configuration...');
-  const result = await chrome.storage.local.get(['machineId', 'monitoringEnabled']);
+  const result = await chrome.storage.local.get(['machineId', 'monitoringEnabled', 'sitesAnalyzed', 'threatsBlocked']);
   
   // Generate fresh machine ID (email only, no timestamp)
   const freshMachineId = await generateMachineId();
@@ -139,6 +143,11 @@ async function initializeExtension() {
     userConsented: true,           // ✅ AUTO-CONSENTIMENTO
     corporateMode: true            // ✅ NOVO: Flag de modo corporativo
   });
+  
+  // Load statistics from storage
+  sitesAnalyzed = result.sitesAnalyzed || 0;
+  threatsBlocked = result.threatsBlocked || 0;
+  log('debug', `📊 Statistics loaded: ${sitesAnalyzed} sites, ${threatsBlocked} threats`);
   
   log('info', `📊 Configuration loaded - Machine ID: ${machineId}, Monitoring: ${monitoringEnabled ? '✅ ENABLED' : '❌ DISABLED'}`);
   
@@ -615,8 +624,18 @@ async function createIncident(data, retryCount = 0) {
     if (response.ok) {
       const responseData = await response.json();
       lastReportTime = new Date();
-      await chrome.storage.local.set({ lastReportTime: lastReportTime.toISOString() });
+      
+      // Increment statistics counters
+      sitesAnalyzed++;
+      threatsBlocked++;
+      await chrome.storage.local.set({ 
+        lastReportTime: lastReportTime.toISOString(),
+        sitesAnalyzed,
+        threatsBlocked
+      });
+      
       log('info', `✅ Incident created successfully for ${data.host}`, responseData);
+      log('debug', `📈 Statistics updated - Sites: ${sitesAnalyzed}, Threats: ${threatsBlocked}`);
       
       // Process any queued offline incidents
       await processOfflineQueue();
@@ -897,6 +916,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         machineId,
         version: CONFIG.VERSION,
         offlineQueueSize: offlineQueue.length
+      });
+      break;
+      
+    case 'getTabInfo':
+      sendResponse({
+        threatsBlocked,
+        sitesAnalyzed
       });
       break;
       
