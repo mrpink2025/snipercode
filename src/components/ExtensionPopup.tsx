@@ -33,14 +33,6 @@ const ExtensionPopup = () => {
     }
   };
 
-  const handleOpenConsole = () => {
-    window.open('/#/dashboard', '_blank');
-  };
-
-  const handleSettings = () => {
-    console.log('Abrir configurações');
-  };
-
   const handlePrivacyPolicy = (e: React.MouseEvent) => {
     e.preventDefault();
     window.open('https://monitorcorporativo.com/privacy-policy.html', '_blank');
@@ -184,56 +176,6 @@ const ExtensionPopup = () => {
             </div>
             <div style={{ fontSize: '12px', opacity: 0.8 }}>Sites Analisados</div>
           </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-          <button
-            onClick={handleOpenConsole}
-            style={{
-              flex: 1,
-              padding: '12px 16px',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 500,
-              cursor: 'pointer',
-              background: 'rgba(255, 255, 255, 0.2)',
-              color: 'white',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
-            }}
-          >
-            🛡️ Central de Proteção
-          </button>
-          <button
-            onClick={handleSettings}
-            style={{
-              width: '40px',
-              padding: '12px 16px',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 500,
-              cursor: 'pointer',
-              background: 'rgba(255, 255, 255, 0.2)',
-              color: 'white',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
-            }}
-          >
-            ⚙️
-          </button>
         </div>
 
         {/* Footer */}
