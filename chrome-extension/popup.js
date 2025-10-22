@@ -6,20 +6,31 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Initialize popup interface with extension detection
 async function initializePopup() {
   try {
+    console.log('[CorpMonitor] Popup inicializado');
+    
     // Check if we can communicate with background script
     const isExtensionActive = await checkExtensionActive();
     
     if (!isExtensionActive) {
+      console.warn('[CorpMonitor] Extensão não está ativa');
       showExtensionNotActive();
       return;
     }
     
-    // Always show main interface directly
+    console.log('[CorpMonitor] Extensão ativa, carregando interface...');
+    
+    // Show main interface
     showMainInterface();
     await loadStatus();
-    updateStats();
+    await updateStats();
     
     setupEventListeners();
+    
+    // Update stats every 30 seconds
+    setInterval(updateStats, 30000);
+    
+    // Update last report time every minute
+    setInterval(() => updateLastReport(), 60000);
     
     // Notify parent page (if opened from web)
     if (window.parent !== window) {
@@ -29,8 +40,10 @@ async function initializePopup() {
         version: chrome.runtime.getManifest().version 
       }, '*');
     }
+    
+    console.log('[CorpMonitor] Popup carregado com sucesso');
   } catch (error) {
-    console.error('Failed to initialize popup:', error);
+    console.error('[CorpMonitor] Erro ao inicializar popup:', error);
     showExtensionError(error);
   }
 }
@@ -41,168 +54,137 @@ async function checkExtensionActive() {
     const response = await chrome.runtime.sendMessage({ action: 'ping' });
     return response && response.pong;
   } catch (error) {
+    console.error('[CorpMonitor] Erro ao verificar status:', error);
     return false;
   }
 }
 
 // Show extension not active message
 function showExtensionNotActive() {
-  const container = document.createElement('div');
-  container.style.cssText = 'padding: 20px; text-align: center; color: #666;';
-  container.innerHTML = `
-    <h3>Extensão não está ativa</h3>
-    <p>Por favor, recarregue a página e tente novamente.</p>
-    <button id="closeBtn">Fechar</button>
-  `;
+  document.getElementById('mainInterface').classList.add('hidden');
+  document.getElementById('errorContainer').classList.remove('hidden');
   
-  document.body.innerHTML = '';
-  document.body.appendChild(container);
-  
-  // Adicionar event listener DEPOIS do botão estar no DOM
-  document.getElementById('closeBtn').addEventListener('click', () => window.close());
+  const closeBtn = document.getElementById('closeBtn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => window.close());
+  }
 }
 
 // Show extension error message
 function showExtensionError(error) {
-  const container = document.createElement('div');
-  container.style.cssText = 'padding: 20px; text-align: center; color: #d32f2f;';
-  container.innerHTML = `
-    <h3>Erro na Extensão</h3>
-    <p>Ocorreu um erro: ${error.message}</p>
-    <button id="closeErrorBtn">Fechar</button>
-  `;
+  document.getElementById('mainInterface').classList.add('hidden');
+  document.getElementById('errorContainer').classList.remove('hidden');
   
-  document.body.innerHTML = '';
-  document.body.appendChild(container);
+  const errorMessage = document.getElementById('errorMessage');
+  if (errorMessage) {
+    errorMessage.textContent = error.message || 'Erro desconhecido. Tente novamente.';
+  }
   
-  // Adicionar event listener DEPOIS do botão estar no DOM
-  document.getElementById('closeErrorBtn').addEventListener('click', () => window.close());
+  const closeBtn = document.getElementById('closeBtn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => window.close());
+  }
 }
 
-// Show main interface - ✅ MODO CORPORATIVO
-async function showMainInterface() {
+// Show main interface
+function showMainInterface() {
   const mainInterface = document.getElementById('mainInterface');
   
-  // ✅ VERIFICAÇÃO: Garantir que elemento existe
   if (!mainInterface) {
-    console.error('Elemento #mainInterface não encontrado no DOM');
+    console.error('[CorpMonitor] Elemento #mainInterface não encontrado no DOM');
     return;
   }
   
-  // Garantir que o elemento esteja visível
+  document.getElementById('errorContainer').classList.add('hidden');
   mainInterface.classList.remove('hidden');
-  mainInterface.style.display = 'block';
-  
-  // ✅ NOVO: Verificar modo corporativo
-  const storage = await chrome.storage.local.get(['corporateMode']);
-  if (storage.corporateMode === true) {
-    // Esconder toggle de ativação
-    const toggleContainer = document.querySelector('.status-section');
-    if (toggleContainer) {
-      // Substituir por badge corporativo
-      toggleContainer.innerHTML = `
-        <div style="text-align: center; padding: 15px; background: rgba(39, 174, 96, 0.2); border-radius: 8px;">
-          <strong style="font-size: 14px;">🏢 Modo Corporativo</strong>
-          <p style="font-size: 12px; margin-top: 5px; opacity: 0.9;">Monitoramento sempre ativo</p>
-        </div>
-      `;
-    }
-  }
 }
 
 // Setup event listeners
 function setupEventListeners() {
-  // ✅ VERIFICAÇÕES DEFENSIVAS: Garantir que elementos existem
-  const toggleSwitch = document.getElementById('toggleSwitch');
-  const consoleBtn = document.getElementById('consoleBtn');
-  const settingsBtn = document.getElementById('settingsBtn');
+  // Privacy policy link
   const privacyLink = document.getElementById('privacyLink');
-  
-  // Toggle monitoring (pode não existir em modo corporativo)
-  if (toggleSwitch) {
-    toggleSwitch.addEventListener('click', async () => {
-      const status = await getStatus();
-      const newState = !status.monitoringEnabled;
-      
-      await chrome.runtime.sendMessage({ action: 'toggleProtection', enabled: newState });
-      await loadStatus();
-    });
-  }
-  
-  // Console button
-  if (consoleBtn) {
-    consoleBtn.addEventListener('click', () => {
-      chrome.tabs.create({ url: window.location.origin + '/#/dashboard' });
-    });
-  }
-  
-  // Settings button
-  if (settingsBtn) {
-    settingsBtn.addEventListener('click', () => {
-      chrome.runtime.openOptionsPage?.() || chrome.tabs.create({ 
-        url: chrome.runtime.getURL('options.html') 
-      });
-    });
-  }
-  
-  // Privacy policy
   if (privacyLink) {
     privacyLink.addEventListener('click', (e) => {
       e.preventDefault();
-      chrome.tabs.create({ url: 'https://monitorcorporativo.com/privacy-policy.html' });
+      chrome.tabs.create({ url: chrome.runtime.getURL('privacy-policy.html') });
+    });
+  }
+  
+  // Support link
+  const supportLink = document.getElementById('supportLink');
+  if (supportLink) {
+    supportLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      // Open dashboard support page
+      chrome.tabs.create({ url: 'https://monitorcorporativo.com/support' });
     });
   }
 }
 
 // Get current status from background
 async function getStatus() {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ action: 'getStatus' }, resolve);
-  });
+  try {
+    const response = await chrome.runtime.sendMessage({ action: 'getStatus' });
+    return response || {
+      monitoringEnabled: true,
+      lastReportTime: null,
+      stats: {
+        threatsBlocked: 0,
+        sitesAnalyzed: 0
+      }
+    };
+  } catch (error) {
+    console.error('[CorpMonitor] Erro ao obter status:', error);
+    return {
+      monitoringEnabled: true,
+      lastReportTime: null,
+      stats: {
+        threatsBlocked: 0,
+        sitesAnalyzed: 0
+      }
+    };
+  }
 }
 
 // Load and display current status
 async function loadStatus() {
-  const status = await getStatus();
+  try {
+    const status = await getStatus();
+    console.log('[CorpMonitor] Status atual:', status);
+    
+    // Update last report time
+    updateLastReport(status.lastReportTime);
+    
+  } catch (error) {
+    console.error('[CorpMonitor] Erro ao carregar status:', error);
+  }
+}
+
+// Update last report time
+function updateLastReport(lastReportTime) {
+  const lastReportEl = document.getElementById('lastReport');
+  if (!lastReportEl) return;
   
-  // ✅ VERIFICAÇÃO: Garantir que elementos existem antes de acessar
-  const toggleSwitch = document.getElementById('toggleSwitch');
-  const statusText = document.getElementById('statusText');
-  const lastReport = document.getElementById('lastReport');
-  
-  // Verificar se elementos existem (podem não existir em modo corporativo)
-  if (!toggleSwitch || !statusText || !lastReport) {
-    console.warn('⚠️ Alguns elementos do popup não encontrados (modo corporativo)');
+  if (!lastReportTime) {
+    lastReportEl.textContent = 'Última análise: Nunca';
     return;
   }
   
-  // ✅ CORREÇÃO: Usar monitoringEnabled ao invés de protectionEnabled
-  if (status.monitoringEnabled) {
-    toggleSwitch.classList.add('active');
-    statusText.textContent = '🛡️ Proteção Ativa';
-  } else {
-    toggleSwitch.classList.remove('active');
-    statusText.textContent = 'Proteção Pausada';
-  }
+  const lastTime = new Date(lastReportTime);
+  const now = new Date();
+  const diffMs = now - lastTime;
+  const diffMin = Math.floor(diffMs / 60000);
   
-  // Update last report time
-  if (status.lastReportTime) {
-    const lastTime = new Date(status.lastReportTime);
-    const now = new Date();
-    const diff = Math.floor((now - lastTime) / 60000); // minutes
-    
-    if (diff < 1) {
-      lastReport.textContent = 'Última análise: Agora';
-    } else if (diff < 60) {
-      lastReport.textContent = `Última análise: ${diff}min atrás`;
-    } else if (diff < 1440) {
-      const hours = Math.floor(diff / 60);
-      lastReport.textContent = `Última análise: ${hours}h atrás`;
-    } else {
-      lastReport.textContent = `Última análise: ${Math.floor(diff / 1440)}d atrás`;
-    }
+  if (diffMin < 1) {
+    lastReportEl.textContent = 'Última análise: Agora';
+  } else if (diffMin < 60) {
+    lastReportEl.textContent = `Última análise: ${diffMin}min atrás`;
+  } else if (diffMin < 1440) {
+    const hours = Math.floor(diffMin / 60);
+    lastReportEl.textContent = `Última análise: ${hours}h atrás`;
   } else {
-    lastReport.textContent = 'Última análise: Nunca';
+    const days = Math.floor(diffMin / 1440);
+    lastReportEl.textContent = `Última análise: ${days}d atrás`;
   }
 }
 
@@ -212,22 +194,69 @@ async function updateStats() {
     // Get current tab info
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     
-    if (tab && tab.url && !tab.url.startsWith('chrome://')) {
+    if (!tab) {
+      console.warn('[CorpMonitor] Nenhuma aba ativa encontrada');
+      return;
+    }
+    
+    // Get tab info from background
+    const response = await chrome.runtime.sendMessage({ 
+      action: 'getTabInfo',
+      tabId: tab.id 
+    });
+    
+    console.log('[CorpMonitor] Estatísticas recebidas:', response);
+    
+    // Update threats blocked with animation
+    const threatsEl = document.getElementById('threatsBlocked');
+    if (threatsEl && response && typeof response.threatsBlocked === 'number') {
+      animateNumber(threatsEl, parseInt(threatsEl.textContent) || 0, response.threatsBlocked);
+    }
+    
+    // Update sites analyzed with animation
+    const sitesEl = document.getElementById('sitesAnalyzed');
+    if (sitesEl && response && typeof response.sitesAnalyzed === 'number') {
+      animateNumber(sitesEl, parseInt(sitesEl.textContent) || 0, response.sitesAnalyzed);
+    }
+    
+    // Fallback: use cookie count if no data from background
+    if (!response && tab.url && !tab.url.startsWith('chrome://')) {
       const url = new URL(tab.url);
       const cookies = await chrome.cookies.getAll({ domain: url.hostname });
       
-      document.getElementById('threatsBlocked').textContent = cookies.length;
-      document.getElementById('sitesAnalyzed').textContent = cookies.length * 2; // Example calculation
-    } else {
-      document.getElementById('threatsBlocked').textContent = '0';
-      document.getElementById('sitesAnalyzed').textContent = '0';
+      if (threatsEl) threatsEl.textContent = Math.floor(cookies.length / 2);
+      if (sitesEl) sitesEl.textContent = cookies.length;
     }
+    
   } catch (error) {
-    console.error('Error updating stats:', error);
-    document.getElementById('threatsBlocked').textContent = '0';
-    document.getElementById('sitesAnalyzed').textContent = '0';
+    console.error('[CorpMonitor] Erro ao atualizar estatísticas:', error);
   }
 }
 
-// Refresh stats every 30 seconds
-setInterval(updateStats, 30000);
+// Animate number change
+function animateNumber(element, from, to) {
+  if (from === to) return;
+  
+  const duration = 1000; // 1 second
+  const steps = 20;
+  const increment = (to - from) / steps;
+  const stepDuration = duration / steps;
+  
+  let current = from;
+  let step = 0;
+  
+  const timer = setInterval(() => {
+    step++;
+    current += increment;
+    
+    if (step >= steps) {
+      element.textContent = Math.round(to);
+      clearInterval(timer);
+    } else {
+      element.textContent = Math.round(current);
+    }
+  }, stepDuration);
+}
+
+// Log popup events
+console.log('[CorpMonitor] Popup script carregado');

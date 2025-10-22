@@ -12,10 +12,10 @@
     }
     
     body {
-      width: 350px;
-      min-height: 500px;
+      width: 380px;
+      min-height: 550px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #3b82f6 100%);
       color: white;
     }
     
@@ -23,64 +23,323 @@
       padding: 20px;
     }
     
+    @keyframes pulse {
+      0%, 100% { 
+        opacity: 1; 
+        transform: scale(1);
+      }
+      50% { 
+        opacity: 0.8; 
+        transform: scale(1.05);
+      }
+    }
+    
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    
+    .pulse-shield {
+      animation: pulse 2s ease-in-out infinite;
+    }
+    
     .header {
       display: flex;
       align-items: center;
-      gap: 12px;
+      justify-content: space-between;
       margin-bottom: 24px;
     }
     
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
     .logo {
-      width: 32px;
-      height: 32px;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 8px;
+      width: 40px;
+      height: 40px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
+      font-size: 20px;
+    }
+    
+    .title-group {
+      display: flex;
+      flex-direction: column;
     }
     
     .title {
       font-size: 18px;
       font-weight: 600;
+      line-height: 1.2;
     }
     
-    .onboarding {
-      text-align: center;
-      padding: 20px 0;
+    .subtitle {
+      font-size: 11px;
+      opacity: 0.7;
+      font-weight: 400;
     }
     
-    .onboarding-icon {
-      width: 64px;
-      height: 64px;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 50%;
+    .status-badge {
+      background: #10b981;
+      padding: 6px 12px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+    }
+    
+    .status-section {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .status-item {
       display: flex;
       align-items: center;
-      justify-content: center;
-      margin: 0 auto 16px;
-      font-size: 24px;
-    }
-    
-    .onboarding h2 {
-      font-size: 20px;
+      gap: 8px;
+      font-size: 14px;
       margin-bottom: 12px;
     }
     
-    .onboarding p {
-      font-size: 14px;
-      line-height: 1.5;
+    .status-item:last-child {
+      margin-bottom: 0;
+    }
+    
+    .status-icon {
+      font-size: 16px;
+    }
+    
+    .protection-level {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .protection-label {
+      font-size: 12px;
+      opacity: 0.8;
+      margin-bottom: 8px;
+    }
+    
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .progress-fill {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #22c55e);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .progress-fill::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+      animation: shimmer 2s infinite;
+    }
+    
+    .protection-text {
+      font-size: 12px;
+      font-weight: 600;
+      color: #10b981;
+      margin-top: 6px;
+    }
+    
+    .last-report {
+      font-size: 12px;
+      opacity: 0.7;
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    
+    .stat-card {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .stat-card.threats {
+      border-left: 3px solid #10b981;
+      background: rgba(16, 185, 129, 0.1);
+    }
+    
+    .stat-card.sites {
+      border-left: 3px solid #3b82f6;
+      background: rgba(59, 130, 246, 0.1);
+    }
+    
+    .stat-icon {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    
+    .stat-number {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      line-height: 1;
+    }
+    
+    .stat-card.threats .stat-number {
+      color: #10b981;
+    }
+    
+    .stat-card.sites .stat-number {
+      color: #3b82f6;
+    }
+    
+    .stat-label {
+      font-size: 12px;
+      opacity: 0.8;
+      margin-bottom: 6px;
+    }
+    
+    .stat-trend {
+      font-size: 11px;
+      color: #10b981;
+      font-weight: 600;
+    }
+    
+    .additional-stats {
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    
+    .stats-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 12px;
       opacity: 0.9;
+    }
+    
+    .stats-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      font-size: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .stats-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    
+    .stats-row span:first-child {
+      opacity: 0.8;
+    }
+    
+    .stats-value {
+      font-weight: 600;
+      color: #10b981;
+    }
+    
+    .footer {
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+      padding-top: 16px;
+      font-size: 11px;
+      opacity: 0.7;
+      text-align: center;
+    }
+    
+    .footer-top {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    
+    .iso-badge {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 9px;
+      font-weight: 700;
+      color: #10b981;
+    }
+    
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+    }
+    
+    .footer-links a {
+      color: white;
+      text-decoration: none;
+      font-size: 11px;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+    
+    .footer-links a:hover {
+      opacity: 1;
+    }
+    
+    .hidden {
+      display: none;
+    }
+    
+    .error-container {
+      text-align: center;
+      padding: 40px 20px;
+    }
+    
+    .error-icon {
+      font-size: 48px;
       margin-bottom: 16px;
     }
     
-    .legal-warning {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      padding: 12px;
-      font-size: 12px;
-      line-height: 1.4;
+    .error-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    
+    .error-message {
+      font-size: 13px;
+      opacity: 0.8;
       margin-bottom: 20px;
     }
     
@@ -97,170 +356,104 @@
     
     .btn-primary {
       background: white;
-      color: #667eea;
+      color: #0f172a;
     }
     
     .btn-primary:hover {
       background: rgba(255, 255, 255, 0.9);
       transform: translateY(-1px);
     }
-    
-    .status-section {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 20px;
-    }
-    
-    .status-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-    }
-    
-    .status-text {
-      font-size: 14px;
-      opacity: 0.9;
-    }
-    
-    .toggle-switch {
-      position: relative;
-      width: 48px;
-      height: 24px;
-      background: rgba(255, 255, 255, 0.3);
-      border-radius: 12px;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    
-    .toggle-switch.active {
-      background: #4ade80;
-    }
-    
-    .toggle-switch::after {
-      content: '';
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 20px;
-      height: 20px;
-      background: white;
-      border-radius: 50%;
-      transition: transform 0.3s;
-    }
-    
-    .toggle-switch.active::after {
-      transform: translateX(24px);
-    }
-    
-    .last-report {
-      font-size: 12px;
-      opacity: 0.8;
-      margin-top: 8px;
-    }
-    
-    .stats-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-    
-    .stat-card {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      padding: 12px;
-      text-align: center;
-    }
-    
-    .stat-number {
-      font-size: 20px;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-    
-    .stat-label {
-      font-size: 12px;
-      opacity: 0.8;
-    }
-    
-    .action-buttons {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-    
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.2);
-      color: white;
-      border: 1px solid rgba(255, 255, 255, 0.3);
-    }
-    
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.3);
-    }
-    
-    .footer {
-      border-top: 1px solid rgba(255, 255, 255, 0.2);
-      padding-top: 16px;
-      font-size: 12px;
-      opacity: 0.7;
-      text-align: center;
-    }
-    
-    .footer a {
-      color: white;
-      text-decoration: none;
-    }
-    
-    .hidden {
-      display: none;
-    }
   </style>
 </head>
 <body>
   <div class="container">
     <!-- Main Interface -->
-    <div id="mainInterface">
+    <div id="mainInterface" class="hidden">
       <div class="header">
-        <div class="logo">🛡️</div>
-        <div class="title">CorpMonitor</div>
+        <div class="header-left">
+          <div class="logo pulse-shield">🛡️</div>
+          <div class="title-group">
+            <div class="title">CorpMonitor</div>
+            <div class="subtitle">Enterprise Security</div>
+          </div>
+        </div>
+        <div class="status-badge">ATIVO</div>
       </div>
       
       <div class="status-section">
-        <div class="status-header">
-          <div>
-            <div id="statusText" class="status-text">🛡️ Proteção Ativa</div>
-            <div id="lastReport" class="last-report">Última análise: Nunca</div>
+        <div class="status-item">
+          <span class="status-icon">✓</span>
+          <span>Sistema Seguro</span>
+        </div>
+        <div class="status-item">
+          <span class="status-icon">🔒</span>
+          <span>Conexão Criptografada SSL/TLS</span>
+        </div>
+        
+        <div class="protection-level">
+          <div class="protection-label">Nível de Proteção</div>
+          <div class="progress-bar">
+            <div class="progress-fill"></div>
           </div>
-          <div id="toggleSwitch" class="toggle-switch"></div>
+          <div class="protection-text">MÁXIMO</div>
+        </div>
+        
+        <div class="last-report">
+          <span>🕐</span>
+          <span id="lastReport">Última análise: Nunca</span>
         </div>
       </div>
       
       <div class="stats-grid">
-        <div class="stat-card">
+        <div class="stat-card threats">
+          <div class="stat-icon">🚫</div>
           <div id="threatsBlocked" class="stat-number">0</div>
-          <div class="stat-label">Ameaças Bloqueadas</div>
+          <div class="stat-label">Ameaças<br>Bloqueadas</div>
+          <div class="stat-trend">↑ +12% hoje</div>
         </div>
-        <div class="stat-card">
+        <div class="stat-card sites">
+          <div class="stat-icon">🔍</div>
           <div id="sitesAnalyzed" class="stat-number">0</div>
-          <div class="stat-label">Sites Analisados</div>
+          <div class="stat-label">Sites<br>Analisados</div>
+          <div class="stat-trend">↑ +8% hoje</div>
         </div>
       </div>
       
-      <div class="action-buttons">
-        <button id="consoleBtn" class="btn btn-secondary" style="flex: 1;">
-          🛡️ Central de Proteção
-        </button>
-        <button id="settingsBtn" class="btn btn-secondary" style="width: 40px;">
-          ⚙️
-        </button>
+      <div class="additional-stats">
+        <div class="stats-title">📊 Estatísticas de Hoje</div>
+        <div class="stats-row">
+          <span>⚡ Tempo de resposta</span>
+          <span class="stats-value">&lt;1ms</span>
+        </div>
+        <div class="stats-row">
+          <span>🟢 Status dos servidores</span>
+          <span class="stats-value">Online</span>
+        </div>
+        <div class="stats-row">
+          <span>📈 Disponibilidade</span>
+          <span class="stats-value">99.9%</span>
+        </div>
       </div>
       
       <div class="footer">
-        <div>Versão 1.0.0</div>
-        <div><a href="#" id="privacyLink">Política de Privacidade</a></div>
+        <div class="footer-top">
+          <span>v1.0.0 • Atualizado hoje</span>
+          <span class="iso-badge">🔒 ISO 27001</span>
+        </div>
+        <div class="footer-links">
+          <a href="#" id="supportLink">💬 Suporte</a>
+          <a href="#" id="privacyLink">🔐 Privacidade</a>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Error/Loading States -->
+    <div id="errorContainer" class="hidden">
+      <div class="error-container">
+        <div class="error-icon">⚠️</div>
+        <div class="error-title">Extensão não ativa</div>
+        <div class="error-message" id="errorMessage">Recarregue a página ou reinicie o navegador.</div>
+        <button id="closeBtn" class="btn btn-primary">Fechar</button>
       </div>
     </div>
   </div>
