@@ -177,45 +177,112 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "  OK Objetos WiX gerados" -ForegroundColor Green
 Write-Host ""
 
-# ===== 5. Linkar com Todas as Localizações =====
-Write-Host "[5/7] Linkando com suporte multilíngue..." -ForegroundColor Yellow
+# ===== 5. Compilar MSI Base (pt-BR) =====
+Write-Host "[5/8] Compilando MSI base (pt-BR)..." -ForegroundColor Yellow
 
-$LocalizationArgs = @()
-foreach ($lang in $LocalizationFiles) {
-    $LocalizationArgs += "-loc"
-    $LocalizationArgs += "$InstallerRoot\localization\$lang.wxl"
-    Write-Host "    + $lang" -ForegroundColor Gray
-}
-
-$lightResult = & "$WixPath\light.exe" `
+$lightBase = & "$WixPath\light.exe" `
     -out CorpMonitor.msi `
-    -cultures:"pt-BR;en-US;es-ES;pt-PT;fr-FR" `
-    @LocalizationArgs `
+    -cultures:pt-BR `
+    -loc "$InstallerRoot\localization\pt-BR.wxl" `
     -ext WixUIExtension `
     -sice:ICE61 `
     Product.wixobj Registry.wixobj UI.wixobj 2>&1
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERRO ao linkar MSI:" -ForegroundColor Red
-    Write-Host $lightResult -ForegroundColor Yellow
+    Write-Host "ERRO ao compilar MSI base:" -ForegroundColor Red
+    Write-Host $lightBase -ForegroundColor Yellow
     Pop-Location
     exit 1
 }
 
 if (-not (Test-Path "$BuildDir\CorpMonitor.msi")) {
-    Write-Host "ERRO: MSI nao foi gerado!" -ForegroundColor Red
-    Write-Host "Verifique os erros acima." -ForegroundColor Yellow
+    Write-Host "ERRO: MSI base nao foi gerado!" -ForegroundColor Red
     Pop-Location
     exit 1
 }
 
-Pop-Location
-
-Write-Host "  OK MSI gerado com 5 idiomas embutidos" -ForegroundColor Green
+Write-Host "  OK MSI base gerado" -ForegroundColor Green
 Write-Host ""
 
-# ===== 6. Gerar Hash SHA256 =====
-Write-Host "[6/7] Gerando hash SHA256..." -ForegroundColor Yellow
+# ===== 6. Gerar Transformações para Outros Idiomas =====
+Write-Host "[6/8] Gerando transformações de idioma..." -ForegroundColor Yellow
+
+$OtherLanguages = @("en-US", "es-ES", "pt-PT", "fr-FR")
+$TransformsGenerated = 0
+
+foreach ($lang in $OtherLanguages) {
+    Write-Host "    + Processando $lang..." -ForegroundColor Gray
+    
+    # Compilar MSI temporário para o idioma
+    $lightTemp = & "$WixPath\light.exe" `
+        -out "CorpMonitor_$lang.msi" `
+        -cultures:$lang `
+        -loc "$InstallerRoot\localization\$lang.wxl" `
+        -ext WixUIExtension `
+        -sice:ICE61 `
+        Product.wixobj Registry.wixobj UI.wixobj 2>&1
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "      AVISO: Falha ao compilar MSI temporário para $lang" -ForegroundColor Yellow
+        continue
+    }
+    
+    # Verificar se torch.exe existe
+    if (-not (Test-Path "$WixPath\torch.exe")) {
+        Write-Host "      AVISO: torch.exe não encontrado - transformações não disponíveis" -ForegroundColor Yellow
+        Remove-Item "CorpMonitor_$lang.msi" -ErrorAction SilentlyContinue
+        continue
+    }
+    
+    # Gerar transformação (.mst)
+    $torchResult = & "$WixPath\torch.exe" `
+        -p -t language `
+        CorpMonitor.msi "CorpMonitor_$lang.msi" `
+        -out "$lang.mst" 2>&1
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "      AVISO: Falha ao gerar transformação para $lang" -ForegroundColor Yellow
+        Remove-Item "CorpMonitor_$lang.msi" -ErrorAction SilentlyContinue
+        continue
+    }
+    
+    # Verificar se wisubstg.vbs existe
+    if (-not (Test-Path "$WixPath\wisubstg.vbs")) {
+        Write-Host "      AVISO: wisubstg.vbs não encontrado - não é possível embedir transformação" -ForegroundColor Yellow
+        Remove-Item "CorpMonitor_$lang.msi" -ErrorAction SilentlyContinue
+        Remove-Item "$lang.mst" -ErrorAction SilentlyContinue
+        continue
+    }
+    
+    # Embedir transformação no MSI
+    $embedResult = & cscript.exe //nologo "$WixPath\wisubstg.vbs" `
+        CorpMonitor.msi $lang "$lang.mst" 2>&1
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "      OK $lang embutido com sucesso" -ForegroundColor Green
+        $TransformsGenerated++
+    } else {
+        Write-Host "      AVISO: Falha ao embedir $lang" -ForegroundColor Yellow
+    }
+    
+    # Limpar arquivos temporários
+    Remove-Item "CorpMonitor_$lang.msi" -ErrorAction SilentlyContinue
+    Remove-Item "$lang.mst" -ErrorAction SilentlyContinue
+}
+
+if ($TransformsGenerated -gt 0) {
+    Write-Host "  OK $TransformsGenerated transformações geradas e embutidas" -ForegroundColor Green
+} else {
+    Write-Host "  AVISO: Nenhuma transformação gerada (torch.exe/wisubstg.vbs ausentes)" -ForegroundColor Yellow
+    Write-Host "  O MSI funcionará apenas em pt-BR" -ForegroundColor Yellow
+}
+
+Pop-Location
+
+Write-Host ""
+
+# ===== 7. Gerar Hash SHA256 =====
+Write-Host "[7/8] Gerando hash SHA256..." -ForegroundColor Yellow
 
 $MsiPath = "$BuildDir\CorpMonitor.msi"
 $Hash = (Get-FileHash $MsiPath -Algorithm SHA256).Hash
@@ -225,8 +292,8 @@ $Hash | Out-File "$MsiPath.sha256" -Encoding ASCII
 Write-Host "  OK Hash gerado" -ForegroundColor Green
 Write-Host ""
 
-# ===== 7. Relatório Final =====
-Write-Host "[7/7] Relatório Final" -ForegroundColor Yellow
+# ===== 8. Relatório Final =====
+Write-Host "[8/8] Relatório Final" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host " BUILD CONCLUÍDO COM SUCESSO!" -ForegroundColor Green
@@ -236,12 +303,18 @@ Write-Host "MSI: $MsiPath" -ForegroundColor Cyan
 Write-Host "Tamanho: $([math]::Round((Get-Item $MsiPath).Length / 1KB, 2)) KB" -ForegroundColor Cyan
 Write-Host "SHA256: $Hash" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "IDIOMAS SUPORTADOS:" -ForegroundColor Yellow
-Write-Host "  - Portugues (Brasil)" -ForegroundColor White
-Write-Host "  - English (United States)" -ForegroundColor White
-Write-Host "  - Espanol (Espana)" -ForegroundColor White
-Write-Host "  - Portugues (Portugal)" -ForegroundColor White
-Write-Host "  - Francais (France)" -ForegroundColor White
+Write-Host "IDIOMAS:" -ForegroundColor Yellow
+if ($TransformsGenerated -gt 0) {
+    Write-Host "  - pt-BR (Base)" -ForegroundColor White
+    Write-Host "  - en-US (Transformação)" -ForegroundColor White
+    Write-Host "  - es-ES (Transformação)" -ForegroundColor White
+    Write-Host "  - pt-PT (Transformação)" -ForegroundColor White
+    Write-Host "  - fr-FR (Transformação)" -ForegroundColor White
+    Write-Host "  Total: 5 idiomas com transformações MST" -ForegroundColor Green
+} else {
+    Write-Host "  - pt-BR (Apenas idioma base)" -ForegroundColor White
+    Write-Host "  NOTA: Instale torch.exe e wisubstg.vbs para suporte multilíngue" -ForegroundColor Yellow
+}
 Write-Host ""
 Write-Host "PROXIMOS PASSOS:" -ForegroundColor Yellow
 Write-Host ""
