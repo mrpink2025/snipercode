@@ -6,7 +6,7 @@ echo.
 
 REM ===== CONFIGURACOES - PREENCHER ANTES DE EXECUTAR =====
 set MSI_PATH=%~dp0..\build\CorpMonitor.msi
-set SIGNTOOL="C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\signtool.exe"
+set SIGNTOOL="C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
 set CERT_THUMBPRINT=[PREENCHER_CERTIFICATE_THUMBPRINT]
 set TIMESTAMP_SERVER=http://timestamp.digicert.com
 set PRODUCT_NAME="CorpMonitor Extension Installer"
@@ -55,7 +55,7 @@ echo [1/3] Assinando MSI com certificado EV...
 echo Arquivo: %MSI_PATH%
 echo.
 
-%SIGNTOOL% sign /sha256 /fd SHA256 ^
+%SIGNTOOL% sign /fd SHA256 ^
   /tr %TIMESTAMP_SERVER% /td SHA256 ^
   /sha1 %CERT_THUMBPRINT% ^
   /d %PRODUCT_NAME% ^
