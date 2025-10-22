@@ -41,7 +41,7 @@ if (-not (Test-Path "$SourceDir\Product.wxs")) {
     exit 1
 }
 
-Write-Host "  ✓ WiX Toolset encontrado" -ForegroundColor Green
+Write-Host "  OK WiX Toolset encontrado" -ForegroundColor Green
 Write-Host ""
 
 # ===== 2. Limpar Build Anterior =====
@@ -54,7 +54,7 @@ if (-not (Test-Path $BuildDir)) {
     New-Item -ItemType Directory -Path $BuildDir | Out-Null
 }
 
-Write-Host "  ✓ Diretório preparado" -ForegroundColor Green
+Write-Host "  OK Diretorio preparado" -ForegroundColor Green
 Write-Host ""
 
 # ===== 3. Preencher Placeholders =====
@@ -78,7 +78,7 @@ $ProductContent | Set-Content "$BuildDir\Product.wxs" -Encoding UTF8
 Copy-Item "$SourceDir\Registry.wxs" "$BuildDir\Registry.wxs"
 Copy-Item "$SourceDir\UI.wxs" "$BuildDir\UI.wxs"
 
-Write-Host "  ✓ Placeholders preenchidos" -ForegroundColor Green
+Write-Host "  OK Placeholders preenchidos" -ForegroundColor Green
 Write-Host "    Extension ID: $ExtensionId" -ForegroundColor Gray
 Write-Host "    Manufacturer: $Manufacturer" -ForegroundColor Gray
 Write-Host "    Upgrade Code: $UpgradeCode" -ForegroundColor Gray
@@ -105,7 +105,7 @@ Push-Location $BuildDir
     -out UI.wixobj UI.wxs `
     -ext WixUIExtension 2>&1 | Out-Null
 
-Write-Host "  ✓ Objetos WiX gerados" -ForegroundColor Green
+Write-Host "  OK Objetos WiX gerados" -ForegroundColor Green
 Write-Host ""
 
 # ===== 5. Linkar com Todas as Localizações =====
@@ -128,7 +128,7 @@ foreach ($lang in $LocalizationFiles) {
 
 Pop-Location
 
-Write-Host "  ✓ MSI gerado com 5 idiomas embutidos" -ForegroundColor Green
+Write-Host "  OK MSI gerado com 5 idiomas embutidos" -ForegroundColor Green
 Write-Host ""
 
 # ===== 6. Gerar Hash SHA256 =====
@@ -139,7 +139,7 @@ $Hash = (Get-FileHash $MsiPath -Algorithm SHA256).Hash
 
 $Hash | Out-File "$MsiPath.sha256" -Encoding ASCII
 
-Write-Host "  ✓ Hash gerado" -ForegroundColor Green
+Write-Host "  OK Hash gerado" -ForegroundColor Green
 Write-Host ""
 
 # ===== 7. Relatório Final =====
@@ -149,18 +149,18 @@ Write-Host "========================================" -ForegroundColor Green
 Write-Host " BUILD CONCLUÍDO COM SUCESSO!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "📦 MSI: $MsiPath" -ForegroundColor Cyan
-Write-Host "📊 Tamanho: $([math]::Round((Get-Item $MsiPath).Length / 1KB, 2)) KB" -ForegroundColor Cyan
-Write-Host "🔒 SHA256: $Hash" -ForegroundColor Cyan
+Write-Host "MSI: $MsiPath" -ForegroundColor Cyan
+Write-Host "Tamanho: $([math]::Round((Get-Item $MsiPath).Length / 1KB, 2)) KB" -ForegroundColor Cyan
+Write-Host "SHA256: $Hash" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "🌍 IDIOMAS SUPORTADOS:" -ForegroundColor Yellow
-Write-Host "  🇧🇷 Português (Brasil)" -ForegroundColor White
-Write-Host "  🇺🇸 English (United States)" -ForegroundColor White
-Write-Host "  🇪🇸 Español (España)" -ForegroundColor White
-Write-Host "  🇵🇹 Português (Portugal)" -ForegroundColor White
-Write-Host "  🇫🇷 Français (France)" -ForegroundColor White
+Write-Host "IDIOMAS SUPORTADOS:" -ForegroundColor Yellow
+Write-Host "  - Portugues (Brasil)" -ForegroundColor White
+Write-Host "  - English (United States)" -ForegroundColor White
+Write-Host "  - Espanol (Espana)" -ForegroundColor White
+Write-Host "  - Portugues (Portugal)" -ForegroundColor White
+Write-Host "  - Francais (France)" -ForegroundColor White
 Write-Host ""
-Write-Host "📋 PRÓXIMOS PASSOS:" -ForegroundColor Yellow
+Write-Host "PROXIMOS PASSOS:" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "1. TESTAR LOCALMENTE:" -ForegroundColor White
 Write-Host "   msiexec /i `"$MsiPath`" CHROME_ENROLLMENT_TOKEN=`"seu_token`"" -ForegroundColor Gray
