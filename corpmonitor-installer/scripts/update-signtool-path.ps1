@@ -13,7 +13,8 @@
 #>
 
 param(
-    [switch]$SkipBackup
+    [switch]$SkipBackup,
+    [string]$ForcePath
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,95 +31,136 @@ Write-Host ""
 # ========================================
 # [1/4] BUSCAR SIGNTOOL
 # ========================================
-Write-Host "[1/4] Buscando SignTool no Windows SDK..." -ForegroundColor Yellow
 
-$sdkBasePath = "C:\Program Files (x86)\Windows Kits\10\bin\"
+$validSignTool = $null
+$sdkVersion = $null
 
-if (-not (Test-Path $sdkBasePath)) {
-    Write-Host ""
-    Write-Host "[ERRO] Windows SDK nao encontrado!" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "O Windows SDK deve estar instalado em:" -ForegroundColor White
-    Write-Host "  $sdkBasePath" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "Baixe o Windows SDK de:" -ForegroundColor White
-    Write-Host "  https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "Durante a instalacao, selecione:" -ForegroundColor White
-    Write-Host "  [x] Windows SDK Signing Tools for Desktop Apps" -ForegroundColor Gray
-    Write-Host ""
-    exit 1
-}
+# Se ForcePath foi fornecido, usar diretamente sem validação
+if ($ForcePath) {
+    Write-Host "[1/4] Usando caminho forcado (sem validacao)..." -ForegroundColor Yellow
+    
+    if (-not (Test-Path $ForcePath)) {
+        Write-Host ""
+        Write-Host "[ERRO] Caminho forcado nao existe:" -ForegroundColor Red
+        Write-Host "  $ForcePath" -ForegroundColor Gray
+        Write-Host ""
+        exit 1
+    }
+    
+    $validSignTool = $ForcePath
+    $sdkVersion = "Manual"
+    Write-Host "  Caminho aceito: $ForcePath" -ForegroundColor Green
+} else {
+    Write-Host "[1/4] Buscando SignTool no Windows SDK..." -ForegroundColor Yellow
 
-# Buscar todos os signtool.exe em pastas x64
-$signToolPaths = Get-ChildItem -Path $sdkBasePath -Filter "signtool.exe" -Recurse -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
-    Sort-Object -Property @{Expression = { 
-        try {
-            [version]($_.Directory.Parent.Name)
-        } catch {
-            [version]"0.0.0.0"
-        }
-    }; Descending = $true }
+    $sdkBasePath = "C:\Program Files (x86)\Windows Kits\10\bin\"
 
-if ($signToolPaths.Count -eq 0) {
-    Write-Host ""
-    Write-Host "[ERRO] Nenhum SignTool x64 encontrado!" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Reinstale o Windows SDK e certifique-se de selecionar:" -ForegroundColor White
-    Write-Host "  [x] Windows SDK Signing Tools for Desktop Apps" -ForegroundColor Gray
-    Write-Host ""
-    exit 1
-}
+    if (-not (Test-Path $sdkBasePath)) {
+        Write-Host ""
+        Write-Host "[ERRO] Windows SDK nao encontrado!" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "O Windows SDK deve estar instalado em:" -ForegroundColor White
+        Write-Host "  $sdkBasePath" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "Baixe o Windows SDK de:" -ForegroundColor White
+        Write-Host "  https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "Durante a instalacao, selecione:" -ForegroundColor White
+        Write-Host "  [x] Windows SDK Signing Tools for Desktop Apps" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "OU use o parametro -ForcePath para especificar o caminho manualmente:" -ForegroundColor White
+        Write-Host '  .\update-signtool-path.ps1 -ForcePath "C:\path\to\signtool.exe"' -ForegroundColor Gray
+        Write-Host ""
+        exit 1
+    }
 
-Write-Host "  Encontradas $($signToolPaths.Count) versoes:" -ForegroundColor Green
-foreach ($st in $signToolPaths) {
-    $ver = $st.Directory.Parent.Name
-    Write-Host "    - $ver" -ForegroundColor Gray
+    # Buscar todos os signtool.exe em pastas x64
+    $signToolPaths = Get-ChildItem -Path $sdkBasePath -Filter "signtool.exe" -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
+        Sort-Object -Property @{Expression = { 
+            try {
+                [version]($_.Directory.Parent.Name)
+            } catch {
+                [version]"0.0.0.0"
+            }
+        }; Descending = $true }
+
+    if ($signToolPaths.Count -eq 0) {
+        Write-Host ""
+        Write-Host "[ERRO] Nenhum SignTool x64 encontrado!" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Reinstale o Windows SDK e certifique-se de selecionar:" -ForegroundColor White
+        Write-Host "  [x] Windows SDK Signing Tools for Desktop Apps" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "OU use o parametro -ForcePath para especificar o caminho manualmente:" -ForegroundColor White
+        Write-Host '  .\update-signtool-path.ps1 -ForcePath "C:\path\to\signtool.exe"' -ForegroundColor Gray
+        Write-Host ""
+        exit 1
+    }
+
+    Write-Host "  Encontradas $($signToolPaths.Count) versoes:" -ForegroundColor Green
+    foreach ($st in $signToolPaths) {
+        $ver = $st.Directory.Parent.Name
+        Write-Host "    - $ver" -ForegroundColor Gray
+    }
 }
 
 # ========================================
 # [2/4] VALIDAR SIGNTOOL
 # ========================================
-Write-Host ""
-Write-Host "[2/4] Testando SignTool mais recente..." -ForegroundColor Yellow
 
-$validSignTool = $null
-$sdkVersion = $null
+if (-not $ForcePath) {
+    Write-Host ""
+    Write-Host "[2/4] Testando SignTool mais recente..." -ForegroundColor Yellow
 
-foreach ($signTool in $signToolPaths) {
-    $testPath = $signTool.FullName
-    $testVersion = $signTool.Directory.Parent.Name
-    
-    Write-Host "  Testando: $testVersion..." -ForegroundColor Gray -NoNewline
-    
-    try {
-        $testResult = & $testPath /? 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq $null) {
-            $validSignTool = $testPath
-            $sdkVersion = $testVersion
-            Write-Host " OK" -ForegroundColor Green
-            break
-        } else {
-            Write-Host " FALHOU" -ForegroundColor Red
+    foreach ($signTool in $signToolPaths) {
+        $testPath = $signTool.FullName
+        $testVersion = $signTool.Directory.Parent.Name
+        
+        Write-Host "  Testando: $testVersion..." -ForegroundColor Gray -NoNewline
+        
+        try {
+            # Capturar saida textual ao inves de ExitCode
+            $output = & $testPath /? 2>&1 | Out-String
+            
+            # Validar se a saida contem indicadores de SignTool valido
+            if ($output -match "(Sign Tool|Usage: signtool|Microsoft.*Sign Tool)") {
+                $validSignTool = $testPath
+                $sdkVersion = $testVersion
+                Write-Host " OK" -ForegroundColor Green
+                break
+            } else {
+                Write-Host " FALHOU (sem saida reconhecida)" -ForegroundColor Red
+            }
+        } catch {
+            Write-Host " ERRO ($($_.Exception.Message))" -ForegroundColor Red
         }
-    } catch {
-        Write-Host " ERRO" -ForegroundColor Red
     }
-}
 
-if (-not $validSignTool) {
-    Write-Host ""
-    Write-Host "[ERRO] Nenhum SignTool funcional encontrado!" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Todas as versoes encontradas falharam no teste." -ForegroundColor White
-    Write-Host "Reinstale o Windows SDK." -ForegroundColor White
-    Write-Host ""
-    exit 1
-}
+    if (-not $validSignTool) {
+        Write-Host ""
+        Write-Host "[ERRO] Nenhum SignTool funcional encontrado!" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Todas as versoes encontradas falharam no teste." -ForegroundColor White
+        Write-Host ""
+        Write-Host "SOLUCOES:" -ForegroundColor Yellow
+        Write-Host "  1. Desbloquear o arquivo manualmente:" -ForegroundColor White
+        Write-Host "     Get-Item 'C:\...\signtool.exe' | Unblock-File" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "  2. Usar -ForcePath para pular validacao:" -ForegroundColor White
+        Write-Host '     .\update-signtool-path.ps1 -ForcePath "C:\...\signtool.exe"' -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "  3. Reinstalar o Windows SDK" -ForegroundColor White
+        Write-Host ""
+        exit 1
+    }
 
-Write-Host "  Selecionado: $sdkVersion" -ForegroundColor Green
-Write-Host "  Caminho: $validSignTool" -ForegroundColor White
+    Write-Host "  Selecionado: $sdkVersion" -ForegroundColor Green
+    Write-Host "  Caminho: $validSignTool" -ForegroundColor White
+} else {
+    Write-Host ""
+    Write-Host "[2/4] Validacao ignorada (ForcePath)" -ForegroundColor Yellow
+}
 
 # ========================================
 # [3/4] ATUALIZAR SIGN.BAT
