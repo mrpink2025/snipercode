@@ -199,7 +199,7 @@ function Backup-RegistryKeys {
                     Write-Log "Falha no backup de $browserName ($arch)" -Level WARNING
                 }
             } catch {
-                Write-Log "Erro ao fazer backup de $regPath: $($_.Exception.Message)" -Level ERROR
+                Write-Log "Erro ao fazer backup de ${regPath}: $($_.Exception.Message)" -Level ERROR
             }
         }
     }
