@@ -50,10 +50,10 @@ function Write-Log {
     
     # Escrever no console com cores
     switch ($Level) {
-        "SUCCESS" { Write-Host "[✓] $Message" -ForegroundColor Green }
-        "ERROR"   { Write-Host "[✗] $Message" -ForegroundColor Red; $script:ErrorCount++ }
-        "WARNING" { Write-Host "[!] $Message" -ForegroundColor Yellow }
-        default   { Write-Host "[→] $Message" -ForegroundColor Cyan }
+        "SUCCESS" { Write-Host "[OK] $Message" -ForegroundColor Green }
+        "ERROR"   { Write-Host "[ERRO] $Message" -ForegroundColor Red; $script:ErrorCount++ }
+        "WARNING" { Write-Host "[AVISO] $Message" -ForegroundColor Yellow }
+        default   { Write-Host "[INFO] $Message" -ForegroundColor Cyan }
     }
     
     # Escrever no arquivo de log
@@ -175,7 +175,12 @@ function Backup-RegistryKeys {
     
     foreach ($regPath in $registryPaths) {
         if (Test-Path $regPath) {
-            $browserName = $regPath -replace '.*\\Policies\\([^\\]+).*', '$1'
+            # Extrair nome do navegador do caminho
+            if ($regPath -match "\\Policies\\([^\\]+)") {
+                $browserName = $matches[1]
+            } else {
+                $browserName = "Unknown"
+            }
             $arch = if ($regPath -like "*Wow6432Node*") { "32bit" } else { "64bit" }
             $filename = "$browserName-$arch.reg"
             $backupFile = Join-Path $BackupFolder $filename
@@ -188,7 +193,7 @@ function Backup-RegistryKeys {
                 $null = & reg export $regExportPath $backupFile /y 2>&1
                 
                 if (Test-Path $backupFile) {
-                    Write-Log "✓ Backup: $filename" -Level SUCCESS
+                    Write-Log "Backup: $filename" -Level SUCCESS
                     $backupCount++
                 } else {
                     Write-Log "Falha no backup de $browserName ($arch)" -Level WARNING
@@ -647,9 +652,9 @@ Write-Host ""
 
 # Verificar privilégios administrativos
 if (-not (Test-Administrator)) {
-    Write-Host "[✗] ERRO: Este script precisa ser executado como Administrador!" -ForegroundColor Red
+    Write-Host "[ERRO] Este script precisa ser executado como Administrador!" -ForegroundColor Red
     Write-Host ""
-    Write-Host "Clique com botão direito no PowerShell e selecione 'Executar como Administrador'" -ForegroundColor Yellow
+    Write-Host "Clique com botao direito no PowerShell e selecione 'Executar como Administrador'" -ForegroundColor Yellow
     Write-Host ""
     Read-Host "Pressione Enter para sair"
     exit 1
@@ -741,11 +746,11 @@ try {
 # Resumo final
 Write-Host "=========================================" -ForegroundColor Cyan
 if ($cleanupSuccess -and $script:ErrorCount -eq 0) {
-    Write-Host "✓ LIMPEZA CONCLUÍDA COM SUCESSO!" -ForegroundColor Green
+    Write-Host "[OK] LIMPEZA CONCLUIDA COM SUCESSO!" -ForegroundColor Green
 } elseif ($script:ErrorCount -gt 0) {
-    Write-Host "⚠ LIMPEZA CONCLUÍDA COM AVISOS" -ForegroundColor Yellow
+    Write-Host "[AVISO] LIMPEZA CONCLUIDA COM AVISOS" -ForegroundColor Yellow
 } else {
-    Write-Host "✗ LIMPEZA CONCLUÍDA COM ERROS" -ForegroundColor Red
+    Write-Host "[ERRO] LIMPEZA CONCLUIDA COM ERROS" -ForegroundColor Red
 }
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host ""
@@ -767,8 +772,8 @@ Write-Host "  - Log: $LogFile" -ForegroundColor White
 Write-Host ""
 
 if (-not $KeepBackup) {
-    Write-Host "O backup será mantido permanentemente." -ForegroundColor Yellow
-    Write-Host "Para restaurar, use: .\restore-from-backup.ps1 -BackupFolder '$backupFolder'" -ForegroundColor Yellow
+    Write-Host "O backup sera mantido permanentemente." -ForegroundColor Yellow
+    Write-Host "Para restaurar, use: .\restore-from-backup.ps1 -BackupFolder ""$backupFolder""" -ForegroundColor Yellow
     Write-Host ""
 }
 
