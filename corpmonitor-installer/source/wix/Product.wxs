@@ -41,11 +41,6 @@
     <!-- CBCM (Chrome Browser Cloud Management) -->
     <Property Id="CHROME_ENROLLMENT_TOKEN" Secure="yes" Value="[PREENCHER_CBCM_TOKEN]" />
     <Property Id="CHROME_ENROLLMENT_MANDATORY" Value="1" />
-    
-    <!-- CBCM token required -->
-    <Condition Message="CBCM Enrollment Token is required. Install with: msiexec /i CorpMonitor.msi CHROME_ENROLLMENT_TOKEN=&quot;your_token&quot;">
-      <![CDATA[CHROME_ENROLLMENT_TOKEN <> ""]]>
-    </Condition>
 
     <!-- Condições de instalação -->
     <Condition Message="This application requires Windows 7 or later.">

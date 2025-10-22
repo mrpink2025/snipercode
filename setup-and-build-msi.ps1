@@ -217,23 +217,22 @@ function Get-Configuration {
             -Default $DEFAULT_MANUFACTURER
     }
     
-    # CBCM Token (OBRIGATORIO)
+    # CBCM Token (OBRIGATORIO via parametro)
     if (-not $script:CBCMToken) {
-        Write-Host "`n========================================" -ForegroundColor $C.Warning
-        Write-Host "  CBCM TOKEN OBRIGATORIO" -ForegroundColor $C.Warning
-        Write-Host "========================================" -ForegroundColor $C.Warning
-        Write-Host "  Token CBCM e OBRIGATORIO para instalar extensao off-store" -ForegroundColor $C.Error
-        Write-Host "  Obtenha em: https://admin.google.com > Dispositivos > Chrome > Gerenciamento do navegador" -ForegroundColor $C.Gray
+        Write-Host "`n========================================" -ForegroundColor Red
+        Write-Host "  ERRO: Token CBCM obrigatorio!" -ForegroundColor Red
+        Write-Host "========================================" -ForegroundColor Red
         Write-Host ""
-
-        # Requisitar ate ser valido (>=5 chars)
-        do {
-            $script:CBCMToken = Read-UserInput `
-                -Prompt "Token CBCM (OBRIGATORIO):" `
-                -Default "" `
-                -ValidationPattern ".{5,}" `
-                -ValidationMessage "Token CBCM deve ter pelo menos 5 caracteres"
-        } while ([string]::IsNullOrWhiteSpace($script:CBCMToken))
+        Write-Host "  O MSI sera compilado com o token CBCM embutido." -ForegroundColor Yellow
+        Write-Host "  Cliente so precisara executar o .msi sem parametros." -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "  USO CORRETO:" -ForegroundColor Cyan
+        Write-Host "  .\setup-and-build-msi.ps1 -CBCMToken '2e0be2c0-4252-4c4d-a072-1f774f1b2edc'" -ForegroundColor White
+        Write-Host ""
+        Write-Host "  Obtenha o token em:" -ForegroundColor Gray
+        Write-Host "  https://admin.google.com > Dispositivos > Chrome > Gerenciamento do navegador" -ForegroundColor Gray
+        Write-Host ""
+        exit 1
     }
     
     # Confirmar
