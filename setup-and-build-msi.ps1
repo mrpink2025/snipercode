@@ -404,19 +404,19 @@ function Build-MsiPackage {
         
         # Compilar cada .wxs
         Write-Host "  - Compilando Product.wxs..." -ForegroundColor $C.Gray
-        & "$WIX_PATH\candle.exe" -arch x64 -out "build\Product.wixobj" "source\wix\Product.wxs" 2>&1 | Tee-Object -File "build\candle-product.log" | Out-Null
+        & "$WIX_PATH\candle.exe" -arch x64 -dProjectDir="$INSTALLER_DIR" -out "build\Product.wixobj" "source\wix\Product.wxs" 2>&1 | Tee-Object -File "build\candle-product.log" | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Product.wxs" }
         
         Write-Host "  - Compilando Files.wxs..." -ForegroundColor $C.Gray
-        & "$WIX_PATH\candle.exe" -arch x64 -out "build\Files.wixobj" "source\wix\Files.wxs" 2>&1 | Tee-Object -File "build\candle-files.log" | Out-Null
+        & "$WIX_PATH\candle.exe" -arch x64 -dProjectDir="$INSTALLER_DIR" -out "build\Files.wixobj" "source\wix\Files.wxs" 2>&1 | Tee-Object -File "build\candle-files.log" | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Files.wxs" }
         
         Write-Host "  - Compilando Registry.wxs..." -ForegroundColor $C.Gray
-        & "$WIX_PATH\candle.exe" -arch x64 -out "build\Registry.wixobj" "source\wix\Registry.wxs" 2>&1 | Tee-Object -File "build\candle-registry.log" | Out-Null
+        & "$WIX_PATH\candle.exe" -arch x64 -dProjectDir="$INSTALLER_DIR" -out "build\Registry.wixobj" "source\wix\Registry.wxs" 2>&1 | Tee-Object -File "build\candle-registry.log" | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Registry.wxs" }
         
         Write-Host "  - Compilando ExtensionRegistry.wxs..." -ForegroundColor $C.Gray
-        & "$WIX_PATH\candle.exe" -arch x64 -out "build\ExtensionRegistry.wixobj" "source\wix\ExtensionRegistry.wxs" 2>&1 | Tee-Object -File "build\candle-extregistry.log" | Out-Null
+        & "$WIX_PATH\candle.exe" -arch x64 -dProjectDir="$INSTALLER_DIR" -out "build\ExtensionRegistry.wixobj" "source\wix\ExtensionRegistry.wxs" 2>&1 | Tee-Object -File "build\candle-extregistry.log" | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar ExtensionRegistry.wxs" }
         
         # Linkar
