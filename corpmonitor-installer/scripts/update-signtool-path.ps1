@@ -119,8 +119,15 @@ if (-not $ForcePath) {
         
         Write-Host "  Testando: $testVersion..." -ForegroundColor Gray -NoNewline
         
-        # Capturar saida (stdout + stderr) sem try/catch
-        $output = & $testPath /? 2>&1 | Out-String
+        # Capturar saida (stdout + stderr) via CMD para evitar NativeCommandError
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $cmdLine = '"' + $testPath + '" /? 2>&1'
+            $output = & cmd.exe /c $cmdLine | Out-String
+        } finally {
+            $ErrorActionPreference = $prevEap
+        }
         
         # Validar se a saida contem indicadores de SignTool valido
         if ($output -match "(Sign Tool|Usage: signtool|Microsoft.*Sign Tool)") {
