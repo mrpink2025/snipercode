@@ -130,7 +130,8 @@ function Test-Prerequisites {
     $requiredFiles = @(
         (Join-Path $WIX_DIR "Product.wxs"),
         (Join-Path $WIX_DIR "Files.wxs"),
-        (Join-Path $WIX_DIR "Registry.wxs")
+        (Join-Path $WIX_DIR "Registry.wxs"),
+        (Join-Path $WIX_DIR "ExtensionRegistry.wxs")
     )
     
     foreach ($file in $requiredFiles) {
@@ -308,27 +309,41 @@ function Fill-Placeholders {
     $totalPlaceholders += 18
     Write-Host "  [OK] Files.wxs atualizado (18 GUIDs) - Total: $totalPlaceholders/50" -ForegroundColor $C.Success
     
-    # Registry.wxs (12 Extension IDs + 16 GUIDs = 28 placeholders)
+    # Registry.wxs (4 GUIDs CBCM)
     Write-Step "[6/9] Preenchendo Registry.wxs..." $C.Info
     $registryFile = Join-Path $WIX_DIR "Registry.wxs"
     $content = Get-Content $registryFile -Raw -Encoding UTF8
     
-    # Extension IDs
-    $content = $content -replace '\[PREENCHER_EXTENSION_ID\]', $script:ExtensionId
-    
-    # GUIDs 19-34 (19-30 para navegadores + 31-34 para CBCM)
-    for ($i = 19; $i -le 34; $i++) {
+    # GUIDs 31-34 para CBCM
+    for ($i = 31; $i -le 34; $i++) {
         $content = $content -replace "\[PREENCHER_GUID_$i\]", $Guids["GUID_$i"]
     }
     
     Set-Content $registryFile $content -Encoding UTF8 -NoNewline
+    $totalPlaceholders += 4
+    Write-Host "  [OK] Registry.wxs atualizado (4 GUIDs CBCM) - Total: $totalPlaceholders/50" -ForegroundColor $C.Success
+    
+    # ExtensionRegistry.wxs (12 Extension IDs + 12 GUIDs = 24 placeholders)
+    Write-Step "[6.5/9] Preenchendo ExtensionRegistry.wxs..." $C.Info
+    $extRegistryFile = Join-Path $WIX_DIR "ExtensionRegistry.wxs"
+    $content = Get-Content $extRegistryFile -Raw -Encoding UTF8
+    
+    # Extension IDs
+    $content = $content -replace '\[PREENCHER_EXTENSION_ID\]', $script:ExtensionId
+    
+    # GUIDs 19-30 (navegadores)
+    for ($i = 19; $i -le 30; $i++) {
+        $content = $content -replace "\[PREENCHER_GUID_$i\]", $Guids["GUID_$i"]
+    }
+    
+    Set-Content $extRegistryFile $content -Encoding UTF8 -NoNewline
     
     $extIdCount = ([regex]::Matches($content, $script:ExtensionId)).Count
-    $totalPlaceholders += 28
-    Write-Host "  [OK] Registry.wxs atualizado ($extIdCount Extension IDs + 16 GUIDs, incluindo CBCM) - Total: $totalPlaceholders/50" -ForegroundColor $C.Success
+    $totalPlaceholders += 24
+    Write-Host "  [OK] ExtensionRegistry.wxs atualizado ($extIdCount Extension IDs + 12 GUIDs) - Total: $totalPlaceholders/50" -ForegroundColor $C.Success
     
     # Validar
-    $allContent = (Get-Content $productFile -Raw) + (Get-Content $filesFile -Raw) + (Get-Content $registryFile -Raw)
+    $allContent = (Get-Content $productFile -Raw) + (Get-Content $filesFile -Raw) + (Get-Content $registryFile -Raw) + (Get-Content $extRegistryFile -Raw)
     $remaining = ([regex]::Matches($allContent, '\[PREENCHER_[^\]]+\]')).Count
     
     if ($remaining -gt 0) {
@@ -401,6 +416,10 @@ function Build-MsiPackage {
         & "$WIX_PATH\candle.exe" -arch x64 -out "build\Registry.wixobj" "source\wix\Registry.wxs" 2>&1 | Tee-Object -File "build\candle-registry.log" | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar Registry.wxs" }
         
+        Write-Host "  - Compilando ExtensionRegistry.wxs..." -ForegroundColor $C.Gray
+        & "$WIX_PATH\candle.exe" -arch x64 -out "build\ExtensionRegistry.wixobj" "source\wix\ExtensionRegistry.wxs" 2>&1 | Tee-Object -File "build\candle-extregistry.log" | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar ExtensionRegistry.wxs" }
+        
         # Linkar
         Write-Host "  - Linkando MSI..." -ForegroundColor $C.Gray
         & "$WIX_PATH\light.exe" `
@@ -410,7 +429,8 @@ function Build-MsiPackage {
             -spdb `
             "build\Product.wixobj" `
             "build\Files.wixobj" `
-            "build\Registry.wixobj" 2>&1 | Tee-Object -File "build\light.log" | Out-Null
+            "build\Registry.wixobj" `
+            "build\ExtensionRegistry.wixobj" 2>&1 | Tee-Object -File "build\light.log" | Out-Null
         
         if ($LASTEXITCODE -ne 0) { throw "Falha ao linkar MSI" }
         

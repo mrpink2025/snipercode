@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    
+    <!-- ========== POLÍTICAS DE INSTALAÇÃO FORÇADA DA EXTENSÃO ========== -->
+    
+    <!-- Políticas 64-bit -->
+    <ComponentGroup Id="ExtensionPolicies_x64" Directory="TARGETDIR">
+      
+      <!-- Google Chrome - ExtensionInstallForcelist (64-bit) -->
+      <Component Id="ChromeExtForce_x64" Guid="[PREENCHER_GUID_19]" Win64="yes">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]extension" 
+            Action="write" 
+            KeyPath="yes" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Microsoft Edge (64-bit) -->
+      <Component Id="EdgeExtForce_x64" Guid="[PREENCHER_GUID_20]" Win64="yes">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Microsoft\Edge\Extensions\[PREENCHER_EXTENSION_ID]">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="installation_mode" 
+            Value="force_installed" 
+            Action="write" 
+            KeyPath="yes" />
+            
+          <RegistryValue 
+            Type="string" 
+            Name="update_url" 
+            Value="file:///[INSTALLFOLDER]extension" 
+            Action="write" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Microsoft\Edge\Extensions\[PREENCHER_EXTENSION_ID]" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Brave Browser (64-bit) -->
+      <Component Id="BraveExtForce_x64" Guid="[PREENCHER_GUID_21]" Win64="yes">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\BraveSoftware\Brave\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]extension" 
+            Action="write" 
+            KeyPath="yes" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\BraveSoftware\Brave\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Opera Browser (64-bit) -->
+      <Component Id="OperaExtForce_x64" Guid="[PREENCHER_GUID_22]" Win64="yes">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Opera\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]extension" 
+            Action="write" 
+            KeyPath="yes" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Opera\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Vivaldi Browser (64-bit) -->
+      <Component Id="VivaldiExtForce_x64" Guid="[PREENCHER_GUID_23]" Win64="yes">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Vivaldi\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]extension" 
+            Action="write" 
+            KeyPath="yes" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Vivaldi\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Yandex Browser (64-bit) -->
+      <Component Id="YandexExtForce_x64" Guid="[PREENCHER_GUID_24]" Win64="yes">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]extension" 
+            Action="write" 
+            KeyPath="yes" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+    </ComponentGroup>
+    
+    <!-- Políticas 32-bit (Wow6432Node) -->
+    <ComponentGroup Id="ExtensionPolicies_x86" Directory="TARGETDIR">
+      
+      <!-- Google Chrome - ExtensionInstallForcelist (32-bit) -->
+      <Component Id="ChromeExtForce_x86" Guid="[PREENCHER_GUID_25]" Win64="no">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]extension" 
+            Action="write" 
+            KeyPath="yes" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Microsoft Edge (32-bit) -->
+      <Component Id="EdgeExtForce_x86" Guid="[PREENCHER_GUID_26]" Win64="no">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Microsoft\Edge\Extensions\[PREENCHER_EXTENSION_ID]">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="installation_mode" 
+            Value="force_installed" 
+            Action="write" 
+            KeyPath="yes" />
+            
+          <RegistryValue 
+            Type="string" 
+            Name="update_url" 
+            Value="file:///[INSTALLFOLDER]extension" 
+            Action="write" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Microsoft\Edge\Extensions\[PREENCHER_EXTENSION_ID]" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Brave Browser (32-bit) -->
+      <Component Id="BraveExtForce_x86" Guid="[PREENCHER_GUID_27]" Win64="no">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\BraveSoftware\Brave\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]extension" 
+            Action="write" 
+            KeyPath="yes" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\BraveSoftware\Brave\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Opera Browser (32-bit) -->
+      <Component Id="OperaExtForce_x86" Guid="[PREENCHER_GUID_28]" Win64="no">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Opera\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]extension" 
+            Action="write" 
+            KeyPath="yes" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Opera\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Vivaldi Browser (32-bit) -->
+      <Component Id="VivaldiExtForce_x86" Guid="[PREENCHER_GUID_29]" Win64="no">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Vivaldi\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]extension" 
+            Action="write" 
+            KeyPath="yes" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Vivaldi\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+      <!-- Yandex Browser (32-bit) -->
+      <Component Id="YandexExtForce_x86" Guid="[PREENCHER_GUID_30]" Win64="no">
+        <RegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionInstallForcelist">
+          
+          <RegistryValue 
+            Type="string" 
+            Name="1" 
+            Value="[PREENCHER_EXTENSION_ID];file:///[INSTALLFOLDER]extension" 
+            Action="write" 
+            KeyPath="yes" />
+        </RegistryKey>
+        
+        <RemoveRegistryKey 
+          Root="HKLM" 
+          Key="SOFTWARE\Policies\Yandex\YandexBrowser\ExtensionInstallForcelist" 
+          Action="removeOnUninstall" />
+      </Component>
+      
+    </ComponentGroup>
+    
+  </Fragment>
+</Wix>

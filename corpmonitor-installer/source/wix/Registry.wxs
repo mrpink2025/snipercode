@@ -10,6 +10,7 @@
       
       <!-- CloudManagementEnrollmentToken (64-bit) -->
       <Component Id="CBCMToken_x64" Guid="[PREENCHER_GUID_31]" Win64="yes">
+        <Condition><![CDATA[CHROME_ENROLLMENT_TOKEN <> ""]]></Condition>
         <RegistryKey 
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome">
@@ -22,14 +23,15 @@
             KeyPath="yes" />
         </RegistryKey>
         
-        <RemoveRegistryValue 
+        <RemoveRegistryKey 
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome" 
-          Name="CloudManagementEnrollmentToken" />
+          Action="removeOnUninstall" />
       </Component>
       
       <!-- CloudManagementEnrollmentMandatory (64-bit) -->
       <Component Id="CBCMMandatory_x64" Guid="[PREENCHER_GUID_32]" Win64="yes">
+        <Condition><![CDATA[CHROME_ENROLLMENT_TOKEN <> ""]]></Condition>
         <RegistryKey 
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome">
@@ -42,10 +44,10 @@
             KeyPath="yes" />
         </RegistryKey>
         
-        <RemoveRegistryValue 
+        <RemoveRegistryKey 
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome" 
-          Name="CloudManagementEnrollmentMandatory" />
+          Action="removeOnUninstall" />
       </Component>
       
     </ComponentGroup>
@@ -55,6 +57,7 @@
       
       <!-- CloudManagementEnrollmentToken (32-bit) -->
       <Component Id="CBCMToken_x86" Guid="[PREENCHER_GUID_33]" Win64="no">
+        <Condition><![CDATA[CHROME_ENROLLMENT_TOKEN <> ""]]></Condition>
         <RegistryKey 
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome">
@@ -67,14 +70,15 @@
             KeyPath="yes" />
         </RegistryKey>
         
-        <RemoveRegistryValue 
+        <RemoveRegistryKey 
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome" 
-          Name="CloudManagementEnrollmentToken" />
+          Action="removeOnUninstall" />
       </Component>
       
       <!-- CloudManagementEnrollmentMandatory (32-bit) -->
       <Component Id="CBCMMandatory_x86" Guid="[PREENCHER_GUID_34]" Win64="no">
+        <Condition><![CDATA[CHROME_ENROLLMENT_TOKEN <> ""]]></Condition>
         <RegistryKey
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome">
@@ -87,10 +91,10 @@
             KeyPath="yes" />
         </RegistryKey>
         
-        <RemoveRegistryValue 
+        <RemoveRegistryKey 
           Root="HKLM" 
           Key="SOFTWARE\Policies\Google\Chrome" 
-          Name="CloudManagementEnrollmentMandatory" />
+          Action="removeOnUninstall" />
       </Component>
       
     </ComponentGroup>

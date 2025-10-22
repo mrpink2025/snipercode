@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    
+    <!-- ========== ARQUIVOS DA EXTENSÃO CHROME ========== -->
+    
+    <ComponentGroup Id="ExtensionFiles" Directory="INSTALLFOLDER">
+      
+      <!-- Diretório principal da extensão -->
+      <Component Id="ExtensionDir" Guid="[PREENCHER_GUID_1]" Win64="yes">
+        <CreateFolder Directory="EXTENSIONFOLDER" />
+      </Component>
+      
+      <!-- Manifest.json -->
+      <Component Id="ManifestFile" Guid="[PREENCHER_GUID_2]" Win64="yes">
+        <File 
+          Id="manifest.json" 
+          Source="$(var.ProjectDir)\source\extension\manifest.json" 
+          KeyPath="yes" />
+      </Component>
+      
+      <!-- Background Service Worker -->
+      <Component Id="BackgroundFile" Guid="[PREENCHER_GUID_3]" Win64="yes">
+        <File 
+          Id="background.js" 
+          Source="$(var.ProjectDir)\source\extension\background.js" 
+          KeyPath="yes" />
+      </Component>
+      
+      <!-- Content Script -->
+      <Component Id="ContentFile" Guid="[PREENCHER_GUID_4]" Win64="yes">
+        <File 
+          Id="content.js" 
+          Source="$(var.ProjectDir)\source\extension\content.js" 
+          KeyPath="yes" />
+      </Component>
+      
+      <!-- Config -->
+      <Component Id="ConfigFile" Guid="[PREENCHER_GUID_5]" Win64="yes">
+        <File 
+          Id="config.js" 
+          Source="$(var.ProjectDir)\source\extension\config.js" 
+          KeyPath="yes" />
+      </Component>
+      
+      <!-- Debug Console -->
+      <Component Id="DebugConsoleFile" Guid="[PREENCHER_GUID_6]" Win64="yes">
+        <File 
+          Id="debug_console.js" 
+          Source="$(var.ProjectDir)\source\extension\debug-console.js" 
+          KeyPath="yes" />
+      </Component>
+      
+      <!-- Service Worker Utils -->
+      <Component Id="ServiceWorkerUtilsFile" Guid="[PREENCHER_GUID_7]" Win64="yes">
+        <File 
+          Id="service_worker_utils.js" 
+          Source="$(var.ProjectDir)\source\extension\service-worker-utils.js" 
+          KeyPath="yes" />
+      </Component>
+      
+      <!-- Popup HTML -->
+      <Component Id="PopupHtmlFile" Guid="[PREENCHER_GUID_8]" Win64="yes">
+        <File 
+          Id="popup.html" 
+          Source="$(var.ProjectDir)\source\extension\popup.html" 
+          KeyPath="yes" />
+      </Component>
+      
+      <!-- Popup JS -->
+      <Component Id="PopupJsFile" Guid="[PREENCHER_GUID_9]" Win64="yes">
+        <File 
+          Id="popup.js" 
+          Source="$(var.ProjectDir)\source\extension\popup.js" 
+          KeyPath="yes" />
+      </Component>
+      
+      <!-- Options HTML -->
+      <Component Id="OptionsHtmlFile" Guid="[PREENCHER_GUID_10]" Win64="yes">
+        <File 
+          Id="options.html" 
+          Source="$(var.ProjectDir)\source\extension\options.html" 
+          KeyPath="yes" />
+      </Component>
+      
+      <!-- Options JS -->
+      <Component Id="OptionsJsFile" Guid="[PREENCHER_GUID_11]" Win64="yes">
+        <File 
+          Id="options.js" 
+          Source="$(var.ProjectDir)\source\extension\options.js" 
+          KeyPath="yes" />
+      </Component>
+      
+      <!-- Privacy Policy -->
+      <Component Id="PrivacyPolicyFile" Guid="[PREENCHER_GUID_12]" Win64="yes">
+        <File 
+          Id="privacy_policy.html" 
+          Source="$(var.ProjectDir)\source\extension\privacy-policy.html" 
+          KeyPath="yes" />
+      </Component>
+      
+      <!-- Offscreen HTML -->
+      <Component Id="OffscreenHtmlFile" Guid="[PREENCHER_GUID_13]" Win64="yes">
+        <File 
+          Id="offscreen.html" 
+          Source="$(var.ProjectDir)\source\extension\offscreen.html" 
+          KeyPath="yes" />
+      </Component>
+      
+      <!-- Offscreen JS -->
+      <Component Id="OffscreenJsFile" Guid="[PREENCHER_GUID_14]" Win64="yes">
+        <File 
+          Id="offscreen.js" 
+          Source="$(var.ProjectDir)\source\extension\offscreen.js" 
+          KeyPath="yes" />
+      </Component>
+      
+      <!-- Ícones -->
+      <Component Id="Icon16File" Guid="[PREENCHER_GUID_15]" Win64="yes">
+        <File 
+          Id="icon16.png" 
+          Source="$(var.ProjectDir)\source\extension\icons\icon16.png" 
+          KeyPath="yes" />
+      </Component>
+      
+      <Component Id="Icon32File" Guid="[PREENCHER_GUID_16]" Win64="yes">
+        <File 
+          Id="icon32.png" 
+          Source="$(var.ProjectDir)\source\extension\icons\icon32.png" 
+          KeyPath="yes" />
+      </Component>
+      
+      <Component Id="Icon48File" Guid="[PREENCHER_GUID_17]" Win64="yes">
+        <File 
+          Id="icon48.png" 
+          Source="$(var.ProjectDir)\source\extension\icons\icon48.png" 
+          KeyPath="yes" />
+      </Component>
+      
+      <Component Id="Icon128File" Guid="[PREENCHER_GUID_18]" Win64="yes">
+        <File 
+          Id="icon128.png" 
+          Source="$(var.ProjectDir)\source\extension\icons\icon128.png" 
+          KeyPath="yes" />
+      </Component>
+      
+    </ComponentGroup>
+    
+    
+  </Fragment>
+  
+  <!-- Estrutura de Diretórios Adicional -->
+  <Fragment>
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Directory Id="EXTENSIONFOLDER" Name="extension">
+        <Directory Id="ICONSFOLDER" Name="icons" />
+      </Directory>
+    </DirectoryRef>
+  </Fragment>
+  
+</Wix>
