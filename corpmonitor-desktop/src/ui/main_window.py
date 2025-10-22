@@ -48,6 +48,7 @@ class MainWindow(ctk.CTk):
         self.blocked_domains_list: List[Dict] = []
         self.machines_list: List[Dict] = []
         self.site_viewer: Optional[SiteViewer] = None
+        self._is_loading = False  # Flag para prevenir carregamentos simultâneos
         
         # Contador de alertas para tocar som
         self.last_pending_alerts_count = 0
@@ -59,7 +60,7 @@ class MainWindow(ctk.CTk):
         
         # Auto-refresh
         self.auto_refresh_enabled = True
-        self.refresh_interval_ms = 10000  # 10 segundos
+        self.refresh_interval_ms = 30000  # 30 segundos
         self.refresh_job_id = None
         
         # Criar UI
@@ -518,64 +519,94 @@ class MainWindow(ctk.CTk):
     
     def load_incidents(self, viewed: bool = False):
         """Carregar lista de incidentes com paginação"""
-        # Selecionar widgets corretos baseado na aba
-        if viewed:
-            scroll = self.viewed_incidents_scroll
-            page = self.viewed_incidents_page
-            per_page = self.viewed_incidents_per_page
-            severity_filter = self.viewed_severity_filter
-            status_filter_value = None
-        else:
-            scroll = self.incidents_scroll
-            page = self.incidents_page
-            per_page = self.incidents_per_page
-            severity_filter = self.severity_filter
-            status_filter_value = None if self.status_filter.get() == "Todos" else self.status_filter.get()
-        
-        # Limpar lista atual
-        for widget in scroll.winfo_children():
-            widget.destroy()
-        
-        # Buscar incidentes
-        severity = None if severity_filter.get() == "Todas" else severity_filter.get()
-        
-        # Buscar com paginação e filtro de visualização
-        offset = page * per_page
-        incidents_list = self.incident_manager.get_incidents(
-            status=status_filter_value,
-            severity=severity,
-            viewed=viewed,
-            limit=per_page,
-            offset=offset
-        )
-        
-        # Buscar total para paginação
-        total = self.incident_manager.get_incidents_count(
-            status=status_filter_value,
-            severity=severity,
-            viewed=viewed
-        )
-        
-        # Armazenar referências
-        if viewed:
-            self.viewed_incidents_list = incidents_list
-            self.viewed_incidents_total = total
-        else:
-            self.incidents_list = incidents_list
-            self.incidents_total = total
-        
-        # Atualizar controles de paginação
-        self.update_pagination_controls(viewed=viewed)
-        
-        if not incidents_list:
-            msg = "Nenhum incidente lido" if viewed else "Nenhum incidente encontrado"
-            no_data = ctk.CTkLabel(scroll, text=msg, text_color="gray")
-            no_data.pack(pady=20)
+        # Prevenir carregamentos simultâneos
+        if self._is_loading or self._destroyed:
             return
         
-        # Criar cards de incidentes
-        for incident in incidents_list:
-            self.create_incident_card(incident, parent_scroll=scroll)
+        self._is_loading = True
+        
+        try:
+            # Selecionar widgets corretos baseado na aba
+            if viewed:
+                scroll = self.viewed_incidents_scroll
+                page = self.viewed_incidents_page
+                per_page = self.viewed_incidents_per_page
+                severity_filter = self.viewed_severity_filter
+                status_filter_value = None
+            else:
+                scroll = self.incidents_scroll
+                page = self.incidents_page
+                per_page = self.incidents_per_page
+                severity_filter = self.severity_filter
+                status_filter_value = None if self.status_filter.get() == "Todos" else self.status_filter.get()
+            
+            # Proteger widgets antes de destruir
+            widgets_to_destroy = list(scroll.winfo_children())
+            for widget in widgets_to_destroy:
+                try:
+                    # Remover bindings antes de destruir
+                    widget.unbind_all()
+                    for child in widget.winfo_children():
+                        try:
+                            child.unbind_all()
+                        except:
+                            pass
+                except:
+                    pass
+                
+                # Destruir widget com segurança
+                try:
+                    widget.destroy()
+                except:
+                    pass
+            
+            # Buscar incidentes
+            severity = None if severity_filter.get() == "Todas" else severity_filter.get()
+            
+            # Buscar com paginação e filtro de visualização
+            offset = page * per_page
+            incidents_list = self.incident_manager.get_incidents(
+                status=status_filter_value,
+                severity=severity,
+                viewed=viewed,
+                limit=per_page,
+                offset=offset
+            )
+            
+            # Buscar total para paginação
+            total = self.incident_manager.get_incidents_count(
+                status=status_filter_value,
+                severity=severity,
+                viewed=viewed
+            )
+            
+            # Armazenar referências
+            if viewed:
+                self.viewed_incidents_list = incidents_list
+                self.viewed_incidents_total = total
+            else:
+                self.incidents_list = incidents_list
+                self.incidents_total = total
+            
+            # Atualizar controles de paginação
+            if not self._destroyed:
+                self.update_pagination_controls(viewed=viewed)
+            
+            if not incidents_list:
+                msg = "Nenhum incidente lido" if viewed else "Nenhum incidente encontrado"
+                no_data = ctk.CTkLabel(scroll, text=msg, text_color="gray")
+                no_data.pack(pady=20)
+                return
+            
+            # Criar cards de incidentes
+            for incident in incidents_list:
+                if not self._destroyed:
+                    self.create_incident_card(incident, parent_scroll=scroll)
+        
+        except Exception as e:
+            logger.error(f"Erro ao carregar incidentes: {e}", exc_info=True)
+        finally:
+            self._is_loading = False
     
     def update_pagination_controls(self, viewed: bool = False):
         """Atualizar controles de paginação"""
@@ -722,7 +753,14 @@ class MainWindow(ctk.CTk):
         )
         status_badge.pack(side="left")
         
-        # Botão Ver Site (Interativo)
+        # Botão Ver Site (Interativo) com proteção
+        def safe_view_site():
+            try:
+                if card.winfo_exists():
+                    self.open_interactive_browser(incident)
+            except Exception as e:
+                logger.warning(f"Erro ao abrir site: {e}")
+        
         view_btn = ctk.CTkButton(
             header,
             text="🌐 Ver Site",
@@ -730,7 +768,7 @@ class MainWindow(ctk.CTk):
             height=28,
             fg_color="#22c55e",
             hover_color="#16a34a",
-            command=lambda: self.open_interactive_browser(incident)
+            command=safe_view_site
         )
         view_btn.pack(side="right")
         
@@ -1981,10 +2019,13 @@ class MainWindow(ctk.CTk):
         """Iniciar atualização automática"""
         if self.auto_refresh_enabled and not self.refresh_job_id:
             self.refresh_job_id = self.safe_after(self.refresh_interval_ms, self.auto_refresh_callback)
-            logger.info("🔄 Auto-refresh ativado (10s)")
+            logger.info("🔄 Auto-refresh ativado (30s)")
     
     def auto_refresh_callback(self):
         """Callback para atualização automática"""
+        if self._destroyed or self._is_loading:
+            return
+        
         try:
             # Atualizar KPIs
             self.load_dashboard_data()
@@ -2000,7 +2041,7 @@ class MainWindow(ctk.CTk):
             logger.error(f"Erro no auto-refresh: {e}", exc_info=True)
         finally:
             # Reagendar próximo refresh
-            if self.auto_refresh_enabled:
+            if self.auto_refresh_enabled and not self._destroyed:
                 self.refresh_job_id = self.safe_after(self.refresh_interval_ms, self.auto_refresh_callback)
     
     def stop_auto_refresh(self):
@@ -2161,7 +2202,7 @@ class MainWindow(ctk.CTk):
         if self._destroyed:
             return
         
-        logger.info("Cancelando callbacks pendentes...")
+        logger.info("Destruindo MainWindow e cancelando callbacks...")
         
         # Cancelar TODOS os callbacks pendentes ANTES de marcar como destruído
         for after_id in list(self._after_ids):
@@ -2180,15 +2221,15 @@ class MainWindow(ctk.CTk):
         # Fechar managers
         try:
             self.realtime_manager.stop()
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Erro ao parar realtime manager: {e}")
         
         try:
             import asyncio
             from src.utils.async_helper import run_async
             run_async(self.browser_manager.close_all_sessions())
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Erro ao fechar browsers: {e}")
         
         super().destroy()
     

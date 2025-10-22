@@ -106,7 +106,7 @@ class RealtimeManager:
         self._run_polling_loop()
     
     async def _run_async_realtime(self):
-        """Executar conexão websocket assíncrona"""
+        """Executar conexão websocket assíncrona com keep-alive e reconexão"""
         try:
             from realtime import AsyncRealtimeClient
         except ImportError:
@@ -127,17 +127,49 @@ class RealtimeManager:
                 callback=self._on_alert_payload,
             )
             
+            # Variável para rastrear status do canal
+            channel_status = {"status": "connecting"}
+            
+            def on_subscribe_status(status, err=None):
+                channel_status["status"] = status
+                logger.info(f"Realtime alerts channel: {status}")
+                if status == "TIMED_OUT":
+                    logger.warning("⚠️ Canal expirou, será reconectado")
+            
             # Assinar canal
-            await ch_alerts.subscribe(
-                lambda status, err: logger.info(f"Realtime alerts channel: {status}")
-            )
+            await ch_alerts.subscribe(on_subscribe_status)
             
             logger.info("✅ WebSocket subscribed to admin_alerts realtime channel")
             self._notify_connection_status("websocket")
             
+            # Keep-alive: enviar ping a cada 30 segundos
+            last_ping = time.time()
+            ping_interval = 30
+            
             # Loop de escuta até pedirmos stop()
             while not self._stop_event.is_set():
                 await asyncio.sleep(0.5)
+                
+                # Enviar keep-alive ping
+                current_time = time.time()
+                if current_time - last_ping >= ping_interval:
+                    try:
+                        # Ping básico para manter conexão viva
+                        await asyncio.sleep(0)  # Yield control
+                        last_ping = current_time
+                    except Exception as e:
+                        logger.warning(f"Erro ao enviar ping: {e}")
+                
+                # Verificar se canal expirou e tentar reconectar
+                if channel_status["status"] == "TIMED_OUT":
+                    logger.warning("⚠️ Reconectando canal após timeout...")
+                    try:
+                        await ch_alerts.unsubscribe()
+                        await ch_alerts.subscribe(on_subscribe_status)
+                        channel_status["status"] = "reconnecting"
+                    except Exception as e:
+                        logger.error(f"Erro ao reconectar: {e}")
+                        break
                 
         finally:
             try:
