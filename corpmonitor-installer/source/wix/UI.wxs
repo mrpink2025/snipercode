@@ -8,34 +8,32 @@
       <TextStyle Id="WixUI_Font_Bigger" FaceName="Segoe UI" Size="12" Bold="yes" />
       <TextStyle Id="WixUI_Font_Title" FaceName="Segoe UI" Size="14" Bold="yes" />
       
-      <!-- Diálogo de Seleção de Idioma -->
-      <Dialog Id="LanguageSelectDlg" Width="370" Height="270" Title="CorpMonitor - Language / Idioma">
+      <!-- Language Selection Dialog -->
+      <Dialog Id="LanguageSelectDlg" Width="370" Height="270" Title="CorpMonitor - Language Selection">
         <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="30" Transparent="yes" NoPrefix="yes">
-          <Text>{\WixUI_Font_Title}Select Installation Language
-Selecione o Idioma de Instalação</Text>
+          <Text>{\WixUI_Font_Title}!(loc.LanguageSelectTitle)</Text>
         </Control>
         
         <Control Id="Description" Type="Text" X="15" Y="40" Width="340" Height="20" Transparent="yes">
-          <Text>Choose your preferred language for the installation wizard:
-Escolha seu idioma preferido para o assistente de instalação:</Text>
+          <Text>!(loc.LanguageSelectDescription)</Text>
         </Control>
         
-        <!-- Lista de idiomas -->
+        <!-- Language list -->
         <Control Id="LanguageList" Type="ListBox" X="15" Y="70" Width="340" Height="120" Property="UI_LANGUAGE">
           <ListBox Property="UI_LANGUAGE">
-            <ListItem Text="Portugues (Brasil)" Value="1046" />
+            <ListItem Text="Portuguese (Brazil)" Value="1046" />
             <ListItem Text="English (United States)" Value="1033" />
-            <ListItem Text="Espanol (Espana)" Value="1034" />
-            <ListItem Text="Portugues (Portugal)" Value="2070" />
-            <ListItem Text="Francais (France)" Value="1036" />
+            <ListItem Text="Spanish (Spain)" Value="1034" />
+            <ListItem Text="Portuguese (Portugal)" Value="2070" />
+            <ListItem Text="French (France)" Value="1036" />
           </ListBox>
         </Control>
         
-        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="Next / Avançar">
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.ButtonNext)">
           <Publish Event="NewDialog" Value="WelcomeDlg">1</Publish>
         </Control>
         
-        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel / Cancelar">
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.ButtonCancel)">
           <Publish Event="EndDialog" Value="Exit">1</Publish>
         </Control>
       </Dialog>

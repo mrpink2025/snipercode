@@ -6,6 +6,9 @@
   <String Id="ProductDescription">Protección completa contra amenazas web - Bloqueo de phishing en tiempo real, prevención de malware y protección contra fuga de datos</String>
   <String Id="Manufacturer">Alves Junior Maquinas e Equipamentos Ltda</String>
   
+  <String Id="LanguageSelectTitle">Seleccione el Idioma de Instalación</String>
+  <String Id="LanguageSelectDescription">Elija su idioma preferido para el asistente de instalación:</String>
+  
   <String Id="WelcomeTitle">Bienvenido a Protección Web CorpMonitor</String>
   <String Id="WelcomeDescription">Este asistente instalará un sistema avanzado de seguridad web que bloquea activamente intentos de phishing, malware, robo de credenciales y fuga de datos en tiempo real.</String>
   

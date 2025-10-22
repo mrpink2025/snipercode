@@ -8,6 +8,9 @@
   <String Id="Manufacturer">Alves Junior Maquinas e Equipamentos Ltda</String>
   
   <!-- Installation Messages -->
+  <String Id="LanguageSelectTitle">Select Installation Language</String>
+  <String Id="LanguageSelectDescription">Choose your preferred language for the installation wizard:</String>
+  
   <String Id="WelcomeTitle">Welcome to CorpMonitor Web Protection</String>
   <String Id="WelcomeDescription">This wizard will install an advanced web security system that actively blocks phishing attempts, malware, credential theft, and data exfiltration in real-time.</String>
   
