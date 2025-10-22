@@ -21,6 +21,7 @@ interface IncidentCardProps {
     cookie_data?: any;
     status: 'new' | 'in-progress' | 'blocked' | 'approved';
     isRedList?: boolean;
+    client_ip?: string;
   };
   onBlock: (incidentId: string) => void;
   onIsolate: (incidentId: string) => void;
@@ -128,15 +129,24 @@ const IncidentCard = ({
             <Clock className="w-4 h-4" />
             <span>{new Date(incident.timestamp).toLocaleString('pt-BR')}</span>
           </div>
-          {incident.tabUrl && (
+          {incident.client_ip && (
             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-              <Globe className="w-4 h-4" />
-              <span className="truncate" title={incident.tabUrl}>
-                {incident.tabUrl}
+              <Monitor className="w-4 h-4" />
+              <span title="IP do Cliente">
+                {incident.client_ip}
               </span>
             </div>
           )}
         </div>
+        
+        {incident.tabUrl && (
+          <div className="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+            <Globe className="w-4 h-4" />
+            <span className="truncate" title={incident.tabUrl}>
+              {incident.tabUrl}
+            </span>
+          </div>
+        )}
 
         {/* Cookie Excerpt */}
         <div className="mb-4 p-3 bg-muted/50 rounded-md">

@@ -19,6 +19,7 @@ interface ProxyRequest {
   }>;
   forceHtml?: boolean;
   rawContent?: boolean;
+  clientIp?: string;
 }
 
 // Utility to detect resource type from URL and Content-Type
@@ -352,7 +353,7 @@ serve(async (req) => {
     );
 
     if (req.method === 'POST') {
-      let { url, incidentId, cookies = [], forceHtml = false, rawContent = false }: ProxyRequest = await req.json();
+      let { url, incidentId, cookies = [], forceHtml = false, rawContent = false, clientIp }: ProxyRequest = await req.json();
       
       console.log('Proxying URL:', url, 'for incident:', incidentId);
       
@@ -363,13 +364,13 @@ serve(async (req) => {
         console.log(`POST: Using ${cookies.length} cookies from client body (fresh)`);
         cookieSource = 'client-body';
       }
-      // PRIORITY 2: Fallback to DB cookies
+      // PRIORITY 2: Fallback to DB cookies and client IP
       else {
         console.log('POST: No cookies in body, fetching from DB for incident:', incidentId);
         try {
           const { data: incidentData } = await supabase
             .from('incidents')
-            .select('full_cookie_data, cookie_excerpt')
+            .select('full_cookie_data, cookie_excerpt, client_ip')
             .eq('incident_id', incidentId)
             .limit(1)
             .single();
@@ -404,6 +405,12 @@ serve(async (req) => {
             cookies = toArray(src);
             console.log(`POST: Fetched ${cookies.length} cookies from DB`);
             cookieSource = 'database';
+            
+            // Set clientIp if not provided and found in DB
+            if (!clientIp && incidentData.client_ip) {
+              clientIp = incidentData.client_ip;
+              console.log(`POST: Using client IP from DB: ${clientIp}`);
+            }
           }
         } catch (err) {
           console.error('POST: Error fetching cookies from DB:', err);
@@ -496,6 +503,12 @@ serve(async (req) => {
 
       if (cookieHeader) {
         headers['Cookie'] = cookieHeader;
+      }
+      
+      // Add client IP to X-Forwarded-For header if available
+      if (clientIp) {
+        headers['X-Forwarded-For'] = clientIp;
+        console.log(`POST: Adding X-Forwarded-For header with client IP: ${clientIp}`);
       }
 
       // Merge real browser headers from the client request when available

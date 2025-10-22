@@ -28,10 +28,10 @@ const Incidents = () => {
 
   const handleExport = () => {
     const csvContent = incidents.map(incident => 
-      `${incident.incident_id},${incident.host},${incident.severity},${incident.status},${incident.created_at}`
+      `${incident.incident_id},${incident.host},${incident.severity},${incident.status},${incident.client_ip || 'N/A'},${incident.created_at}`
     ).join('\n');
     
-    const blob = new Blob(['ID,Host,Severity,Status,Created\n' + csvContent], { type: 'text/csv' });
+    const blob = new Blob(['ID,Host,Severity,Status,Client IP,Created\n' + csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

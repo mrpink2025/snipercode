@@ -24,6 +24,7 @@ export interface Incident {
   created_at: string;
   updated_at: string;
   resolved_at?: string;
+  client_ip?: string;
   // Joined data
   user?: {
     full_name: string;
@@ -103,7 +104,13 @@ export const useIncidents = (options: UseIncidentsOptions = {}): UseIncidentsRet
         throw queryError;
       }
 
-      setIncidents(data || []);
+      // Map Supabase data to Incident type (handle client_ip type)
+      const mappedData = (data || []).map(item => ({
+        ...item,
+        client_ip: item.client_ip ? String(item.client_ip) : undefined
+      })) as Incident[];
+
+      setIncidents(mappedData);
       setTotalCount(count || 0);
     } catch (err) {
       console.error('Error fetching incidents:', err);

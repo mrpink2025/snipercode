@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       active_sessions: {
         Row: {
+          client_ip: unknown
           created_at: string
           domain: string
           id: string
@@ -28,6 +29,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          client_ip?: unknown
           created_at?: string
           domain: string
           id?: string
@@ -40,6 +42,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          client_ip?: unknown
           created_at?: string
           domain?: string
           id?: string
@@ -97,7 +100,7 @@ export type Database = {
           action: Database["public"]["Enums"]["audit_action"]
           created_at: string
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           new_values: Json | null
           old_values: Json | null
           resource_id: string
@@ -109,7 +112,7 @@ export type Database = {
           action: Database["public"]["Enums"]["audit_action"]
           created_at?: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           new_values?: Json | null
           old_values?: Json | null
           resource_id: string
@@ -121,7 +124,7 @@ export type Database = {
           action?: Database["public"]["Enums"]["audit_action"]
           created_at?: string
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           new_values?: Json | null
           old_values?: Json | null
           resource_id?: string
@@ -233,6 +236,7 @@ export type Database = {
       incidents: {
         Row: {
           assigned_to: string | null
+          client_ip: unknown
           cookie_excerpt: string
           created_at: string
           full_cookie_data: Json | null
@@ -255,6 +259,7 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          client_ip?: unknown
           cookie_excerpt: string
           created_at?: string
           full_cookie_data?: Json | null
@@ -277,6 +282,7 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          client_ip?: unknown
           cookie_excerpt?: string
           created_at?: string
           full_cookie_data?: Json | null
@@ -781,28 +787,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      cleanup_expired_threat_cache: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      cleanup_old_sessions: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      cleanup_old_snapshots: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      cleanup_stale_websockets: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      generate_incident_id: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
+      cleanup_expired_threat_cache: { Args: never; Returns: undefined }
+      cleanup_old_sessions: { Args: never; Returns: undefined }
+      cleanup_old_snapshots: { Args: never; Returns: undefined }
+      cleanup_stale_websockets: { Args: never; Returns: undefined }
+      generate_incident_id: { Args: never; Returns: string }
       get_phishing_stats: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           avg_risk_score: number
           false_positives: number
@@ -815,18 +806,9 @@ export type Database = {
         Args: { user_uuid: string }
         Returns: Database["public"]["Enums"]["user_role"]
       }
-      is_admin: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
-      is_operator_or_above: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
-      is_superadmin: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
+      is_admin: { Args: never; Returns: boolean }
+      is_operator_or_above: { Args: never; Returns: boolean }
+      is_superadmin: { Args: never; Returns: boolean }
     }
     Enums: {
       audit_action:

