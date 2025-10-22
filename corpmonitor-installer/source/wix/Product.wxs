@@ -54,6 +54,13 @@
     <!-- Media (arquivos compactados no MSI) -->
     <MediaTemplate EmbedCab="yes" />
     
+    <!-- Estrutura de diretórios (obrigatória pelo WiX) -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="CorpMonitor" />
+      </Directory>
+    </Directory>
+    
     <!-- Features (componentes instaláveis) -->
     <Feature Id="ProductFeature" Title="CorpMonitor Extension" Level="1">
       <ComponentGroupRef Id="CBCMKeys_x64" />

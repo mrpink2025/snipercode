@@ -42,9 +42,11 @@ Escolha seu idioma preferido para o assistente de instalação:</Text>
       
       <!-- Fluxo de instalação -->
       <InstallUISequence>
-        <Show Dialog="LanguageSelectDlg" Before="WelcomeDlg" />
-        <Show Dialog="ProgressDlg" After="ExecuteAction" />
-        <Show Dialog="ExitDlg" OnExit="success" />
+        <Show Dialog="LanguageSelectDlg" After="CostFinalize">1</Show>
+        <Show Dialog="WelcomeDlg" After="LanguageSelectDlg">1</Show>
+        <Show Dialog="SecurityFeaturesDlg" After="WelcomeDlg">1</Show>
+        <Show Dialog="ProgressDlg" After="ExecuteAction">1</Show>
+        <Show Dialog="ExitDlg" OnExit="success">1</Show>
       </InstallUISequence>
       
       <!-- Tela de Boas-Vindas -->
@@ -57,7 +59,7 @@ Escolha seu idioma preferido para o assistente de instalação:</Text>
           <Text>!(loc.WelcomeDescription)</Text>
         </Control>
         
-        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="WixUIBannerBmp" />
+        <!-- Banner bitmap removido (sem WixUIExtension) -->
         
         <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.ButtonNext)">
           <Publish Event="NewDialog" Value="SecurityFeaturesDlg">1</Publish>
@@ -110,8 +112,8 @@ Escolha seu idioma preferido para o assistente de instalação:</Text>
       
       <!-- Diálogo de Confirmação de Cancelamento -->
       <Dialog Id="CancelDlg" Width="260" Height="85" Title="!(loc.ProductName)" NoMinimize="yes">
-        <Control Id="Icon" Type="Icon" X="15" Y="15" Width="24" Height="24" ToolTip="Information icon" FixedSize="yes" IconSize="32" Text="WixUIInfoIco" />
-        <Control Id="Text" Type="Text" X="48" Y="15" Width="194" Height="30">
+        <!-- Ícone removido (sem WixUIExtension) -->
+        <Control Id="Text" Type="Text" X="15" Y="15" Width="227" Height="30">
           <Text>Are you sure you want to cancel the installation?</Text>
         </Control>
         <Control Id="Yes" Type="PushButton" X="100" Y="57" Width="56" Height="17" Default="yes" Cancel="yes" Text="Yes">
