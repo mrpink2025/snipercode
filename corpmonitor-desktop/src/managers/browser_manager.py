@@ -150,54 +150,6 @@ class BrowserManager:
             if fingerprint and isinstance(fingerprint, dict):
                 await self._inject_fingerprint_overrides(context, fingerprint)
             
-            # Configurar túnel DNS se client_ip disponível
-            if client_ip and incident_id:
-                print(f"[BrowserManager] Configurando túnel DNS via site-proxy...")
-                
-                async def route_handler(route):
-                    """Proxy via site-proxy com client_ip"""
-                    request = route.request
-                    url = request.url
-                    
-                    # Ignorar requisições internas do browser
-                    if url.startswith('data:') or url.startswith('blob:'):
-                        await route.continue_()
-                        return
-                    
-                    proxy_url = "https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy"
-                    
-                    payload = {
-                        "url": url,
-                        "incidentId": incident_id,
-                        "clientIp": client_ip,
-                        "rawContent": True
-                    }
-                    
-                    try:
-                        import aiohttp
-                        async with aiohttp.ClientSession() as session:
-                            async with session.post(proxy_url, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as response:
-                                content = await response.read()
-                                headers = dict(response.headers)
-                                
-                                # Filtrar headers problemáticos
-                                headers.pop('content-encoding', None)
-                                headers.pop('transfer-encoding', None)
-                                
-                                await route.fulfill(
-                                    status=response.status,
-                                    headers=headers,
-                                    body=content
-                                )
-                    except Exception as e:
-                        print(f"[BrowserManager] ⚠️ Erro no túnel DNS para {url[:100]}: {e}")
-                        await route.continue_()
-                
-                await context.route("**/*", route_handler)
-                print(f"[BrowserManager] ✓ Túnel DNS configurado (IP: {client_ip})")
-            else:
-                print(f"[BrowserManager] ⚠️ Navegação sem túnel DNS (client_ip não disponível)")
-            
             # Injetar cookies
             if cookies_raw:
                 cookies = []
@@ -228,8 +180,63 @@ class BrowserManager:
             print(f"[BrowserManager] Aplicando bloqueios de domínio...")
             await self._apply_domain_blocks(context)
             
-            # Criar nova página
+            # Criar nova página ANTES de configurar o route handler
             page = await context.new_page()
+            
+            # Configurar túnel DNS se client_ip disponível
+            if client_ip and incident_id:
+                print(f"[BrowserManager] Configurando túnel DNS via site-proxy...")
+                
+                async def route_handler(route):
+                    """Proxy via site-proxy com client_ip"""
+                    request = route.request
+                    url = request.url
+                    
+                    # Ignorar requisições internas do browser
+                    if url.startswith('data:') or url.startswith('blob:'):
+                        await route.continue_()
+                        return
+                    
+                    print(f"[BrowserManager] 🌐 Tunelando: {url[:80]}...")
+                    
+                    proxy_url = "https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy"
+                    
+                    payload = {
+                        "url": url,
+                        "incidentId": incident_id,
+                        "clientIp": client_ip,
+                        "rawContent": True
+                    }
+                    
+                    try:
+                        import aiohttp
+                        async with aiohttp.ClientSession() as session:
+                            async with session.post(proxy_url, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                                content = await response.read()
+                                
+                                # Construir headers manualmente para compatibilidade com Playwright
+                                headers = {}
+                                for key, value in response.headers.items():
+                                    # Ignorar headers problemáticos que causam erros no Playwright
+                                    if key.lower() not in ['content-encoding', 'transfer-encoding', 'content-length']:
+                                        headers[key] = value
+                                
+                                print(f"[BrowserManager] ✓ Tunelado: {response.status} - {len(content)} bytes")
+                                
+                                await route.fulfill(
+                                    status=response.status,
+                                    headers=headers,
+                                    body=content
+                                )
+                    except Exception as e:
+                        print(f"[BrowserManager] ⚠️ Erro no túnel DNS para {url[:100]}: {e}")
+                        await route.continue_()
+                
+                # Usar page.route() ao invés de context.route() para garantir interceptação
+                await page.route("**/*", route_handler)
+                print(f"[BrowserManager] ✓ Túnel DNS configurado (IP: {client_ip})")
+            else:
+                print(f"[BrowserManager] ⚠️ Navegação sem túnel DNS (client_ip não disponível)")
             
             # Navegar para URL
             print(f"[BrowserManager] Navegando para {target_url}...")
