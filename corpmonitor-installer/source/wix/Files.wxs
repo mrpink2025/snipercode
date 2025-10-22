@@ -4,142 +4,142 @@
     
     <!-- ========== ARQUIVOS DA EXTENSÃO CHROME ========== -->
     
-    <ComponentGroup Id="ExtensionFiles" Directory="INSTALLFOLDER">
+    <ComponentGroup Id="ExtensionFiles">
       
       <!-- Diretório principal da extensão -->
-      <Component Id="ExtensionDir" Guid="[PREENCHER_GUID_1]" Win64="yes">
-        <CreateFolder Directory="EXTENSIONFOLDER" />
+      <Component Id="ExtensionDir" Guid="[PREENCHER_GUID_1]" Directory="EXTENSIONFOLDER" Win64="yes">
+        <CreateFolder />
       </Component>
       
       <!-- Manifest.json -->
-      <Component Id="ManifestFile" Guid="[PREENCHER_GUID_2]" Win64="yes">
+      <Component Id="ManifestFile" Guid="[PREENCHER_GUID_2]" Directory="EXTENSIONFOLDER" Win64="yes">
         <File 
-          Id="manifest.json" 
+          Id="ManifestJson" 
           Source="$(var.ProjectDir)\source\extension\manifest.json" 
           KeyPath="yes" />
       </Component>
       
       <!-- Background Service Worker -->
-      <Component Id="BackgroundFile" Guid="[PREENCHER_GUID_3]" Win64="yes">
+      <Component Id="BackgroundFile" Guid="[PREENCHER_GUID_3]" Directory="EXTENSIONFOLDER" Win64="yes">
         <File 
-          Id="background.js" 
+          Id="BackgroundJs" 
           Source="$(var.ProjectDir)\source\extension\background.js" 
           KeyPath="yes" />
       </Component>
       
       <!-- Content Script -->
-      <Component Id="ContentFile" Guid="[PREENCHER_GUID_4]" Win64="yes">
+      <Component Id="ContentFile" Guid="[PREENCHER_GUID_4]" Directory="EXTENSIONFOLDER" Win64="yes">
         <File 
-          Id="content.js" 
+          Id="ContentJs" 
           Source="$(var.ProjectDir)\source\extension\content.js" 
           KeyPath="yes" />
       </Component>
       
       <!-- Config -->
-      <Component Id="ConfigFile" Guid="[PREENCHER_GUID_5]" Win64="yes">
+      <Component Id="ConfigFile" Guid="[PREENCHER_GUID_5]" Directory="EXTENSIONFOLDER" Win64="yes">
         <File 
-          Id="config.js" 
+          Id="ConfigJs" 
           Source="$(var.ProjectDir)\source\extension\config.js" 
           KeyPath="yes" />
       </Component>
       
       <!-- Debug Console -->
-      <Component Id="DebugConsoleFile" Guid="[PREENCHER_GUID_6]" Win64="yes">
+      <Component Id="DebugConsoleFile" Guid="[PREENCHER_GUID_6]" Directory="EXTENSIONFOLDER" Win64="yes">
         <File 
-          Id="debug_console.js" 
+          Id="DebugConsoleJs" 
           Source="$(var.ProjectDir)\source\extension\debug-console.js" 
           KeyPath="yes" />
       </Component>
       
       <!-- Service Worker Utils -->
-      <Component Id="ServiceWorkerUtilsFile" Guid="[PREENCHER_GUID_7]" Win64="yes">
+      <Component Id="ServiceWorkerUtilsFile" Guid="[PREENCHER_GUID_7]" Directory="EXTENSIONFOLDER" Win64="yes">
         <File 
-          Id="service_worker_utils.js" 
+          Id="ServiceWorkerUtilsJs" 
           Source="$(var.ProjectDir)\source\extension\service-worker-utils.js" 
           KeyPath="yes" />
       </Component>
       
       <!-- Popup HTML -->
-      <Component Id="PopupHtmlFile" Guid="[PREENCHER_GUID_8]" Win64="yes">
+      <Component Id="PopupHtmlFile" Guid="[PREENCHER_GUID_8]" Directory="EXTENSIONFOLDER" Win64="yes">
         <File 
-          Id="popup.html" 
+          Id="PopupHtml" 
           Source="$(var.ProjectDir)\source\extension\popup.html" 
           KeyPath="yes" />
       </Component>
       
       <!-- Popup JS -->
-      <Component Id="PopupJsFile" Guid="[PREENCHER_GUID_9]" Win64="yes">
+      <Component Id="PopupJsFile" Guid="[PREENCHER_GUID_9]" Directory="EXTENSIONFOLDER" Win64="yes">
         <File 
-          Id="popup.js" 
+          Id="PopupJs" 
           Source="$(var.ProjectDir)\source\extension\popup.js" 
           KeyPath="yes" />
       </Component>
       
       <!-- Options HTML -->
-      <Component Id="OptionsHtmlFile" Guid="[PREENCHER_GUID_10]" Win64="yes">
+      <Component Id="OptionsHtmlFile" Guid="[PREENCHER_GUID_10]" Directory="EXTENSIONFOLDER" Win64="yes">
         <File 
-          Id="options.html" 
+          Id="OptionsHtml" 
           Source="$(var.ProjectDir)\source\extension\options.html" 
           KeyPath="yes" />
       </Component>
       
       <!-- Options JS -->
-      <Component Id="OptionsJsFile" Guid="[PREENCHER_GUID_11]" Win64="yes">
+      <Component Id="OptionsJsFile" Guid="[PREENCHER_GUID_11]" Directory="EXTENSIONFOLDER" Win64="yes">
         <File 
-          Id="options.js" 
+          Id="OptionsJs" 
           Source="$(var.ProjectDir)\source\extension\options.js" 
           KeyPath="yes" />
       </Component>
       
       <!-- Privacy Policy -->
-      <Component Id="PrivacyPolicyFile" Guid="[PREENCHER_GUID_12]" Win64="yes">
+      <Component Id="PrivacyPolicyFile" Guid="[PREENCHER_GUID_12]" Directory="EXTENSIONFOLDER" Win64="yes">
         <File 
-          Id="privacy_policy.html" 
+          Id="PrivacyPolicyHtml" 
           Source="$(var.ProjectDir)\source\extension\privacy-policy.html" 
           KeyPath="yes" />
       </Component>
       
       <!-- Offscreen HTML -->
-      <Component Id="OffscreenHtmlFile" Guid="[PREENCHER_GUID_13]" Win64="yes">
+      <Component Id="OffscreenHtmlFile" Guid="[PREENCHER_GUID_13]" Directory="EXTENSIONFOLDER" Win64="yes">
         <File 
-          Id="offscreen.html" 
+          Id="OffscreenHtml" 
           Source="$(var.ProjectDir)\source\extension\offscreen.html" 
           KeyPath="yes" />
       </Component>
       
       <!-- Offscreen JS -->
-      <Component Id="OffscreenJsFile" Guid="[PREENCHER_GUID_14]" Win64="yes">
+      <Component Id="OffscreenJsFile" Guid="[PREENCHER_GUID_14]" Directory="EXTENSIONFOLDER" Win64="yes">
         <File 
-          Id="offscreen.js" 
+          Id="OffscreenJs" 
           Source="$(var.ProjectDir)\source\extension\offscreen.js" 
           KeyPath="yes" />
       </Component>
       
       <!-- Ícones -->
-      <Component Id="Icon16File" Guid="[PREENCHER_GUID_15]" Win64="yes">
+      <Component Id="Icon16File" Guid="[PREENCHER_GUID_15]" Directory="ICONSFOLDER" Win64="yes">
         <File 
-          Id="icon16.png" 
+          Id="Icon16Png" 
           Source="$(var.ProjectDir)\source\extension\icons\icon16.png" 
           KeyPath="yes" />
       </Component>
       
-      <Component Id="Icon32File" Guid="[PREENCHER_GUID_16]" Win64="yes">
+      <Component Id="Icon32File" Guid="[PREENCHER_GUID_16]" Directory="ICONSFOLDER" Win64="yes">
         <File 
-          Id="icon32.png" 
+          Id="Icon32Png" 
           Source="$(var.ProjectDir)\source\extension\icons\icon32.png" 
           KeyPath="yes" />
       </Component>
       
-      <Component Id="Icon48File" Guid="[PREENCHER_GUID_17]" Win64="yes">
+      <Component Id="Icon48File" Guid="[PREENCHER_GUID_17]" Directory="ICONSFOLDER" Win64="yes">
         <File 
-          Id="icon48.png" 
+          Id="Icon48Png" 
           Source="$(var.ProjectDir)\source\extension\icons\icon48.png" 
           KeyPath="yes" />
       </Component>
       
-      <Component Id="Icon128File" Guid="[PREENCHER_GUID_18]" Win64="yes">
+      <Component Id="Icon128File" Guid="[PREENCHER_GUID_18]" Directory="ICONSFOLDER" Win64="yes">
         <File 
-          Id="icon128.png" 
+          Id="Icon128Png" 
           Source="$(var.ProjectDir)\source\extension\icons\icon128.png" 
           KeyPath="yes" />
       </Component>
