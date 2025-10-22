@@ -10,7 +10,7 @@ param(
     [string]$ExtensionId = "kmcpcjjddbhdgkaonaohpikkdgfejkgm",
     [string]$Manufacturer = "Alves Junior Maquinas e Equipamentos Ltda",
     [string]$CBCMToken = "2e0be2c0-4252-4c4d-a072-1f774f1b2edc",
-    [string]$WixPath = "",
+    [string]$WixPath = "C:\Users\User\Downloads\wix311-binaries",
     [switch]$CleanBuild
 )
 
