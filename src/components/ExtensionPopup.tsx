@@ -1,170 +1,264 @@
-import { useState } from "react";
-import { Shield, Pause, Play, Settings, Clock, AlertTriangle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
+import { useState, useEffect } from "react";
 
 const ExtensionPopup = () => {
   const [isMonitoring, setIsMonitoring] = useState(true);
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [lastReport, setLastReport] = useState<string>("Nunca");
+  const [threatsBlocked, setThreatsBlocked] = useState(0);
+  const [sitesAnalyzed, setSitesAnalyzed] = useState(0);
+  const [corporateMode, setCorporateMode] = useState(false);
 
-  const lastReportTime = new Date(Date.now() - 300000); // 5 minutes ago
+  useEffect(() => {
+    // Simular última análise há 5 minutos
+    const lastTime = new Date(Date.now() - 300000);
+    const now = new Date();
+    const diff = Math.floor((now.getTime() - lastTime.getTime()) / 60000);
+    
+    if (diff < 1) {
+      setLastReport('Agora');
+    } else if (diff < 60) {
+      setLastReport(`${diff}min atrás`);
+    } else {
+      const hours = Math.floor(diff / 60);
+      setLastReport(`${hours}h atrás`);
+    }
 
-  if (showOnboarding) {
-    return (
-      <Card className="w-80">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-3">
-            <div className="flex items-center space-x-2 p-3 rounded-full bg-primary/10">
-              <Shield className="w-8 h-8 text-primary" />
-            </div>
-          </div>
-          <CardTitle>Extensão CorpMonitor — Monitoramento Ativo</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="text-sm text-muted-foreground leading-relaxed">
-            Esta extensão coleta metadados de navegação e hashes de cookies em dispositivos 
-            corporativos para proteção de ativos e investigação de incidentes. Valores sensíveis 
-            são acessados apenas mediante justificativa aprovada e registro de auditoria.
-          </div>
-          
-          <div className="security-banner">
-            <div className="flex items-start space-x-2">
-              <AlertTriangle className="w-4 h-4 text-warning mt-0.5" />
-              <div className="text-sm">
-                <p className="font-medium text-warning-foreground">Aviso Legal</p>
-                <p className="text-xs text-warning-foreground/80 mt-1">
-                  O uso está condicionado às políticas corporativas de segurança e privacidade.
-                </p>
-              </div>
-            </div>
-          </div>
+    // Simular estatísticas
+    setThreatsBlocked(Math.floor(Math.random() * 10));
+    setSitesAnalyzed(Math.floor(Math.random() * 50));
+  }, []);
 
-          <div className="flex space-x-2 pt-2">
-            <Button 
-              className="flex-1" 
-              onClick={() => setShowOnboarding(false)}
-            >
-              Concordo
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => window.open('https://monitorcorporativo.com/privacy-policy.html', '_blank')}
-            >
-              Ver políticas
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const handleToggle = () => {
+    if (!corporateMode) {
+      setIsMonitoring(!isMonitoring);
+    }
+  };
+
+  const handleOpenConsole = () => {
+    window.open('/#/dashboard', '_blank');
+  };
+
+  const handleSettings = () => {
+    console.log('Abrir configurações');
+  };
+
+  const handlePrivacyPolicy = (e: React.MouseEvent) => {
+    e.preventDefault();
+    window.open('https://monitorcorporativo.com/privacy-policy.html', '_blank');
+  };
 
   return (
-    <Card className="w-80">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Shield className="w-6 h-6 text-primary" />
-            <div>
-              <CardTitle className="text-lg">CorpMonitor</CardTitle>
-              <p className="text-xs text-muted-foreground">Extensão Corporativa</p>
-            </div>
+    <div
+      style={{
+        width: '350px',
+        minHeight: '500px',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        color: 'white',
+        margin: 0,
+        padding: 0,
+        boxSizing: 'border-box',
+      }}
+    >
+      <div style={{ padding: '20px' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              background: 'rgba(255, 255, 255, 0.2)',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '16px',
+            }}
+          >
+            🛡️
           </div>
-          <Button variant="outline" size="sm">
-            <Settings className="w-4 h-4" />
-          </Button>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {/* Status Principal */}
-        <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-          <div className="flex items-center space-x-3">
-            <div className={`w-3 h-3 rounded-full ${isMonitoring ? 'bg-success animate-pulse' : 'bg-muted-foreground'}`} />
-            <div>
-              <div className="font-medium text-sm">
-                {isMonitoring ? 'Monitoramento Ativo' : 'Monitoramento Pausado'}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {isMonitoring ? 'Coletando metadados' : 'Coleta pausada'}
-              </div>
-            </div>
-          </div>
-          <Switch 
-            checked={isMonitoring} 
-            onCheckedChange={setIsMonitoring}
-            className="data-[state=checked]:bg-success"
-          />
+          <div style={{ fontSize: '18px', fontWeight: 600 }}>CorpMonitor</div>
         </div>
 
-        <Separator />
-
-        {/* Último Relatório */}
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2 text-sm">
-            <Clock className="w-4 h-4 text-muted-foreground" />
-            <span className="text-muted-foreground">Último relatório:</span>
-          </div>
-          <div className="text-sm font-mono bg-muted/50 p-2 rounded">
-            {lastReportTime.toLocaleString('pt-BR')}
-          </div>
-        </div>
-
-        {/* Status da Sessão */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="text-center p-2 bg-card border rounded">
-            <div className="text-lg font-bold text-success">4</div>
-            <div className="text-xs text-muted-foreground">Cookies hash</div>
-          </div>
-          <div className="text-center p-2 bg-card border rounded">
-            <div className="text-lg font-bold text-primary">12</div>
-            <div className="text-xs text-muted-foreground">Metadados</div>
-          </div>
-        </div>
-
-        {/* Toggle Rápido - Apenas Admin */}
-        <div className="security-banner">
-          <div className="text-xs">
-            <p className="font-medium">⚠️ Apenas administradores de dispositivo</p>
-            <p className="text-xs opacity-75 mt-1">
-              Controles avançados requerem privilégios elevados
+        {/* Status Section */}
+        {corporateMode ? (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '15px',
+              background: 'rgba(39, 174, 96, 0.2)',
+              borderRadius: '8px',
+              marginBottom: '20px',
+            }}
+          >
+            <strong style={{ fontSize: '14px' }}>🏢 Modo Corporativo</strong>
+            <p style={{ fontSize: '12px', marginTop: '5px', opacity: 0.9 }}>
+              Monitoramento sempre ativo
             </p>
           </div>
+        ) : (
+          <div
+            style={{
+              background: 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '12px',
+              padding: '16px',
+              marginBottom: '20px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '12px',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '14px', opacity: 0.9 }}>
+                  {isMonitoring ? '🛡️ Proteção Ativa' : 'Proteção Pausada'}
+                </div>
+                <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '8px' }}>
+                  Última análise: {lastReport}
+                </div>
+              </div>
+              <div
+                onClick={handleToggle}
+                style={{
+                  position: 'relative',
+                  width: '48px',
+                  height: '24px',
+                  background: isMonitoring ? '#4ade80' : 'rgba(255, 255, 255, 0.3)',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  transition: 'background 0.3s',
+                }}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '2px',
+                    left: isMonitoring ? '26px' : '2px',
+                    width: '20px',
+                    height: '20px',
+                    background: 'white',
+                    borderRadius: '50%',
+                    transition: 'left 0.3s',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Stats Grid */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '12px',
+            marginBottom: '20px',
+          }}
+        >
+          <div
+            style={{
+              background: 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '12px',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '20px', fontWeight: 600, marginBottom: '4px' }}>
+              {threatsBlocked}
+            </div>
+            <div style={{ fontSize: '12px', opacity: 0.8 }}>Ameaças Bloqueadas</div>
+          </div>
+          <div
+            style={{
+              background: 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '12px',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '20px', fontWeight: 600, marginBottom: '4px' }}>
+              {sitesAnalyzed}
+            </div>
+            <div style={{ fontSize: '12px', opacity: 0.8 }}>Sites Analisados</div>
+          </div>
         </div>
 
-        {/* Ações */}
-        <div className="flex space-x-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="flex-1"
-            onClick={() => window.open('/dashboard', '_blank')}
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+          <button
+            onClick={handleOpenConsole}
+            style={{
+              flex: 1,
+              padding: '12px 16px',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              background: 'rgba(255, 255, 255, 0.2)',
+              color: 'white',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+            }}
           >
-            Abrir Console
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => setShowOnboarding(true)}
+            🛡️ Central de Proteção
+          </button>
+          <button
+            onClick={handleSettings}
+            style={{
+              width: '40px',
+              padding: '12px 16px',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              background: 'rgba(255, 255, 255, 0.2)',
+              color: 'white',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+            }}
           >
-            <Settings className="w-4 h-4" />
-          </Button>
+            ⚙️
+          </button>
         </div>
 
         {/* Footer */}
-        <div className="text-xs text-muted-foreground text-center pt-2 border-t">
-          v1.0.0-PoC • <button 
-            onClick={() => window.open('https://monitorcorporativo.com/privacy-policy.html', '_blank')}
-            className="hover:text-primary underline cursor-pointer"
-          >
-            Política de privacidade
-          </button>
+        <div
+          style={{
+            borderTop: '1px solid rgba(255, 255, 255, 0.2)',
+            paddingTop: '16px',
+            fontSize: '12px',
+            opacity: 0.7,
+            textAlign: 'center',
+          }}
+        >
+          <div>Versão 1.0.0</div>
+          <div>
+            <a
+              href="#"
+              onClick={handlePrivacyPolicy}
+              style={{ color: 'white', textDecoration: 'none' }}
+            >
+              Política de Privacidade
+            </a>
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 };
 
