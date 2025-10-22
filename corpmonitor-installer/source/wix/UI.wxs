@@ -43,6 +43,8 @@ Escolha seu idioma preferido para o assistente de instalação:</Text>
       <!-- Fluxo de instalação -->
       <InstallUISequence>
         <Show Dialog="LanguageSelectDlg" Before="WelcomeDlg" />
+        <Show Dialog="ProgressDlg" After="ExecuteAction" />
+        <Show Dialog="ExitDlg" OnExit="success" />
       </InstallUISequence>
       
       <!-- Tela de Boas-Vindas -->
@@ -86,6 +88,52 @@ Escolha seu idioma preferido para o assistente de instalação:</Text>
         
         <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.ButtonCancel)">
           <Publish Event="EndDialog" Value="Exit">1</Publish>
+        </Control>
+      </Dialog>
+      
+      <!-- Diálogo de Progresso -->
+      <Dialog Id="ProgressDlg" Width="370" Height="270" Title="!(loc.ProgressTitle)" Modeless="yes">
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="25">
+          <Text>{\WixUI_Font_Title}!(loc.ProgressTitle)</Text>
+        </Control>
+        
+        <Control Id="StatusLabel" Type="Text" X="15" Y="40" Width="340" Height="20">
+          <Text>!(loc.ProgressDescription)</Text>
+        </Control>
+        
+        <Control Id="ProgressBar" Type="ProgressBar" X="15" Y="70" Width="340" Height="15" ProgressBlocks="yes" Text="!(loc.ProgressDescription)" />
+        
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.ButtonCancel)">
+          <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
+        </Control>
+      </Dialog>
+      
+      <!-- Diálogo de Confirmação de Cancelamento -->
+      <Dialog Id="CancelDlg" Width="260" Height="85" Title="!(loc.ProductName)" NoMinimize="yes">
+        <Control Id="Icon" Type="Icon" X="15" Y="15" Width="24" Height="24" ToolTip="Information icon" FixedSize="yes" IconSize="32" Text="WixUIInfoIco" />
+        <Control Id="Text" Type="Text" X="48" Y="15" Width="194" Height="30">
+          <Text>Are you sure you want to cancel the installation?</Text>
+        </Control>
+        <Control Id="Yes" Type="PushButton" X="100" Y="57" Width="56" Height="17" Default="yes" Cancel="yes" Text="Yes">
+          <Publish Event="EndDialog" Value="Return">1</Publish>
+        </Control>
+        <Control Id="No" Type="PushButton" X="164" Y="57" Width="56" Height="17" Text="No">
+          <Publish Event="EndDialog" Value="Return">1</Publish>
+        </Control>
+      </Dialog>
+      
+      <!-- Diálogo de Finalização -->
+      <Dialog Id="ExitDlg" Width="370" Height="270" Title="!(loc.FinishTitle)">
+        <Control Id="Title" Type="Text" X="135" Y="20" Width="220" Height="60" Transparent="yes">
+          <Text>{\WixUI_Font_Title}!(loc.FinishTitle)</Text>
+        </Control>
+        
+        <Control Id="Description" Type="Text" X="135" Y="80" Width="220" Height="100" Transparent="yes">
+          <Text>!(loc.FinishDescription)</Text>
+        </Control>
+        
+        <Control Id="Finish" Type="PushButton" X="304" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.ButtonFinish)">
+          <Publish Event="EndDialog" Value="Return">1</Publish>
         </Control>
       </Dialog>
       

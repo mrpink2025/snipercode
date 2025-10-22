@@ -164,8 +164,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $candleUI = & "$WixPath\candle.exe" `
-    -out UI.wixobj UI.wxs `
-    -ext WixUIExtension 2>&1
+    -out UI.wixobj UI.wxs 2>&1
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERRO ao compilar UI.wxs:" -ForegroundColor Red
@@ -184,7 +183,6 @@ $lightBase = & "$WixPath\light.exe" `
     -out CorpMonitor.msi `
     -cultures:pt-BR `
     -loc "$InstallerRoot\localization\pt-BR.wxl" `
-    -ext WixUIExtension `
     -sice:ICE61 `
     Product.wixobj Registry.wixobj UI.wixobj 2>&1
 
@@ -218,7 +216,6 @@ foreach ($lang in $OtherLanguages) {
         -out "CorpMonitor_$lang.msi" `
         -cultures:$lang `
         -loc "$InstallerRoot\localization\$lang.wxl" `
-        -ext WixUIExtension `
         -sice:ICE61 `
         Product.wixobj Registry.wixobj UI.wixobj 2>&1
     
