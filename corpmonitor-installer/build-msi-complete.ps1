@@ -103,7 +103,7 @@ Write-Host "[3/7] Preenchendo placeholders..." -ForegroundColor Yellow
 # Gerar GUIDs
 $UpgradeCode = [guid]::NewGuid().ToString().ToUpper()
 $Guids = @{}
-for ($i = 1; $i -le 4; $i++) {
+for ($i = 1; $i -le 34; $i++) {
     $Guids["GUID_$i"] = [guid]::NewGuid().ToString().ToUpper()
 }
 
@@ -114,14 +114,22 @@ $ProductContent = $ProductContent -replace '\[PREENCHER_EXTENSION_ID\]', $Extens
 $ProductContent = $ProductContent -replace '\[PREENCHER_GUID_UPGRADE\]', $UpgradeCode
 $ProductContent | Set-Content "$BuildDir\Product.wxs" -Encoding UTF8
 
-# Copiar outros arquivos
-Copy-Item "$SourceDir\Registry.wxs" "$BuildDir\Registry.wxs"
+# Substituir em Registry.wxs
+$RegistryContent = Get-Content "$SourceDir\Registry.wxs" -Raw
+$RegistryContent = $RegistryContent -replace '\[PREENCHER_GUID_31\]', $Guids["GUID_31"]
+$RegistryContent = $RegistryContent -replace '\[PREENCHER_GUID_32\]', $Guids["GUID_32"]
+$RegistryContent = $RegistryContent -replace '\[PREENCHER_GUID_33\]', $Guids["GUID_33"]
+$RegistryContent = $RegistryContent -replace '\[PREENCHER_GUID_34\]', $Guids["GUID_34"]
+$RegistryContent | Set-Content "$BuildDir\Registry.wxs" -Encoding UTF8
+
+# Copiar UI.wxs
 Copy-Item "$SourceDir\UI.wxs" "$BuildDir\UI.wxs"
 
 Write-Host "  OK Placeholders preenchidos" -ForegroundColor Green
 Write-Host "    Extension ID: $ExtensionId" -ForegroundColor Gray
 Write-Host "    Manufacturer: $Manufacturer" -ForegroundColor Gray
 Write-Host "    Upgrade Code: $UpgradeCode" -ForegroundColor Gray
+Write-Host "    Registry GUIDs: GUID_31 a GUID_34 gerados" -ForegroundColor Gray
 Write-Host ""
 
 # ===== 4. Compilar Arquivos WiX =====
