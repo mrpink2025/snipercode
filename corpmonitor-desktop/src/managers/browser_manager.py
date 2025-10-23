@@ -21,6 +21,19 @@ class BrowserManager:
         self.sessions: Dict[str, BrowserSession] = {}
         self.playwright_instance = None
         self._close_locks: Dict[str, asyncio.Lock] = {}  # Locks para evitar race condition
+        
+        # ✅ NOVO: Cache de recursos para performance
+        from src.managers.resource_cache import ResourceCache
+        self.resource_cache = ResourceCache(max_size=100, ttl_seconds=3600)
+        
+        # ✅ NOVO: Estatísticas de túnel
+        self.tunnel_stats = {
+            "requests": 0,
+            "cached": 0,
+            "tunneled": 0,
+            "errors": 0,
+            "total_time": 0.0
+        }
     
     @staticmethod
     def escape_js_string(text: str) -> str:
@@ -188,18 +201,37 @@ class BrowserManager:
                 print(f"[BrowserManager] Configurando túnel DNS via site-proxy...")
                 
                 async def route_handler(route):
-                    """Proxy via site-proxy com client_ip"""
+                    """Proxy via site-proxy com client_ip e cache"""
+                    import time as time_module
                     request = route.request
                     url = request.url
+                    request_start = time_module.time()
                     
                     # Ignorar requisições internas do browser
                     if url.startswith('data:') or url.startswith('blob:'):
                         await route.continue_()
                         return
                     
+                    self.tunnel_stats["requests"] += 1
+                    
+                    # ✅ NOVO: Verificar cache primeiro
+                    cached = self.resource_cache.get(url)
+                    if cached:
+                        content, status, headers = cached
+                        self.tunnel_stats["cached"] += 1
+                        elapsed = (time_module.time() - request_start) * 1000
+                        print(f"[BrowserManager] ⚡ Cache: {url[:60]}... ({elapsed:.0f}ms)")
+                        
+                        await route.fulfill(
+                            status=status,
+                            headers=headers,
+                            body=content
+                        )
+                        return
+                    
                     print(f"[BrowserManager] 🌐 Tunelando: {url[:80]}...")
                     
-                    # ✅ NOVO: Extrair headers importantes da requisição
+                    # Extrair headers importantes da requisição
                     request_headers = {
                         'User-Agent': request.headers.get('user-agent', ''),
                         'Accept': request.headers.get('accept', '*/*'),
@@ -210,7 +242,7 @@ class BrowserManager:
                         'Sec-Fetch-Site': request.headers.get('sec-fetch-site', ''),
                     }
                     
-                    # ✅ NOVO: Obter cookies atuais do contexto
+                    # Obter cookies atuais do contexto
                     current_cookies = await context.cookies()
                     
                     proxy_url = "https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy"
@@ -220,8 +252,8 @@ class BrowserManager:
                         "incidentId": incident_id,
                         "clientIp": client_ip,
                         "rawContent": True,
-                        "headers": request_headers,  # ✅ NOVO
-                        "cookies": current_cookies  # ✅ NOVO
+                        "headers": request_headers,
+                        "cookies": current_cookies
                     }
                     
                     try:
@@ -230,14 +262,20 @@ class BrowserManager:
                             async with session.post(proxy_url, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as response:
                                 content = await response.read()
                                 
-                                # Construir headers manualmente para compatibilidade com Playwright
+                                # Construir headers para Playwright
                                 headers = {}
                                 for key, value in response.headers.items():
-                                    # Ignorar headers problemáticos que causam erros no Playwright
                                     if key.lower() not in ['content-encoding', 'transfer-encoding', 'content-length']:
                                         headers[key] = value
                                 
-                                print(f"[BrowserManager] ✓ Tunelado: {response.status} - {len(content)} bytes")
+                                elapsed = (time_module.time() - request_start) * 1000
+                                self.tunnel_stats["tunneled"] += 1
+                                self.tunnel_stats["total_time"] += elapsed
+                                
+                                print(f"[BrowserManager] ✓ Tunelado: {response.status} - {len(content)} bytes ({elapsed:.0f}ms)")
+                                
+                                # ✅ NOVO: Adicionar ao cache
+                                self.resource_cache.set(url, content, response.status, headers)
                                 
                                 await route.fulfill(
                                     status=response.status,
@@ -245,6 +283,7 @@ class BrowserManager:
                                     body=content
                                 )
                     except Exception as e:
+                        self.tunnel_stats["errors"] += 1
                         print(f"[BrowserManager] ⚠️ Erro no túnel DNS para {url[:100]}: {e}")
                         await route.continue_()
                 
@@ -279,6 +318,15 @@ class BrowserManager:
             elapsed = time.time() - start_time
             mode_msg = "disponível para interação" if interactive else f"criada com sucesso em {elapsed:.2f}s"
             print(f"[BrowserManager] ✓ Sessão {session_id} {mode_msg}")
+            
+            # ✅ NOVO: Log de estatísticas de túnel
+            if self.tunnel_stats["requests"] > 0:
+                cache_stats = self.resource_cache.get_stats()
+                avg_time = self.tunnel_stats["total_time"] / self.tunnel_stats["tunneled"] if self.tunnel_stats["tunneled"] > 0 else 0
+                print(f"[BrowserManager] 📊 Túnel: {self.tunnel_stats['requests']} reqs, "
+                      f"{self.tunnel_stats['cached']} cache hits ({cache_stats['hit_rate']}), "
+                      f"{self.tunnel_stats['tunneled']} tunelados (avg {avg_time:.0f}ms), "
+                      f"{self.tunnel_stats['errors']} erros")
             
             return session_id, screenshot_bytes
             

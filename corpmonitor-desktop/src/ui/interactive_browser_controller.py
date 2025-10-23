@@ -352,11 +352,17 @@ class InteractiveBrowserController(ctk.CTkToplevel):
                 from src.managers.incident_manager import IncidentManager
                 incident_manager = IncidentManager(
                     supabase=self.auth_manager.supabase,
-                    user_id=self.auth_manager.current_user.id
+                    user_id=self.auth_manager.get_user_id()  # ✅ CORRIGIDO: usar método ao invés de atributo
                 )
-                incident_manager.mark_incident_as_viewed(self.incident['id'])
+                success = incident_manager.mark_incident_as_viewed(self.incident['id'])
+                if success:
+                    print(f"[Controller] ✓ Incidente marcado como visualizado")
+                else:
+                    print(f"[Controller] ⚠️ Falha ao marcar incidente como visualizado")
             except Exception as e:
                 print(f"[Controller] Erro ao marcar incidente como visualizado: {e}")
+                import traceback
+                traceback.print_exc()
         
         import threading
         threading.Thread(target=mark, daemon=True).start()

@@ -106,77 +106,85 @@ class RealtimeManager:
         self._run_polling_loop()
     
     async def _run_async_realtime(self):
-        """Executar conexão websocket assíncrona com keep-alive e reconexão"""
+        """Executar conexão websocket com reconexão robusta e exponential backoff"""
         try:
             from realtime import AsyncRealtimeClient
         except ImportError:
             logger.error("Módulo 'realtime' não encontrado, caindo para polling")
             raise
         
-        logger.info("🔌 Setting up WebSocket realtime connection...")
-        self._async_client = AsyncRealtimeClient(self._ws_url, self._supabase_key)
+        max_retries = 5
+        retry_count = 0
+        base_delay = 2
         
-        try:
-            await self._async_client.connect()
-            
-            ch_alerts = self._async_client.channel("db-changes-alerts")
-            ch_alerts.on_postgres_changes(
-                "INSERT",
-                schema="public",
-                table="admin_alerts",
-                callback=self._on_alert_payload,
-            )
-            
-            # Variável para rastrear status do canal
-            channel_status = {"status": "connecting"}
-            
-            def on_subscribe_status(status, err=None):
-                channel_status["status"] = status
-                logger.info(f"Realtime alerts channel: {status}")
-                if status == "TIMED_OUT":
-                    logger.warning("⚠️ Canal expirou, será reconectado")
-            
-            # Assinar canal
-            await ch_alerts.subscribe(on_subscribe_status)
-            
-            logger.info("✅ WebSocket subscribed to admin_alerts realtime channel")
-            self._notify_connection_status("websocket")
-            
-            # Keep-alive: enviar ping a cada 30 segundos
-            last_ping = time.time()
-            ping_interval = 30
-            
-            # Loop de escuta até pedirmos stop()
-            while not self._stop_event.is_set():
-                await asyncio.sleep(0.5)
-                
-                # Enviar keep-alive ping
-                current_time = time.time()
-                if current_time - last_ping >= ping_interval:
-                    try:
-                        # Ping básico para manter conexão viva
-                        await asyncio.sleep(0)  # Yield control
-                        last_ping = current_time
-                    except Exception as e:
-                        logger.warning(f"Erro ao enviar ping: {e}")
-                
-                # Verificar se canal expirou e tentar reconectar
-                if channel_status["status"] == "TIMED_OUT":
-                    logger.warning("⚠️ Reconectando canal após timeout...")
-                    try:
-                        await ch_alerts.unsubscribe()
-                        await ch_alerts.subscribe(on_subscribe_status)
-                        channel_status["status"] = "reconnecting"
-                    except Exception as e:
-                        logger.error(f"Erro ao reconectar: {e}")
-                        break
-                
-        finally:
+        while retry_count < max_retries and not self._stop_event.is_set():
+            ch_alerts = None
             try:
-                await self._async_client.close()
-            except Exception:
-                pass
-            logger.info("Websocket realtime encerrado")
+                logger.info(f"🔌 Conectando WebSocket (tentativa {retry_count + 1}/{max_retries})...")
+                self._async_client = AsyncRealtimeClient(self._ws_url, self._supabase_key)
+                await self._async_client.connect()
+                
+                # ✅ Criar NOVO canal a cada conexão
+                channel_name = f"db-changes-alerts-{int(time.time())}"
+                ch_alerts = self._async_client.channel(channel_name)
+                ch_alerts.on_postgres_changes(
+                    "INSERT",
+                    schema="public",
+                    table="admin_alerts",
+                    callback=self._on_alert_payload,
+                )
+                
+                channel_status = {"status": "connecting"}
+                
+                def on_subscribe_status(status, err=None):
+                    channel_status["status"] = status
+                    logger.info(f"Realtime channel: {status}")
+                    if status == "SUBSCRIBED":
+                        nonlocal retry_count
+                        retry_count = 0  # Reset em caso de sucesso
+                
+                await ch_alerts.subscribe(on_subscribe_status)
+                logger.info("✅ WebSocket connected successfully")
+                self._notify_connection_status("websocket")
+                
+                # Keep-alive loop
+                last_ping = time.time()
+                while not self._stop_event.is_set():
+                    await asyncio.sleep(0.5)
+                    
+                    if time.time() - last_ping >= 30:
+                        last_ping = time.time()
+                    
+                    # ✅ Detectar timeout e SAIR para reconectar
+                    if channel_status["status"] == "TIMED_OUT":
+                        logger.warning("⚠️ Canal expirou, iniciando reconexão...")
+                        raise ConnectionError("Channel timed out")
+                        
+            except Exception as e:
+                logger.error(f"Erro no WebSocket: {e}")
+                retry_count += 1
+                
+                if retry_count < max_retries:
+                    delay = min(base_delay * (2 ** retry_count), 60)
+                    logger.info(f"Aguardando {delay}s antes de reconectar...")
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error("❌ Máximo de tentativas atingido, caindo para polling")
+                    break
+            finally:
+                # ✅ Limpeza adequada
+                try:
+                    if ch_alerts:
+                        await ch_alerts.unsubscribe()
+                except:
+                    pass
+                try:
+                    if self._async_client:
+                        await self._async_client.close()
+                except:
+                    pass
+        
+        logger.info("WebSocket finalizado")
     
     def _run_polling_loop(self):
         """Fallback: polling manual do banco de dados"""

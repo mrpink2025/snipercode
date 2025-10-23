@@ -184,18 +184,53 @@ class IncidentManager:
             return {"total": 0, "critical": 0, "resolved_today": 0, "in_progress": 0}
     
     def mark_incident_as_viewed(self, incident_id: str) -> bool:
-        """Marcar incidente como visualizado"""
+        """Marcar incidente como visualizado com validação robusta"""
         try:
             from src.utils.logger import logger
+            
+            # ✅ Validar que incident_id é válido
+            if not incident_id or not isinstance(incident_id, str):
+                logger.error(f"incident_id inválido: {incident_id}")
+                return False
+            
             logger.info(f"Marcando incidente {incident_id} como visualizado")
             
-            response = self.supabase.table("incidents")\
-                .update({"viewed_at": datetime.now().isoformat()})\
+            # ✅ Verificar se incidente existe antes de atualizar
+            check_response = self.supabase.table("incidents")\
+                .select("id")\
                 .eq("id", incident_id)\
+                .maybeSingle()\
                 .execute()
             
-            logger.info(f"✓ Incidente {incident_id} marcado como visualizado")
-            return bool(response.data)
+            if not check_response.data:
+                logger.warning(f"⚠️ Incidente {incident_id} não encontrado")
+                return False
+            
+            # ✅ Atualizar com retry em caso de falha temporária
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    response = self.supabase.table("incidents")\
+                        .update({"viewed_at": datetime.now().isoformat()})\
+                        .eq("id", incident_id)\
+                        .execute()
+                    
+                    if response.data:
+                        logger.info(f"✓ Incidente {incident_id} marcado como visualizado")
+                        logger.info(f"Incidente {incident_id} marcado como visualizado: {bool(response.data)}")
+                        return True
+                    else:
+                        logger.warning(f"⚠️ Update retornou vazio (tentativa {attempt + 1}/{max_retries})")
+                        if attempt < max_retries - 1:
+                            import time
+                            time.sleep(0.5 * (attempt + 1))
+                except Exception as retry_error:
+                    logger.warning(f"⚠️ Tentativa {attempt + 1}/{max_retries} falhou: {retry_error}")
+                    if attempt == max_retries - 1:
+                        raise
+            
+            return False
+            
         except Exception as e:
             from src.utils.logger import logger
             logger.error(f"Erro ao marcar incidente como visualizado: {e}", exc_info=True)
