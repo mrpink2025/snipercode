@@ -243,7 +243,7 @@ class MachineManager:
             logger.error(f"Erro ao buscar alertas: {e}", exc_info=True)
             return []
     
-    def get_critical_domains(self) -> List[str]:
+    async def get_critical_domains(self) -> List[str]:
         """
         Buscar lista de domínios marcados como críticos
         
@@ -268,7 +268,7 @@ class MachineManager:
             logger.error(f"Erro ao buscar domínios críticos: {e}", exc_info=True)
             return []
     
-    def check_machine_has_critical_access(
+    async def check_machine_has_critical_access(
         self, 
         machine_id: str, 
         critical_domains: List[str]
