@@ -1877,6 +1877,12 @@ async function closeOffscreenDocument() {
 async function handleTunnelFetchCommand(data) {
   const { command_id, target_url, method, headers, body, follow_redirects } = data.payload || {};
   
+  // ✅ Validação crítica: command_id deve existir
+  if (!command_id) {
+    log('error', '❌ [TUNNEL] command_id não fornecido', data);
+    return;
+  }
+  
   log('info', `🌐 [TUNNEL] Requisição recebida`, {
     command_id,
     url: target_url,
@@ -2122,7 +2128,7 @@ async function sendTunnelResult(command_id, result) {
         'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
       },
       body: JSON.stringify({
-        command_id,
+        command_id: command_id,  // ✅ Explícito para garantir que não seja undefined
         machine_id: machineId,
         ...result
       })
