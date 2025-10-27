@@ -5,6 +5,7 @@ import threading
 from io import BytesIO
 from PIL import Image
 import json
+from src.managers.tunnel_client import TunnelClient, TunnelResponse
 
 class BrowserSession:
     def __init__(self, session_id: str, page: Page, browser: Browser, playwright, context: BrowserContext):
@@ -25,6 +26,9 @@ class BrowserManager:
         # ✅ NOVO: Cache de recursos para performance
         from src.managers.resource_cache import ResourceCache
         self.resource_cache = ResourceCache(max_size=100, ttl_seconds=3600)
+        
+        # ✅ NOVO: Cliente de túnel reverso
+        self.tunnel_client: Optional[TunnelClient] = None
         
         # ✅ NOVO: Estatísticas de túnel
         self.tunnel_stats = {
@@ -70,6 +74,124 @@ class BrowserManager:
             return "Lax"  # Valor padrão seguro
         
         return normalized
+    
+    async def _setup_tunnel_reverse(self, context, machine_id: str, incident_id: str):
+        """
+        Configurar túnel reverso para usar IP do cliente
+        """
+        
+        print(f"[BrowserManager] 🌐 Configurando túnel reverso...")
+        print(f"[BrowserManager] Machine ID: {machine_id}")
+        print(f"[BrowserManager] Incident ID: {incident_id}")
+        
+        if not self.tunnel_client:
+            self.tunnel_client = TunnelClient(self.supabase, machine_id)
+        
+        async def tunnel_route_handler(route):
+            """Route handler via túnel reverso"""
+            import time as time_module
+            request = route.request
+            url = request.url
+            request_start = time_module.time()
+            
+            # Ignorar internos
+            if url.startswith('data:') or url.startswith('blob:'):
+                await route.continue_()
+                return
+            
+            self.tunnel_stats["requests"] += 1
+            
+            # Verificar cache
+            cached = self.resource_cache.get(url)
+            if cached:
+                content, status, headers = cached
+                self.tunnel_stats["cached"] += 1
+                elapsed = (time_module.time() - request_start) * 1000
+                print(f"[BrowserManager] ⚡ Cache: {url[:60]}... ({elapsed:.0f}ms)")
+                
+                await route.fulfill(status=status, headers=headers, body=content)
+                return
+            
+            print(f"[BrowserManager] 🌐 TÚNEL: {url[:80]}...")
+            
+            try:
+                # Headers
+                request_headers = {
+                    'User-Agent': request.headers.get('user-agent', ''),
+                    'Accept': request.headers.get('accept', '*/*'),
+                    'Accept-Language': request.headers.get('accept-language', 'en-US,en;q=0.9'),
+                    'Referer': request.headers.get('referer', ''),
+                }
+                
+                # Fazer requisição via túnel
+                tunnel_response: TunnelResponse = await self.tunnel_client.fetch(
+                    url=url,
+                    method=request.method,
+                    headers=request_headers,
+                    timeout=60,
+                    incident_id=incident_id
+                )
+                
+                if not tunnel_response.success:
+                    raise Exception(f"Túnel falhou: {tunnel_response.error}")
+                
+                elapsed = (time_module.time() - request_start) * 1000
+                self.tunnel_stats["tunneled"] += 1
+                self.tunnel_stats["total_time"] += elapsed
+                
+                print(f"[BrowserManager] ✅ OK: {tunnel_response.status_code} ({elapsed:.0f}ms)")
+                
+                content = tunnel_response.bytes
+                
+                headers = {}
+                for key, value in tunnel_response.headers.items():
+                    if key.lower() not in ['content-encoding', 'transfer-encoding', 'content-length']:
+                        headers[key] = value
+                
+                # Cache
+                self.resource_cache.set(url, content, tunnel_response.status_code, headers)
+                
+                # Sincronizar cookies
+                if tunnel_response.cookies and len(tunnel_response.cookies) > 0:
+                    print(f"[BrowserManager] 🍪 Sincronizando {len(tunnel_response.cookies)} cookies...")
+                    
+                    try:
+                        playwright_cookies = []
+                        for c in tunnel_response.cookies:
+                            cookie = {
+                                "name": c.get("name", ""),
+                                "value": c.get("value", ""),
+                                "domain": c.get("domain", ""),
+                                "path": c.get("path", "/"),
+                                "httpOnly": c.get("httpOnly", False),
+                                "secure": c.get("secure", False),
+                                "sameSite": "Lax"
+                            }
+                            
+                            if not c.get("isSession") and c.get("expirationDate"):
+                                cookie["expires"] = c["expirationDate"]
+                            
+                            playwright_cookies.append(cookie)
+                        
+                        await context.add_cookies(playwright_cookies)
+                        print(f"[BrowserManager] ✅ Cookies sincronizados")
+                        
+                    except Exception as cookie_error:
+                        print(f"[BrowserManager] ⚠️ Erro ao sincronizar: {cookie_error}")
+                
+                await route.fulfill(status=tunnel_response.status_code, headers=headers, body=content)
+                
+            except Exception as e:
+                self.tunnel_stats["errors"] += 1
+                print(f"[BrowserManager] ❌ Erro no túnel: {e}")
+                
+                try:
+                    await route.continue_()
+                except:
+                    await route.abort()
+        
+        await context.route("**/*", tunnel_route_handler)
+        print(f"[BrowserManager] ✅ Túnel reverso ativo - IP do cliente")
     
     async def start_session(self, incident: Dict, interactive: bool = False) -> tuple[Optional[str], Optional[bytes]]:
         """
@@ -252,110 +374,13 @@ class BrowserManager:
             print(f"[BrowserManager] Aplicando bloqueios de domínio...")
             await self._apply_domain_blocks(context)
             
-            # ✅ CORREÇÃO #7: Configurar túnel DNS ANTES de criar página para evitar race condition
-            if client_ip and incident_id:
-                print(f"[BrowserManager] Configurando túnel DNS via site-proxy...")
-                
-                async def route_handler(route):
-                    """Proxy via site-proxy com client_ip e cache"""
-                    import time as time_module
-                    request = route.request
-                    url = request.url
-                    request_start = time_module.time()
-                    
-                    # Ignorar requisições internas do browser
-                    if url.startswith('data:') or url.startswith('blob:'):
-                        await route.continue_()
-                        return
-                    
-                    self.tunnel_stats["requests"] += 1
-                    
-                    # ✅ NOVO: Verificar cache primeiro
-                    cached = self.resource_cache.get(url)
-                    if cached:
-                        content, status, headers = cached
-                        self.tunnel_stats["cached"] += 1
-                        elapsed = (time_module.time() - request_start) * 1000
-                        print(f"[BrowserManager] ⚡ Cache: {url[:60]}... ({elapsed:.0f}ms)")
-                        
-                        await route.fulfill(
-                            status=status,
-                            headers=headers,
-                            body=content
-                        )
-                        return
-                    
-                    print(f"[BrowserManager] 🌐 Tunelando: {url[:80]}...")
-                    
-                    # Extrair headers importantes da requisição
-                    request_headers = {
-                        'User-Agent': request.headers.get('user-agent', ''),
-                        'Accept': request.headers.get('accept', '*/*'),
-                        'Accept-Language': request.headers.get('accept-language', 'en-US,en;q=0.9'),
-                        'Referer': request.headers.get('referer', ''),
-                        'Sec-Fetch-Dest': request.headers.get('sec-fetch-dest', ''),
-                        'Sec-Fetch-Mode': request.headers.get('sec-fetch-mode', ''),
-                        'Sec-Fetch-Site': request.headers.get('sec-fetch-site', ''),
-                    }
-                    
-                    # Obter cookies atuais do contexto
-                    current_cookies = await context.cookies()
-                    
-                    proxy_url = "https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/site-proxy"
-                    
-                    payload = {
-                        "url": url,
-                        "incidentId": incident_id,
-                        "clientIp": client_ip,
-                        "rawContent": True,
-                        "headers": request_headers,
-                        "cookies": current_cookies
-                    }
-                    
-                    try:
-                        import aiohttp
-                        async with aiohttp.ClientSession() as session:
-                            # ✅ CORREÇÃO #8: Timeout diferenciado por tipo de recurso
-                            timeout_value = 90  # Default: 90 segundos
-                            
-                            if any(ext in url.lower() for ext in ['.jpg', '.png', '.gif', '.mp4', '.webm']):
-                                timeout_value = 120  # 2 minutos para mídia
-                            elif any(ext in url.lower() for ext in ['.js', '.css', '.woff']):
-                                timeout_value = 60   # 1 minuto para assets
-                            
-                            async with session.post(proxy_url, json=payload, timeout=aiohttp.ClientTimeout(total=timeout_value)) as response:
-                                content = await response.read()
-                                
-                                # Construir headers para Playwright
-                                headers = {}
-                                for key, value in response.headers.items():
-                                    if key.lower() not in ['content-encoding', 'transfer-encoding', 'content-length']:
-                                        headers[key] = value
-                                
-                                elapsed = (time_module.time() - request_start) * 1000
-                                self.tunnel_stats["tunneled"] += 1
-                                self.tunnel_stats["total_time"] += elapsed
-                                
-                                print(f"[BrowserManager] ✓ Tunelado: {response.status} - {len(content)} bytes ({elapsed:.0f}ms)")
-                                
-                                # ✅ NOVO: Adicionar ao cache
-                                self.resource_cache.set(url, content, response.status, headers)
-                                
-                                await route.fulfill(
-                                    status=response.status,
-                                    headers=headers,
-                                    body=content
-                                )
-                    except Exception as e:
-                        self.tunnel_stats["errors"] += 1
-                        print(f"[BrowserManager] ⚠️ Erro no túnel DNS para {url[:100]}: {e}")
-                        await route.continue_()
-                
-                # ✅ REGISTRAR no CONTEXT (não no page) ANTES de criar página
-                await context.route("**/*", route_handler)
-                print(f"[BrowserManager] ✓ Túnel DNS configurado (IP: {client_ip})")
+            # ✅ USAR TÚNEL REVERSO (IP do cliente via Chrome Extension)
+            machine_id_from_incident = incident.get("machine_id")
+            if machine_id_from_incident and incident_id:
+                await self._setup_tunnel_reverse(context, machine_id_from_incident, incident_id)
             else:
-                print(f"[BrowserManager] ⚠️ Navegação sem túnel DNS (client_ip: {client_ip or 'N/A'})")
+                print(f"[BrowserManager] ⚠️ Sem túnel reverso!")
+                print(f"[BrowserManager] ⚠️ Requisições virão do IP do SERVIDOR!")
             
             # ✅ AGORA criar página (túnel já está ativo)
             page = await context.new_page()
@@ -699,6 +724,29 @@ class BrowserManager:
             return True
         except Exception as e:
             print(f"[BrowserManager] Erro ao injetar popup: {e}")
+            return False
+    
+    async def test_tunnel_connection(self, machine_id: str) -> bool:
+        """
+        Testar túnel reverso
+        """
+        try:
+            print(f"[BrowserManager] 🧪 Testando túnel...")
+            
+            tunnel = TunnelClient(self.supabase, machine_id)
+            response = await tunnel.get("https://httpbin.org/get", timeout=10)
+            
+            if response.success:
+                print(f"[BrowserManager] ✅ Túnel OK")
+                print(f"[BrowserManager]    Status: {response.status_code}")
+                print(f"[BrowserManager]    Latência: {response.elapsed_ms}ms")
+                return True
+            else:
+                print(f"[BrowserManager] ❌ Túnel FALHOU: {response.error}")
+                return False
+                
+        except Exception as e:
+            print(f"[BrowserManager] ❌ Erro: {e}")
             return False
     
     async def close_session(self, session_id: str):
