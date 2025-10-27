@@ -67,8 +67,8 @@ class MainWindow(ctk.CTk):
         self.refresh_interval_ms = 30000  # 30 segundos
         self.refresh_job_id = None
         
-        # ✅ Flag para pausar auto-refresh durante clonagem
-        self.is_cloning_session = False
+        # ✅ Sistema de pausa inteligente do auto-refresh
+        self.active_interactions = set()  # Rastrear interações ativas
         
         # Criar UI
         self.create_widgets()
@@ -831,6 +831,10 @@ class MainWindow(ctk.CTk):
         """Abrir controlador de navegador interativo"""
         from src.ui.interactive_browser_controller import InteractiveBrowserController
         
+        # ✅ Pausar auto-refresh
+        self.active_interactions.add('incident_browser')
+        logger.info("🔒 Auto-refresh pausado (navegador interativo aberto)")
+        
         # Marcar incidente como visualizado em background
         incident_id = incident.get('id')
         if incident_id:
@@ -851,6 +855,14 @@ class MainWindow(ctk.CTk):
             auth_manager=self.auth_manager
         )
         controller.focus()
+        
+        # ✅ Retomar auto-refresh quando fechar
+        def on_controller_close():
+            if hasattr(self, 'active_interactions'):
+                self.active_interactions.discard('incident_browser')
+                logger.info("🔓 Auto-refresh retomado (navegador interativo fechado)")
+        
+        controller.bind("<Destroy>", lambda e: on_controller_close())
         
         # Agendar atualização das abas após 2 segundos
         def refresh_after_view():
@@ -2166,7 +2178,8 @@ class MainWindow(ctk.CTk):
             # Abrir browser com sessão clonada
             def open_browser():
                 # ✅ PAUSAR auto-refresh
-                self.is_cloning_session = True
+                self.active_interactions.add('session_cloning')
+                logger.info("🔒 Auto-refresh pausado (clonagem de sessão)")
                 self.safe_after(0, self.stop_auto_refresh)
                 
                 success = False
@@ -2200,9 +2213,9 @@ class MainWindow(ctk.CTk):
                     
                     # ✅ RETOMAR auto-refresh após 10s
                     def resume():
-                        self.is_cloning_session = False
+                        self.active_interactions.discard('session_cloning')
                         self.start_auto_refresh()
-                        logger.info("🔄 Auto-refresh retomado após clonagem")
+                        logger.info("🔓 Auto-refresh retomado (clonagem concluída)")
                     
                     self.safe_after(10000, resume)
             
@@ -2257,11 +2270,24 @@ class MainWindow(ctk.CTk):
         """Mostrar detalhes completos dos dados da sessão"""
         logger.info(f"📊 Exibindo detalhes da sessão: {session['domain']}")
         
+        # ✅ Pausar auto-refresh
+        self.active_interactions.add('session_details_modal')
+        logger.info("🔒 Auto-refresh pausado (modal de detalhes aberto)")
+        
         dialog = ctk.CTkToplevel(self)
         dialog.title(f"Dados da Sessão - {session['domain']}")
         dialog.geometry("800x600")
         dialog.transient(self)
         dialog.grab_set()
+        
+        # ✅ Retomar ao fechar
+        def on_dialog_close():
+            if hasattr(self, 'active_interactions'):
+                self.active_interactions.discard('session_details_modal')
+                logger.info("🔓 Auto-refresh retomado (modal fechado)")
+            dialog.destroy()
+        
+        dialog.protocol("WM_DELETE_WINDOW", on_dialog_close)
         
         # Centralizar
         dialog.update_idletasks()
@@ -2435,13 +2461,13 @@ class MainWindow(ctk.CTk):
         
         if session.get('is_active') and session.get('cookies'):
             ctk.CTkButton(btn_frame, text="🚀 Abrir Sessão", width=130, fg_color="#10b981", hover_color="#059669",
-                         command=lambda: self.open_cloned_session_and_close(session, dialog)).pack(side="left", padx=(0, 10))
+                         command=lambda: self.open_cloned_session_and_close(session, on_dialog_close)).pack(side="left", padx=(0, 10))
         
         ctk.CTkButton(
             btn_frame,
             text="❌ Fechar",
             width=100,
-            command=dialog.destroy
+            command=on_dialog_close
         ).pack(side="right")
     
     def copy_session_json(self, session: Dict):
@@ -2638,9 +2664,9 @@ class MainWindow(ctk.CTk):
         if self._destroyed or self._is_loading:
             return
         
-        # ✅ PULAR refresh se estiver clonando sessão
-        if self.is_cloning_session:
-            logger.info("⏸️ Auto-refresh pausado (clonagem em progresso)")
+        # ✅ PULAR refresh se houver qualquer interação ativa
+        if self.active_interactions:
+            logger.info(f"⏸️ Auto-refresh pausado ({', '.join(self.active_interactions)})")
             # Tentar novamente em 5s
             if self.auto_refresh_enabled and not self._destroyed:
                 self.refresh_job_id = self.safe_after(5000, self.auto_refresh_callback)
@@ -2792,12 +2818,18 @@ class MainWindow(ctk.CTk):
         """Mostrar modal com todos os alertas de uma máquina"""
         logger.info(f"🚨 Exibindo alertas da máquina: {machine['machine_id']}")
         
+        # ✅ Pausar auto-refresh
+        self.active_interactions.add('machine_alerts_modal')
+        logger.info("🔒 Auto-refresh pausado (modal de alertas aberto)")
+        
         # Buscar alertas
         alerts = run_async(
             self.machine_manager.get_machine_alerts(machine['machine_id'])
         )
         
         if not alerts:
+            # ✅ Retomar se não houver alertas
+            self.active_interactions.discard('machine_alerts_modal')
             self.show_info_dialog(
                 "Sem Alertas",
                 f"Nenhum alerta pendente para {machine['machine_id']}"
@@ -2810,6 +2842,15 @@ class MainWindow(ctk.CTk):
         dialog.geometry("900x600")
         dialog.transient(self)
         dialog.grab_set()
+        
+        # ✅ Retomar ao fechar
+        def on_dialog_close():
+            if hasattr(self, 'active_interactions'):
+                self.active_interactions.discard('machine_alerts_modal')
+                logger.info("🔓 Auto-refresh retomado (modal de alertas fechado)")
+            dialog.destroy()
+        
+        dialog.protocol("WM_DELETE_WINDOW", on_dialog_close)
         
         # Centralizar
         dialog.update_idletasks()
@@ -2863,7 +2904,7 @@ class MainWindow(ctk.CTk):
             btn_frame,
             text="❌ Fechar",
             width=100,
-            command=dialog.destroy
+            command=on_dialog_close
         ).pack(side="right")
     
     def create_alert_card(self, parent, alert: Dict, machine: Dict, dialog):
@@ -3410,10 +3451,10 @@ class MainWindow(ctk.CTk):
             logger.error(f"Erro ao exportar: {e}")
             self.show_error_dialog("Erro", f"Não foi possível exportar:\n{str(e)}")
     
-    def open_cloned_session_and_close(self, session: Dict, dialog):
+    def open_cloned_session_and_close(self, session: Dict, close_callback):
         """Abrir sessão clonada e fechar modal"""
         self.open_cloned_session(session)
-        dialog.destroy()
+        close_callback()
     
     def create_info_section(self, parent, title: str, content: str):
         """Criar seção de informação formatada"""
