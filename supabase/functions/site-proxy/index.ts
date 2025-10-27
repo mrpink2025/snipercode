@@ -1532,13 +1532,40 @@ const runtimePatchScript = `
 
   } catch (error) {
     console.error('Site proxy error:', error);
+    console.error('Error stack:', error.stack);
+    
+    // ✅ CORREÇÃO #4: Capturar contexto da requisição para debug
+    let requestContext: any = { timestamp: new Date().toISOString() };
+    
+    try {
+      const body = await req.clone().json();
+      requestContext = {
+        url: body.url,
+        incidentId: body.incidentId,
+        clientIp: body.clientIp,
+        cookieCount: body.cookies?.length || 0,
+        hasHeaders: !!body.headers,
+        rawContent: body.rawContent,
+        timestamp: new Date().toISOString()
+      };
+    } catch (parseError) {
+      // Se falhar ao parsear JSON, pegar da URL
+      const url = new URL(req.url);
+      requestContext.requestUrl = url.toString();
+      requestContext.params = Object.fromEntries(url.searchParams);
+      requestContext.parseError = parseError.message;
+    }
+    
+    console.error('❌ Request context:', JSON.stringify(requestContext, null, 2));
+    
     const errorMessage = error instanceof Error ? error.message : 'Internal server error';
-    const errorDetails = error instanceof Error ? error.toString() : String(error);
+    const errorDetails = error instanceof Error ? error.stack : String(error);
     
     return new Response(
       JSON.stringify({ 
         error: errorMessage,
-        details: errorDetails
+        details: errorDetails,
+        context: requestContext
       }), 
       {
         status: 500,

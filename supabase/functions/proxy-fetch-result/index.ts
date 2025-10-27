@@ -21,8 +21,16 @@ serve(async (req) => {
     console.log(`📥 [ProxyFetch] Result received for command: ${command_id}, success: ${success}`);
     console.log(`📊 [ProxyFetch] HTML size: ${html_content?.length || 0} bytes, URL: ${url}`);
 
-    // Warn if HTML is too large (but still allow it)
-    if (html_content && html_content.length > 100000) {
+    // ✅ CORREÇÃO #9: Validação e truncamento se necessário
+    let finalHtmlContent = html_content;
+    let wasTruncated = false;
+
+    if (html_content && html_content.length > 5000000) {
+      // Limitar a 5MB
+      console.warn(`⚠️ [ProxyFetch] HTML muito grande (${html_content.length} bytes), truncando para 5MB`);
+      finalHtmlContent = html_content.substring(0, 5000000) + '\n\n<!-- TRUNCADO POR TAMANHO -->';
+      wasTruncated = true;
+    } else if (html_content && html_content.length > 100000) {
       console.warn(`⚠️ [ProxyFetch] Large HTML detected: ${html_content.length} bytes`);
     }
 
@@ -33,7 +41,7 @@ serve(async (req) => {
         command_id,
         machine_id,
         url,
-        html_content,
+        html_content: finalHtmlContent,
         status_code,
         success,
         error
