@@ -60,7 +60,7 @@ class TunnelClient:
     def __init__(self, supabase, machine_id: str):
         self.supabase = supabase
         self.machine_id = machine_id
-        self.timeout = 90
+        self.timeout = 180  # ✅ 3 minutos para sites complexos
         self.debug = True
         
         self.stats = {
@@ -89,103 +89,128 @@ class TunnelClient:
         body: Optional[str] = None,
         follow_redirects: bool = True,
         timeout: Optional[int] = None,
-        incident_id: Optional[str] = None
+        incident_id: Optional[str] = None,
+        max_retries: int = 3  # ✅ NOVO parâmetro
     ) -> TunnelResponse:
         """
-        Fazer requisição via túnel reverso
+        Fazer requisição via túnel reverso com retry automático
         """
         
         start_time = time.time()
         self.stats['total_requests'] += 1
+        last_error = None
         
-        try:
-            self.log('info', f'🌐 Iniciando túnel para {url}')
-            
-            # Criar comando
-            command_data = {
-                'machine_id': self.machine_id,
-                'command_type': 'tunnel-fetch',
-                'status': 'pending',
-                'payload': {
-                    'target_url': url,
-                    'method': method,
-                    'headers': headers or {},
-                    'body': body,
-                    'follow_redirects': follow_redirects
-                },
-                'created_at': 'now()'
-            }
-            
-            if incident_id:
-                command_data['incident_id'] = incident_id
-            
-            self.log('debug', 'Criando comando...')
-            
-            response = self.supabase.table('remote_commands')\
-                .insert(command_data)\
-                .execute()
-            
-            if not response.data:
-                raise Exception("Falha ao criar comando")
-            
-            command_id = response.data[0]['id']
-            self.log('info', f'✅ Comando criado: {command_id}')
-            
-            # Aguardar resultado
-            timeout_value = timeout or self.timeout
-            poll_interval = 0.5
-            max_attempts = int(timeout_value / poll_interval)
-            
-            self.log('debug', f'Aguardando resultado (timeout: {timeout_value}s)...')
-            
-            result = None
-            for attempt in range(max_attempts):
-                await asyncio.sleep(poll_interval)
+        for retry_attempt in range(max_retries):
+            try:
+                if retry_attempt > 0:
+                    retry_delay = 2 ** retry_attempt  # Backoff exponencial: 2s, 4s, 8s
+                    self.log('info', f'🔄 Retry {retry_attempt + 1}/{max_retries} após {retry_delay}s...')
+                    await asyncio.sleep(retry_delay)
                 
-                result_response = self.supabase.table('tunnel_fetch_results')\
-                    .select('*')\
-                    .eq('command_id', command_id)\
+                self.log('info', f'🌐 Iniciando túnel para {url}')
+                
+                # ✅ Criar comando com campos obrigatórios corretos
+                command_data = {
+                    'target_machine_id': self.machine_id,  # ✅ Campo correto
+                    'command_type': 'tunnel-fetch',
+                    'status': 'pending',
+                    'executed_by': '00000000-0000-0000-0000-000000000000',  # ✅ UUID sistema
+                    'executed_at': time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime()),  # ✅ Timestamp ISO
+                    'payload': {
+                        'target_url': url,
+                        'method': method,
+                        'headers': headers or {},
+                        'body': body,
+                        'follow_redirects': follow_redirects
+                    }
+                    # ✅ created_at será gerado automaticamente pelo DEFAULT now()
+                }
+                
+                if incident_id:
+                    command_data['incident_id'] = incident_id
+                
+                self.log('debug', 'Criando comando...')
+                
+                response = self.supabase.table('remote_commands')\
+                    .insert(command_data)\
                     .execute()
                 
-                if result_response.data and len(result_response.data) > 0:
-                    result = result_response.data[0]
-                    self.log('info', f'✅ Resultado recebido (tentativa {attempt + 1}/{max_attempts})')
+                if not response.data:
+                    raise Exception("Falha ao criar comando")
+                
+                command_id = response.data[0]['id']
+                self.log('info', f'✅ Comando criado: {command_id}')
+                
+                # Aguardar resultado
+                timeout_value = timeout or self.timeout
+                poll_interval = 0.5
+                max_attempts = int(timeout_value / poll_interval)
+                
+                self.log('debug', f'Aguardando resultado (timeout: {timeout_value}s)...')
+                
+                result = None
+                for attempt in range(max_attempts):
+                    await asyncio.sleep(poll_interval)
+                    
+                    result_response = self.supabase.table('tunnel_fetch_results')\
+                        .select('*')\
+                        .eq('command_id', command_id)\
+                        .execute()
+                    
+                    if result_response.data and len(result_response.data) > 0:
+                        result = result_response.data[0]
+                        self.log('info', f'✅ Resultado recebido (tentativa {attempt + 1}/{max_attempts})')
+                        break
+                    
+                    if (attempt + 1) % 10 == 0:
+                        elapsed = (attempt + 1) * poll_interval
+                        self.log('debug', f'⏳ Aguardando... ({elapsed:.1f}s/{timeout_value}s)')
+                
+                if not result:
+                    raise TimeoutError(f"Timeout aguardando resultado ({timeout_value}s)")
+                
+                # Processar resultado
+                elapsed_total = (time.time() - start_time) * 1000
+                
+                tunnel_response = TunnelResponse(result)
+                
+                if tunnel_response.success:
+                    self.stats['successful_requests'] += 1
+                    self.stats['total_bytes'] += tunnel_response.content_length
+                    self.log('info', f'✅ Sucesso: {tunnel_response.status_code} ({elapsed_total:.0f}ms)')
+                else:
+                    self.stats['failed_requests'] += 1
+                    self.log('error', f'❌ Falhou: {tunnel_response.error}')
+                
+                self.stats['total_time_ms'] += elapsed_total
+                
+                return tunnel_response
+                
+            except Exception as e:
+                last_error = e
+                
+                # ✅ Se for erro de schema cache, não tentar novamente
+                error_str = str(e).lower()
+                if 'schema cache' in error_str or 'pgrst204' in error_str:
+                    self.log('error', '❌ Erro de schema cache - necessário reload do Supabase')
                     break
                 
-                if (attempt + 1) % 10 == 0:
-                    elapsed = (attempt + 1) * poll_interval
-                    self.log('debug', f'⏳ Aguardando... ({elapsed:.1f}s/{timeout_value}s)')
-            
-            if not result:
-                raise TimeoutError(f"Timeout aguardando resultado ({timeout_value}s)")
-            
-            # Processar resultado
-            elapsed_total = (time.time() - start_time) * 1000
-            
-            tunnel_response = TunnelResponse(result)
-            
-            if tunnel_response.success:
-                self.stats['successful_requests'] += 1
-                self.stats['total_bytes'] += tunnel_response.content_length
-                self.log('info', f'✅ Sucesso: {tunnel_response.status_code} ({elapsed_total:.0f}ms)')
-            else:
-                self.stats['failed_requests'] += 1
-                self.log('error', f'❌ Falhou: {tunnel_response.error}')
-            
-            self.stats['total_time_ms'] += elapsed_total
-            
-            return tunnel_response
-            
-        except Exception as e:
-            self.stats['failed_requests'] += 1
-            self.log('error', f'❌ Erro: {e}')
-            
-            return TunnelResponse({
-                'success': False,
-                'error': str(e),
-                'error_type': type(e).__name__,
-                'timestamp': time.time()
-            })
+                # ✅ Se for último retry, falhar
+                if retry_attempt == max_retries - 1:
+                    break
+                
+                self.log('warning', f'⚠️ Tentativa {retry_attempt + 1} falhou: {e}')
+        
+        # Se chegou aqui, todas as tentativas falharam
+        self.stats['failed_requests'] += 1
+        self.log('error', f'❌ Túnel falhou após {max_retries} tentativas: {last_error}')
+        
+        return TunnelResponse({
+            'success': False,
+            'error': f'Túnel falhou: {last_error}',
+            'error_type': type(last_error).__name__,
+            'timestamp': time.time()
+        })
     
     async def get(self, url: str, **kwargs) -> TunnelResponse:
         """Atalho para GET"""

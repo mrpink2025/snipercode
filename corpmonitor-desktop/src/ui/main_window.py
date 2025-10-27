@@ -67,6 +67,9 @@ class MainWindow(ctk.CTk):
         self.refresh_interval_ms = 30000  # 30 segundos
         self.refresh_job_id = None
         
+        # ✅ Flag para pausar auto-refresh durante clonagem
+        self.is_cloning_session = False
+        
         # Criar UI
         self.create_widgets()
         
@@ -2162,6 +2165,10 @@ class MainWindow(ctk.CTk):
             
             # Abrir browser com sessão clonada
             def open_browser():
+                # ✅ PAUSAR auto-refresh
+                self.is_cloning_session = True
+                self.safe_after(0, self.stop_auto_refresh)
+                
                 success = False
                 error_msg = None
                 
@@ -2190,6 +2197,14 @@ class MainWindow(ctk.CTk):
                     self.safe_after(0, lambda: self.register_clone_history(
                         session, success, error_msg
                     ))
+                    
+                    # ✅ RETOMAR auto-refresh após 10s
+                    def resume():
+                        self.is_cloning_session = False
+                        self.start_auto_refresh()
+                        logger.info("🔄 Auto-refresh retomado após clonagem")
+                    
+                    self.safe_after(10000, resume)
             
             threading.Thread(target=open_browser, daemon=True).start()
             
@@ -2621,6 +2636,14 @@ class MainWindow(ctk.CTk):
     def auto_refresh_callback(self):
         """Callback para atualização automática"""
         if self._destroyed or self._is_loading:
+            return
+        
+        # ✅ PULAR refresh se estiver clonando sessão
+        if self.is_cloning_session:
+            logger.info("⏸️ Auto-refresh pausado (clonagem em progresso)")
+            # Tentar novamente em 5s
+            if self.auto_refresh_enabled and not self._destroyed:
+                self.refresh_job_id = self.safe_after(5000, self.auto_refresh_callback)
             return
         
         try:
