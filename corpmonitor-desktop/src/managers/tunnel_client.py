@@ -154,10 +154,11 @@ class TunnelClient:
                         }
                     })
                     
-                    if dispatcher_response.status_code == 200:
-                        self.log('debug', '✅ Comando despachado')
+                    # Supabase-py retorna bytes, não um objeto com status_code
+                    if isinstance(dispatcher_response, (bytes, bytearray)):
+                        self.log('debug', f'✅ Comando despachado ({len(dispatcher_response)} bytes)')
                     else:
-                        self.log('warning', f'⚠️ Dispatcher retornou: {dispatcher_response.status_code}')
+                        self.log('debug', f'✅ Comando despachado (type={type(dispatcher_response).__name__})')
                         
                 except Exception as dispatch_error:
                     self.log('warning', f'⚠️ Erro ao despachar (continuando): {dispatch_error}')

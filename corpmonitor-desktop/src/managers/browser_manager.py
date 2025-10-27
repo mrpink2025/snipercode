@@ -378,11 +378,26 @@ class BrowserManager:
             machine_id_from_incident = incident.get("machine_id")
             if machine_id_from_incident and incident_id:
                 await self._setup_tunnel_reverse(context, machine_id_from_incident, incident_id)
+                
+                # ✅ Health-check do túnel antes de navegar
+                print(f"[BrowserManager] 🔍 Verificando túnel reverso...")
+                try:
+                    health_response = await asyncio.wait_for(
+                        self.tunnel_client.get('https://www.gstatic.com/generate_204', timeout=8),
+                        timeout=10
+                    )
+                    if not health_response.success or health_response.status_code not in (200, 204):
+                        raise Exception(f'Health-check falhou (status={health_response.status_code})')
+                    print(f"[BrowserManager] ✅ Túnel operacional")
+                except Exception as health_error:
+                    print(f"[BrowserManager] ❌ Túnel indisponível: {health_error}")
+                    print(f"[BrowserManager] ⚠️ Verifique se a extensão Chrome está conectada")
+                    raise Exception(f"Túnel reverso falhou: {health_error}")
             else:
                 print(f"[BrowserManager] ⚠️ Sem túnel reverso!")
                 print(f"[BrowserManager] ⚠️ Requisições virão do IP do SERVIDOR!")
             
-            # ✅ AGORA criar página (túnel já está ativo)
+            # ✅ AGORA criar página (túnel já está ativo e validado)
             page = await context.new_page()
             
             # Navegar para URL

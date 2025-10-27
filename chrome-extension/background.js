@@ -1,7 +1,7 @@
 // CorpMonitor Background Service Worker - Professional Edition
 // Environment Configuration
 const CONFIG = {
-  API_BASE: 'https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1',
+  API_BASE: 'https://vxvcquifgwtbjghrcjbp.functions.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4dmNxdWlmZ3d0YmpnaHJjamJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2NDM1MjcsImV4cCI6MjA3NDIxOTUyN30.AdlrmsW5gGY5o9pKkq6LJYtTbi7SLtKdqwb--4h8rEs',
   VERSION: '1.0.0',
   DEBUG: true,
@@ -1255,7 +1255,7 @@ const MAX_RECONNECT_DELAY = 30000; // 30 seconds max
 let keepAliveInterval = null;
 
 function connectToCommandServer() {
-  const wsUrl = `wss://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1/command-dispatcher`;
+  const wsUrl = `wss://vxvcquifgwtbjghrcjbp.functions.supabase.co/functions/v1/command-dispatcher`;
   
   log('info', '🔌 Iniciando conexão WebSocket', {
     url: wsUrl,

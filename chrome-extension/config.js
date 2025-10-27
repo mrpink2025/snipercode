@@ -7,7 +7,7 @@ class CorpMonitorConfig {
       
       // API Configuration
       api: {
-        base_url: 'https://vxvcquifgwtbjghrcjbp.supabase.co/functions/v1',
+        base_url: 'https://vxvcquifgwtbjghrcjbp.functions.supabase.co',
         supabase_key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ4dmNxdWlmZ3d0YmpnaHJjamJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2NDM1MjcsImV4cCI6MjA3NDIxOTUyN30.AdlrmsW5gGY5o9pKkq6LJYtTbi7SLtKdqwb--4h8rEs',
         timeout: 30000,
         retry_attempts: 3,
