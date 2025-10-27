@@ -1,5 +1,8 @@
 project_id = "vxvcquifgwtbjghrcjbp"
 
+[functions.tunnel-fetch-result]
+verify_jwt = false
+
 [functions.phishing-detector]
 verify_jwt = false
 

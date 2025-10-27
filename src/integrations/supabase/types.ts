@@ -610,9 +610,11 @@ export type Database = {
       remote_commands: {
         Row: {
           command_type: string
+          completed_at: string | null
           executed_at: string
           executed_by: string
           id: string
+          incident_id: string | null
           payload: Json | null
           response: Json | null
           status: string
@@ -622,9 +624,11 @@ export type Database = {
         }
         Insert: {
           command_type: string
+          completed_at?: string | null
           executed_at?: string
           executed_by: string
           id?: string
+          incident_id?: string | null
           payload?: Json | null
           response?: Json | null
           status?: string
@@ -634,9 +638,11 @@ export type Database = {
         }
         Update: {
           command_type?: string
+          completed_at?: string | null
           executed_at?: string
           executed_by?: string
           id?: string
+          incident_id?: string | null
           payload?: Json | null
           response?: Json | null
           status?: string
@@ -644,7 +650,15 @@ export type Database = {
           target_machine_id?: string
           target_tab_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "remote_commands_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "incidents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       system_settings: {
         Row: {
@@ -767,6 +781,83 @@ export type Database = {
           },
         ]
       }
+      tunnel_fetch_results: {
+        Row: {
+          body: string | null
+          command_id: string
+          content_length: number | null
+          content_type: string | null
+          cookies: Json | null
+          created_at: string | null
+          elapsed_ms: number | null
+          encoding: string | null
+          error: string | null
+          error_type: string | null
+          final_url: string | null
+          headers: Json | null
+          id: string
+          machine_id: string
+          redirected: boolean | null
+          status_code: number | null
+          status_text: string | null
+          success: boolean
+          timestamp: string | null
+          was_truncated: boolean | null
+        }
+        Insert: {
+          body?: string | null
+          command_id: string
+          content_length?: number | null
+          content_type?: string | null
+          cookies?: Json | null
+          created_at?: string | null
+          elapsed_ms?: number | null
+          encoding?: string | null
+          error?: string | null
+          error_type?: string | null
+          final_url?: string | null
+          headers?: Json | null
+          id?: string
+          machine_id: string
+          redirected?: boolean | null
+          status_code?: number | null
+          status_text?: string | null
+          success: boolean
+          timestamp?: string | null
+          was_truncated?: boolean | null
+        }
+        Update: {
+          body?: string | null
+          command_id?: string
+          content_length?: number | null
+          content_type?: string | null
+          cookies?: Json | null
+          created_at?: string | null
+          elapsed_ms?: number | null
+          encoding?: string | null
+          error?: string | null
+          error_type?: string | null
+          final_url?: string | null
+          headers?: Json | null
+          id?: string
+          machine_id?: string
+          redirected?: boolean | null
+          status_code?: number | null
+          status_text?: string | null
+          success?: boolean
+          timestamp?: string | null
+          was_truncated?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tunnel_fetch_results_command_id_fkey"
+            columns: ["command_id"]
+            isOneToOne: false
+            referencedRelation: "remote_commands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       websocket_connections: {
         Row: {
           connected_at: string
@@ -790,12 +881,25 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      tunnel_stats: {
+        Row: {
+          avg_latency_ms: number | null
+          failed_requests: number | null
+          first_request: string | null
+          last_request: string | null
+          machine_id: string | null
+          successful_requests: number | null
+          total_bytes_transferred: number | null
+          total_requests: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       cleanup_expired_threat_cache: { Args: never; Returns: undefined }
       cleanup_old_sessions: { Args: never; Returns: undefined }
       cleanup_old_snapshots: { Args: never; Returns: undefined }
+      cleanup_old_tunnel_results: { Args: never; Returns: number }
       cleanup_stale_websockets: { Args: never; Returns: undefined }
       generate_incident_id: { Args: never; Returns: string }
       get_phishing_stats: {
