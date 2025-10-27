@@ -383,8 +383,8 @@ class BrowserManager:
                 print(f"[BrowserManager] 🔍 Verificando túnel reverso...")
                 try:
                     health_response = await asyncio.wait_for(
-                        self.tunnel_client.get('https://www.gstatic.com/generate_204', timeout=8),
-                        timeout=10
+                        self.tunnel_client.get('https://www.gstatic.com/generate_204', timeout=30),
+                        timeout=35
                     )
                     if not health_response.success or health_response.status_code not in (200, 204):
                         raise Exception(f'Health-check falhou (status={health_response.status_code})')

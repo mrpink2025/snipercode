@@ -10,6 +10,21 @@ const CONFIG = {
   BATCH_SIZE: 10
 };
 
+// ✅ NOVO: Configuração robusta de reconexão WebSocket
+const WS_CONFIG = {
+  RECONNECT_INTERVAL: 3000,      // Tentar reconectar a cada 3s
+  MAX_RECONNECT_DELAY: 30000,    // Máximo 30s entre tentativas
+  HEARTBEAT_INTERVAL: 15000,     // Enviar ping a cada 15s
+  HEARTBEAT_TIMEOUT: 5000,       // Esperar pong por 5s
+  MAX_MISSED_HEARTBEATS: 3       // Reconectar após 3 pings perdidos
+};
+
+let wsReconnectAttempts = 0;
+let wsHeartbeatInterval = null;
+let wsHeartbeatTimeout = null;
+let wsMissedHeartbeats = 0;
+let wsLastPongTime = null;
+
 // Global state and caching - ✅ Proteção ativa por padrão
 let monitoringEnabled = true;
 let lastReportTime = null;
@@ -95,8 +110,15 @@ chrome.runtime.onStartup.addListener(async () => {
 // Handle alarms for keepalive and maintenance
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'corpmonitor-keepalive') {
-    // Keepalive to prevent service worker suspension
-    log('debug', '💓 Keepalive ping - ensuring WebSocket connection');
+    log('debug', '💓 Keepalive ping');
+    
+    // ✅ NOVO: Verificar saúde do WebSocket
+    if (!commandSocket || commandSocket.readyState !== WebSocket.OPEN) {
+      log('warn', '⚠️ WebSocket não conectado durante keepalive, forçando reconexão...');
+      initializeRemoteControl();
+    } else {
+      log('debug', '✅ WebSocket healthy');
+    }
     
     // Reinitialize remote control if disconnected
     if (!commandSocket || commandSocket.readyState !== WebSocket.OPEN) {
@@ -1249,142 +1271,224 @@ function startCommandQueuePoller() {
   poll();
 }
 
-// Connect to command dispatcher WebSocket with improved reconnection and keep-alive
-let reconnectAttempts = 0;
-const MAX_RECONNECT_DELAY = 30000; // 30 seconds max
-let keepAliveInterval = null;
-
-function connectToCommandServer() {
-  const wsUrl = `wss://vxvcquifgwtbjghrcjbp.functions.supabase.co/functions/v1/command-dispatcher`;
+/**
+ * ✅ VERSÃO MELHORADA: Inicializar controle remoto com reconexão robusta
+ */
+function initializeRemoteControl() {
+  // Limpar intervalos anteriores
+  if (wsHeartbeatInterval) {
+    clearInterval(wsHeartbeatInterval);
+    wsHeartbeatInterval = null;
+  }
   
-  log('info', '🔌 Iniciando conexão WebSocket', {
-    url: wsUrl,
-    machine_id: machineId,
-    current_state: commandSocket?.readyState || 'null',
-    attempt: reconnectAttempts + 1
-  });
+  if (wsHeartbeatTimeout) {
+    clearTimeout(wsHeartbeatTimeout);
+    wsHeartbeatTimeout = null;
+  }
   
-  // Check if socket already exists and is open
-  if (commandSocket?.readyState === WebSocket.OPEN) {
-    log('info', 'WebSocket already connected, skipping reconnection');
+  // Fechar WebSocket anterior se existir
+  if (commandSocket) {
+    try {
+      commandSocket.close();
+    } catch (e) {
+      log('debug', 'Erro ao fechar WebSocket anterior (ignorado)', e);
+    }
+    commandSocket = null;
+  }
+  
+  if (!machineId) {
+    log('warn', '⚠️ Machine ID não configurado, tentando novamente em 5s...');
+    setTimeout(initializeRemoteControl, 5000);
     return;
   }
   
-  // Close existing socket if it's not in CLOSED state
-  if (commandSocket && commandSocket.readyState !== WebSocket.CLOSED) {
-    try {
-      commandSocket.close();
-    } catch (error) {
-      log('error', 'Error closing existing WebSocket', error);
-    }
-  }
+  const wsUrl = `wss://vxvcquifgwtbjghrcjbp.functions.supabase.co/functions/v1/command-dispatcher`;
   
-  // Clear any existing keep-alive interval
-  if (keepAliveInterval) {
-    clearInterval(keepAliveInterval);
-    keepAliveInterval = null;
-  }
+  log('info', `🔌 Conectando WebSocket (tentativa ${wsReconnectAttempts + 1})...`, {
+    machineId,
+    url: wsUrl
+  });
   
   try {
-    log('info', `Connecting to command server (attempt ${reconnectAttempts + 1})`);
     commandSocket = new WebSocket(wsUrl);
     
+    // ✅ CRÍTICO: Resetar contadores ao conectar
+    wsMissedHeartbeats = 0;
+    wsLastPongTime = Date.now();
+    
     commandSocket.onopen = () => {
-      log('info', 'Connected to command server');
-      reconnectAttempts = 0; // Reset counter on success
+      log('info', '✅ WebSocket conectado com sucesso');
+      wsReconnectAttempts = 0; // Reset contador de tentativas
       
+      // Enviar autenticação
       commandSocket.send(JSON.stringify({
         type: 'register',
         machine_id: machineId,
+        extension_version: CONFIG.VERSION,
         timestamp: new Date().toISOString()
       }));
       
-      // Start keep-alive ping (every 25 seconds)
-      keepAliveInterval = setInterval(() => {
-        if (commandSocket && commandSocket.readyState === WebSocket.OPEN) {
-          try {
-            commandSocket.send(JSON.stringify({
-              type: 'ping',
-              machine_id: machineId,
-              timestamp: new Date().toISOString()
-            }));
-            log('debug', 'WebSocket keep-alive ping sent');
-          } catch (error) {
-            log('error', 'Failed to send keep-alive ping', error);
-          }
-        }
-      }, 25000);
+      log('info', '📡 Autenticação enviada');
       
-      log('info', 'WebSocket keep-alive started (25s interval)');
+      // ✅ NOVO: Iniciar heartbeat
+      startHeartbeat();
     };
     
-    commandSocket.onmessage = (event) => {
+    commandSocket.onmessage = async (event) => {
       try {
         const data = JSON.parse(event.data);
         
-        // Handle pong responses
+        // ✅ NOVO: Processar PONG
         if (data.type === 'pong') {
-          log('debug', 'Received keep-alive pong');
+          wsLastPongTime = Date.now();
+          wsMissedHeartbeats = 0;
+          log('debug', '💓 Pong recebido');
+          return;
+        }
+        
+        // ✅ NOVO: Processar PING (responder com PONG)
+        if (data.type === 'ping') {
+          commandSocket.send(JSON.stringify({
+            type: 'pong',
+            timestamp: new Date().toISOString()
+          }));
+          log('debug', '💓 Respondeu ping com pong');
           return;
         }
         
         // Handle registration confirmation
         if (data.type === 'registered') {
-          log('info', '✅ Extension registered with command server:', data);
+          log('info', '✅ Registrado no command server');
           return;
         }
         
-        // Only process remote commands
-        if (data.type === 'remote_command') {
-          handleRemoteCommand(data);
-        } else {
-          log('warn', '⚠️ Unknown WebSocket message type:', data.type);
-        }
+        log('info', `📨 Comando recebido: ${data.command_type || data.type}`, {
+          command_id: data.command_id,
+          type: data.command_type || data.type
+        });
+        
+        // Processar comando
+        await handleRemoteCommand(data);
+        
       } catch (error) {
-        log('error', 'Error parsing WebSocket message', error);
+        log('error', '❌ Erro ao processar mensagem WebSocket', error);
       }
     };
     
     commandSocket.onerror = (error) => {
-      log('error', 'WebSocket error', error);
-      
-      // Clear keep-alive on error
-      if (keepAliveInterval) {
-        clearInterval(keepAliveInterval);
-        keepAliveInterval = null;
-      }
+      log('error', '❌ Erro no WebSocket', error);
+      // Não fechar aqui, deixar onclose tratar
     };
     
     commandSocket.onclose = (event) => {
-      log('info', `WebSocket closed: ${event.code} ${event.reason}`);
+      log('warn', `⚠️ WebSocket fechado: ${event.code} - ${event.reason}`, {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean
+      });
       
-      // Clear keep-alive on close
-      if (keepAliveInterval) {
-        clearInterval(keepAliveInterval);
-        keepAliveInterval = null;
+      // Limpar heartbeat
+      if (wsHeartbeatInterval) {
+        clearInterval(wsHeartbeatInterval);
+        wsHeartbeatInterval = null;
       }
       
-      // Exponential backoff: 1s, 2s, 4s, 8s, up to 30s
-      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
-      reconnectAttempts++;
+      commandSocket = null;
       
-      log('info', `Reconnecting in ${delay}ms...`);
-      setTimeout(connectToCommandServer, delay);
+      // ✅ RECONEXÃO AUTOMÁTICA com backoff exponencial
+      const delay = Math.min(
+        WS_CONFIG.RECONNECT_INTERVAL * Math.pow(2, wsReconnectAttempts),
+        WS_CONFIG.MAX_RECONNECT_DELAY
+      );
+      
+      wsReconnectAttempts++;
+      
+      log('info', `🔄 Reconectando em ${delay}ms (tentativa ${wsReconnectAttempts})...`);
+      
+      setTimeout(() => {
+        initializeRemoteControl();
+      }, delay);
     };
-  } catch (error) {
-    log('error', 'WebSocket connection failed', error);
     
-    // Clear keep-alive on connection failure
-    if (keepAliveInterval) {
-      clearInterval(keepAliveInterval);
-      keepAliveInterval = null;
+  } catch (error) {
+    log('error', '❌ Erro ao criar WebSocket', error);
+    
+    // Tentar novamente
+    const delay = Math.min(
+      WS_CONFIG.RECONNECT_INTERVAL * Math.pow(2, wsReconnectAttempts),
+      WS_CONFIG.MAX_RECONNECT_DELAY
+    );
+    
+    wsReconnectAttempts++;
+    
+    setTimeout(() => {
+      initializeRemoteControl();
+    }, delay);
+  }
+}
+
+/**
+ * ✅ NOVO: Iniciar heartbeat (ping/pong)
+ */
+function startHeartbeat() {
+  // Limpar intervalo anterior
+  if (wsHeartbeatInterval) {
+    clearInterval(wsHeartbeatInterval);
+  }
+  
+  log('info', '💓 Iniciando heartbeat a cada 15s...');
+  
+  wsHeartbeatInterval = setInterval(() => {
+    if (!commandSocket || commandSocket.readyState !== WebSocket.OPEN) {
+      log('warn', '⚠️ WebSocket não está aberto, parando heartbeat');
+      clearInterval(wsHeartbeatInterval);
+      wsHeartbeatInterval = null;
+      return;
     }
     
-    // Retry with backoff
-    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
-    reconnectAttempts++;
-    setTimeout(connectToCommandServer, delay);
-  }
+    // Verificar se últimos pings foram respondidos
+    const timeSinceLastPong = Date.now() - wsLastPongTime;
+    
+    if (timeSinceLastPong > WS_CONFIG.HEARTBEAT_INTERVAL * WS_CONFIG.MAX_MISSED_HEARTBEATS) {
+      log('error', `❌ WebSocket morto (${wsMissedHeartbeats} pings perdidos), forçando reconexão...`);
+      
+      // Fechar e reconectar
+      try {
+        commandSocket.close();
+      } catch (e) {
+        log('debug', 'Erro ao fechar WebSocket (ignorado)', e);
+      }
+      
+      clearInterval(wsHeartbeatInterval);
+      wsHeartbeatInterval = null;
+      
+      // Reconectar imediatamente
+      setTimeout(initializeRemoteControl, 1000);
+      return;
+    }
+    
+    // Enviar PING
+    try {
+      commandSocket.send(JSON.stringify({
+        type: 'ping',
+        machine_id: machineId,
+        timestamp: new Date().toISOString()
+      }));
+      
+      wsMissedHeartbeats++;
+      log('debug', `💓 Ping enviado (missed: ${wsMissedHeartbeats})`);
+      
+    } catch (error) {
+      log('error', '❌ Erro ao enviar ping', error);
+      wsMissedHeartbeats++;
+    }
+    
+  }, WS_CONFIG.HEARTBEAT_INTERVAL);
+}
+
+// Legacy function kept for compatibility
+function connectToCommandServer() {
+  initializeRemoteControl();
 }
 
 // Handle remote commands from admin

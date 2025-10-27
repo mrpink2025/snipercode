@@ -98,7 +98,7 @@ class IncidentManager:
             response = self.supabase.table("incidents")\
                 .select("*")\
                 .eq("id", incident_id)\
-                .maybeSingle()\
+                .maybe_single()\
                 .execute()
             
             if not response.data:
@@ -199,7 +199,7 @@ class IncidentManager:
             check_response = self.supabase.table("incidents")\
                 .select("id")\
                 .eq("id", incident_id)\
-                .maybeSingle()\
+                .maybe_single()\
                 .execute()
             
             if not check_response.data:
@@ -263,7 +263,7 @@ class IncidentManager:
                 .eq("tab_url", url)\
                 .order("created_at", desc=True)\
                 .limit(1)\
-                .maybeSingle()\
+                .maybe_single()\
                 .execute()
             
             return response.data if response.data else None
