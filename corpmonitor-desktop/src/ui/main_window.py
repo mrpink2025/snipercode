@@ -10,7 +10,8 @@ from src.utils.async_helper import run_async
 from src.utils.logger import logger
 from typing import Dict, List, Optional
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
+import json
 
 class MainWindow(ctk.CTk):
     def __init__(self, auth_manager: AuthManager):
@@ -26,6 +27,9 @@ class MainWindow(ctk.CTk):
             raise ValueError("Usuário não autenticado")
         
         user_id = auth_manager.current_user["id"]
+        self.current_user_id = user_id
+        self.current_user_email = auth_manager.current_user.get("email", "unknown")
+        self.supabase = auth_manager.supabase
         self.incident_manager = IncidentManager(auth_manager.supabase, user_id)
         self.domain_manager = DomainManager(auth_manager.supabase, user_id)
         self.browser_manager = BrowserManager(auth_manager.supabase)
@@ -199,6 +203,7 @@ class MainWindow(ctk.CTk):
         self.tabview.add("🌐 Domínios Monitorados")
         self.tabview.add("🚫 Domínios Bloqueados")
         self.tabview.add("🚨 Alertas Monitorados")
+        self.tabview.add("📜 Histórico")
         
         # Tab Incidentes (não lidos)
         self.create_incidents_tab(viewed=False)
@@ -217,6 +222,9 @@ class MainWindow(ctk.CTk):
         
         # Tab Alertas Monitorados
         self.create_alerts_tab()
+        
+        # Tab Histórico
+        self.create_history_tab()
     
     def create_kpi_card(self, parent, title: str, value: str, icon: str):
         """Criar card de KPI"""
@@ -435,6 +443,31 @@ class MainWindow(ctk.CTk):
     def create_machines_tab(self):
         """Criar aba de máquinas monitoradas"""
         machines_tab = self.tabview.tab("🖥️ Máquinas Monitoradas")
+        
+        # Filtro de domínios críticos
+        critical_filter_frame = ctk.CTkFrame(machines_tab, fg_color="transparent")
+        critical_filter_frame.pack(fill="x", padx=20, pady=(10, 5))
+        
+        self.filter_critical_only = ctk.CTkCheckBox(
+            critical_filter_frame,
+            text="🚨 Mostrar apenas máquinas com domínios críticos",
+            font=ctk.CTkFont(size=12),
+            command=self.apply_critical_filter
+        )
+        self.filter_critical_only.pack(side="left")
+        
+        # Info sobre quantidade de domínios críticos
+        critical_domains = run_async(self.machine_manager.get_critical_domains())
+        critical_count = len(critical_domains)
+        
+        if critical_count > 0:
+            info_label = ctk.CTkLabel(
+                critical_filter_frame,
+                text=f"({critical_count} domínio(s) crítico(s))",
+                font=ctk.CTkFont(size=10),
+                text_color="#94a3b8"
+            )
+            info_label.pack(side="left", padx=(10, 0))
         
         # Filtros
         filters_frame = ctk.CTkFrame(machines_tab, fg_color="transparent")
@@ -997,6 +1030,114 @@ class MainWindow(ctk.CTk):
         # Obter filtros
         active_only = self.machines_status_filter.get() == "Apenas Ativas"
         search_term = self.machines_search_entry.get().strip()
+        filter_critical = self.filter_critical_only.get()
+        
+        # Loading
+        loading = ctk.CTkLabel(
+            self.machines_scroll,
+            text="⏳ Carregando máquinas...",
+            text_color="gray"
+        )
+        loading.pack(pady=50)
+        
+        def fetch():
+            try:
+                # Buscar máquinas
+                machines = self.machine_manager.get_monitored_machines(active_only, search_term)
+                
+                # Se filtro crítico ativado, filtrar
+                if filter_critical:
+                    critical_domains = self.machine_manager.get_critical_domains()
+                    
+                    if not critical_domains:
+                        self.safe_after(0, lambda: self.show_no_critical_domains())
+                        return
+                    
+                    # Filtrar apenas máquinas que acessaram domínios críticos
+                    filtered_machines = []
+                    for machine in machines:
+                        has_critical = self.machine_manager.check_machine_has_critical_access(
+                            machine['machine_id'], 
+                            critical_domains
+                        )
+                        if has_critical:
+                            filtered_machines.append(machine)
+                    
+                    machines = filtered_machines
+                
+                self.machines_list = machines
+                
+                # Atualizar UI
+                def update_ui():
+                    # Limpar loading
+                    for widget in self.machines_scroll.winfo_children():
+                        widget.destroy()
+                    
+                    if not machines:
+                        if filter_critical:
+                            no_results = ctk.CTkLabel(
+                                self.machines_scroll,
+                                text="🔍 Nenhuma máquina com acessos a domínios críticos nas últimas 24h",
+                                text_color="gray",
+                                font=ctk.CTkFont(size=12)
+                            )
+                            no_results.pack(pady=50)
+                        else:
+                            no_results = ctk.CTkLabel(
+                                self.machines_scroll,
+                                text="Nenhuma máquina encontrada",
+                                text_color="gray"
+                            )
+                            no_results.pack(pady=50)
+                        return
+                    
+                    # Mostrar contador se filtrado
+                    if filter_critical:
+                        count_label = ctk.CTkLabel(
+                            self.machines_scroll,
+                            text=f"✅ {len(machines)} máquina(s) com acessos críticos",
+                            font=ctk.CTkFont(size=11, weight="bold"),
+                            text_color="#10b981"
+                        )
+                        count_label.pack(pady=(10, 15))
+                    
+                    for machine in machines:
+                        self.create_machine_card(machine)
+                    
+                    # Atualizar KPIs
+                    self.update_machines_kpis()
+                
+                self.safe_after(0, update_ui)
+                
+            except Exception as e:
+                logger.error(f"Erro ao carregar máquinas: {e}", exc_info=True)
+                
+                def show_error():
+                    for widget in self.machines_scroll.winfo_children():
+                        widget.destroy()
+                    error_label = ctk.CTkLabel(
+                        self.machines_scroll,
+                        text=f"Erro ao carregar:\n{str(e)}",
+                        text_color="#ef4444"
+                    )
+                    error_label.pack(pady=50)
+                
+                self.safe_after(0, show_error)
+        
+        threading.Thread(target=fetch, daemon=True).start()
+    
+    def show_no_critical_domains(self):
+        """Mostrar mensagem quando não há domínios críticos cadastrados"""
+        for widget in self.machines_scroll.winfo_children():
+            widget.destroy()
+        
+        message = ctk.CTkLabel(
+            self.machines_scroll,
+            text="⚠️ Nenhum domínio crítico cadastrado no sistema",
+            text_color="#f59e0b",
+            font=ctk.CTkFont(size=12)
+        )
+        message.pack(pady=50)
         
         # Buscar máquinas
         self.machines_list = self.machine_manager.get_monitored_machines(
@@ -1366,6 +1507,38 @@ class MainWindow(ctk.CTk):
             font=ctk.CTkFont(size=10, weight="bold")
         )
         status_badge.pack(side="left", padx=15)
+        
+        # ✅ NOVO: Verificar alertas pendentes
+        alerts_count = run_async(
+            self.machine_manager.get_pending_alerts_count(machine['machine_id'])
+        )
+        
+        if alerts_count > 0:
+            # Badge de alertas (vermelho)
+            alerts_badge = ctk.CTkLabel(
+                header_frame,
+                text=f"🚨 {alerts_count}",
+                font=ctk.CTkFont(size=11, weight="bold"),
+                fg_color="#ef4444",
+                text_color="white",
+                corner_radius=12,
+                padx=10,
+                pady=4
+            )
+            alerts_badge.pack(side="right", padx=(10, 0))
+            
+            # Botão Ver Alertas
+            view_alerts_btn = ctk.CTkButton(
+                header_frame,
+                text="🚨 Ver Alertas",
+                width=100,
+                height=28,
+                fg_color="#dc2626",
+                hover_color="#b91c1c",
+                font=ctk.CTkFont(size=11),
+                command=lambda m=machine: self.show_machine_alerts(m)
+            )
+            view_alerts_btn.pack(side="right", padx=(5, 0))
         
         # Última atividade
         from datetime import datetime
@@ -1989,6 +2162,9 @@ class MainWindow(ctk.CTk):
             
             # Abrir browser com sessão clonada
             def open_browser():
+                success = False
+                error_msg = None
+                
                 try:
                     run_async(self.browser_manager.start_session(
                         incident_id=incident_data['id'],
@@ -2001,11 +2177,18 @@ class MainWindow(ctk.CTk):
                         client_ip=incident_data['client_ip']
                     ))
                     logger.info("✅ Sessão clonada aberta com sucesso")
+                    success = True
                 except Exception as e:
                     logger.error(f"❌ Erro ao abrir sessão clonada: {e}", exc_info=True)
+                    error_msg = str(e)
                     self.safe_after(0, lambda: self.show_error_dialog(
                         "Erro ao Abrir Sessão",
                         f"Não foi possível abrir a sessão:\n{str(e)}"
+                    ))
+                finally:
+                    # Registrar no histórico (sucesso ou falha)
+                    self.safe_after(0, lambda: self.register_clone_history(
+                        session, success, error_msg
                     ))
             
             threading.Thread(target=open_browser, daemon=True).start()
@@ -2191,16 +2374,53 @@ class MainWindow(ctk.CTk):
                 text_color="gray"
             ).pack(pady=20)
         
+        # Tab Fingerprint
+        tab_fingerprint = tabview.add("🔍 Fingerprint")
+        scroll_fingerprint = ctk.CTkScrollableFrame(tab_fingerprint)
+        scroll_fingerprint.pack(fill="both", expand=True)
+        
+        if fingerprint:
+            if fingerprint.get('userAgent'):
+                self.create_info_section(scroll_fingerprint, "User Agent", fingerprint['userAgent'])
+            if fingerprint.get('screen'):
+                screen = fingerprint['screen']
+                screen_text = f"Resolução: {screen.get('width')}x{screen.get('height')} • Pixel Ratio: {screen.get('pixelRatio')}x"
+                self.create_info_section(scroll_fingerprint, "Screen", screen_text)
+            if fingerprint.get('timezone'):
+                tz = fingerprint['timezone']
+                tz_text = f"{tz.get('name')} (offset: {tz.get('offset')} min)"
+                self.create_info_section(scroll_fingerprint, "Timezone", tz_text)
+            if fingerprint.get('webgl'):
+                webgl = fingerprint['webgl']
+                webgl_text = f"Vendor: {webgl.get('vendor')} • Renderer: {webgl.get('renderer')}"
+                self.create_info_section(scroll_fingerprint, "WebGL", webgl_text)
+        else:
+            ctk.CTkLabel(scroll_fingerprint, text="❌ Fingerprint não capturado", text_color="gray").pack(pady=50)
+        
+        # Tab Raw JSON
+        tab_json = tabview.add("📄 Raw JSON")
+        json_frame = ctk.CTkFrame(tab_json, fg_color="transparent")
+        json_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        session_json = json.dumps(session, indent=2, ensure_ascii=False)
+        json_textbox = ctk.CTkTextbox(json_frame, width=750, height=450, font=ctk.CTkFont(family="Courier", size=10), wrap="none")
+        json_textbox.pack(fill="both", expand=True)
+        json_textbox.insert("1.0", session_json)
+        json_textbox.configure(state="disabled")
+        
         # Botões
         btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
         btn_frame.pack(fill="x", pady=(15, 0))
         
-        ctk.CTkButton(
-            btn_frame,
-            text="📋 Copiar JSON",
-            width=120,
-            command=lambda: self.copy_session_json(session)
-        ).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(btn_frame, text="💾 Exportar JSON", width=130, fg_color="#8b5cf6", hover_color="#7c3aed",
+                     command=lambda: self.export_session_json(session)).pack(side="left", padx=(0, 10))
+        
+        ctk.CTkButton(btn_frame, text="📋 Copiar JSON", width=120,
+                     command=lambda: self.copy_to_clipboard(session_json)).pack(side="left", padx=(0, 10))
+        
+        if session.get('is_active') and session.get('cookies'):
+            ctk.CTkButton(btn_frame, text="🚀 Abrir Sessão", width=130, fg_color="#10b981", hover_color="#059669",
+                         command=lambda: self.open_cloned_session_and_close(session, dialog)).pack(side="left", padx=(0, 10))
         
         ctk.CTkButton(
             btn_frame,
@@ -2544,6 +2764,653 @@ class MainWindow(ctk.CTk):
         self.realtime_manager.on_connection_status_change(on_connection_status)
         self.realtime_manager.start(on_alert=on_alert)
         self.realtime_manager.subscribe_to_sessions(on_sessions_change)
+    
+    def show_machine_alerts(self, machine: Dict):
+        """Mostrar modal com todos os alertas de uma máquina"""
+        logger.info(f"🚨 Exibindo alertas da máquina: {machine['machine_id']}")
+        
+        # Buscar alertas
+        alerts = run_async(
+            self.machine_manager.get_machine_alerts(machine['machine_id'])
+        )
+        
+        if not alerts:
+            self.show_info_dialog(
+                "Sem Alertas",
+                f"Nenhum alerta pendente para {machine['machine_id']}"
+            )
+            return
+        
+        # Criar modal
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(f"Alertas - {machine['machine_id']}")
+        dialog.geometry("900x600")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Centralizar
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 450
+        y = (dialog.winfo_screenheight() // 2) - 300
+        dialog.geometry(f"900x600+{x}+{y}")
+        
+        # Frame principal
+        main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Header
+        header = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header.pack(fill="x", pady=(0, 15))
+        
+        ctk.CTkLabel(
+            header,
+            text=f"🚨 Alertas de {machine['machine_id']}",
+            font=ctk.CTkFont(size=16, weight="bold")
+        ).pack(side="left")
+        
+        ctk.CTkLabel(
+            header,
+            text=f"{len(alerts)} pendente(s)",
+            font=ctk.CTkFont(size=12),
+            text_color="#94a3b8"
+        ).pack(side="left", padx=(10, 0))
+        
+        # Lista de alertas
+        scroll = ctk.CTkScrollableFrame(main_frame)
+        scroll.pack(fill="both", expand=True)
+        
+        for alert in alerts:
+            alert_card = self.create_alert_card(scroll, alert, machine, dialog)
+            alert_card.pack(fill="x", pady=5)
+        
+        # Botões do rodapé
+        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=(15, 0))
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="✅ Reconhecer Todos",
+            width=150,
+            fg_color="#10b981",
+            hover_color="#059669",
+            command=lambda: self.acknowledge_all_alerts(alerts, dialog)
+        ).pack(side="left", padx=(0, 10))
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="❌ Fechar",
+            width=100,
+            command=dialog.destroy
+        ).pack(side="right")
+    
+    def create_alert_card(self, parent, alert: Dict, machine: Dict, dialog):
+        """Criar card individual de alerta"""
+        card = ctk.CTkFrame(parent, fg_color="#1e293b", corner_radius=8)
+        
+        content = ctk.CTkFrame(card, fg_color="transparent")
+        content.pack(fill="x", padx=15, pady=12)
+        
+        # Header do alerta
+        header_frame = ctk.CTkFrame(content, fg_color="transparent")
+        header_frame.pack(fill="x")
+        
+        # Tipo de alerta
+        alert_type = alert.get('metadata', {}).get('alert_type', 'warning')
+        alert_icon = "🔴" if alert_type == 'critical' else "🟡"
+        
+        ctk.CTkLabel(
+            header_frame,
+            text=f"{alert_icon} {alert['domain']}",
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).pack(side="left")
+        
+        # Timestamp
+        triggered_at = datetime.fromisoformat(alert['triggered_at'].replace('Z', '+00:00'))
+        time_ago = self.format_time_ago(triggered_at)
+        
+        ctk.CTkLabel(
+            header_frame,
+            text=time_ago,
+            font=ctk.CTkFont(size=10),
+            text_color="#94a3b8"
+        ).pack(side="right")
+        
+        # URL
+        url_label = ctk.CTkLabel(
+            content,
+            text=alert['url'],
+            font=ctk.CTkFont(size=11),
+            text_color="gray",
+            wraplength=750
+        )
+        url_label.pack(anchor="w", pady=(5, 0))
+        
+        # Botões de ação
+        actions_frame = ctk.CTkFrame(content, fg_color="transparent")
+        actions_frame.pack(fill="x", pady=(10, 0))
+        
+        ctk.CTkButton(
+            actions_frame,
+            text="🚀 Abrir Sessão",
+            width=120,
+            height=28,
+            fg_color="#10b981",
+            hover_color="#059669",
+            font=ctk.CTkFont(size=11),
+            command=lambda: self.open_session_from_alert(alert, machine)
+        ).pack(side="left", padx=(0, 8))
+        
+        ctk.CTkButton(
+            actions_frame,
+            text="✅ Reconhecer",
+            width=120,
+            height=28,
+            fg_color="#3b82f6",
+            hover_color="#2563eb",
+            font=ctk.CTkFont(size=11),
+            command=lambda: self.acknowledge_single_alert(alert, card, dialog)
+        ).pack(side="left")
+        
+        return card
+    
+    def acknowledge_single_alert(self, alert: Dict, card_widget, dialog):
+        """Reconhecer um alerta individual"""
+        try:
+            # Atualizar no Supabase
+            run_async(self.supabase.table('admin_alerts')
+                .update({
+                    'acknowledged_by': self.current_user_id,
+                    'acknowledged_at': datetime.now().isoformat()
+                })
+                .eq('id', alert['id'])
+                .execute()
+            )
+            
+            # Remover card da interface
+            card_widget.destroy()
+            logger.info(f"✅ Alerta {alert['id']} reconhecido")
+            
+            # Verificar se ainda há alertas
+            if not dialog.winfo_children()[0].winfo_children()[1].winfo_children():
+                dialog.destroy()
+                self.load_machines()
+            
+        except Exception as e:
+            logger.error(f"Erro ao reconhecer alerta: {e}")
+            self.show_error_dialog("Erro", f"Não foi possível reconhecer o alerta:\n{str(e)}")
+    
+    def acknowledge_all_alerts(self, alerts: List[Dict], dialog):
+        """Reconhecer todos os alertas de uma vez"""
+        try:
+            alert_ids = [a['id'] for a in alerts]
+            
+            run_async(self.supabase.table('admin_alerts')
+                .update({
+                    'acknowledged_by': self.current_user_id,
+                    'acknowledged_at': datetime.now().isoformat()
+                })
+                .in_('id', alert_ids)
+                .execute()
+            )
+            
+            logger.info(f"✅ {len(alerts)} alertas reconhecidos")
+            dialog.destroy()
+            self.load_machines()
+            
+        except Exception as e:
+            logger.error(f"Erro ao reconhecer alertas: {e}")
+            self.show_error_dialog("Erro", f"Não foi possível reconhecer os alertas:\n{str(e)}")
+    
+    def open_session_from_alert(self, alert: Dict, machine: Dict):
+        """Abrir sessão diretamente de um alerta"""
+        # Buscar sessão ativa correspondente
+        sessions = run_async(
+            self.supabase.table('active_sessions')
+            .select('*')
+            .eq('machine_id', machine['machine_id'])
+            .eq('domain', alert['domain'])
+            .eq('is_active', True)
+            .order('last_activity', desc=True)
+            .limit(1)
+            .execute()
+        )
+        
+        if sessions.data and len(sessions.data) > 0:
+            session = sessions.data[0]
+            self.open_cloned_session(session)
+        else:
+            self.show_error_dialog(
+                "Sessão Não Encontrada",
+                f"Não foi encontrada uma sessão ativa para {alert['domain']}"
+            )
+    
+    def show_info_dialog(self, title: str, message: str):
+        """Mostrar diálogo informativo"""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(title)
+        dialog.geometry("400x200")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Centralizar
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 200
+        y = (dialog.winfo_screenheight() // 2) - 100
+        dialog.geometry(f"400x200+{x}+{y}")
+        
+        # Conteúdo
+        frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        ctk.CTkLabel(
+            frame,
+            text="ℹ️",
+            font=ctk.CTkFont(size=32)
+        ).pack(pady=(10, 10))
+        
+        ctk.CTkLabel(
+            frame,
+            text=message,
+            font=ctk.CTkFont(size=12),
+            wraplength=350
+        ).pack(pady=(0, 20))
+        
+        ctk.CTkButton(
+            frame,
+            text="OK",
+            width=100,
+            command=dialog.destroy
+        ).pack()
+    
+    def apply_critical_filter(self):
+        """Aplicar/remover filtro de domínios críticos"""
+        is_checked = self.filter_critical_only.get()
+        logger.info(f"Filtro de domínios críticos: {'ATIVADO' if is_checked else 'DESATIVADO'}")
+        
+        # Recarregar lista de máquinas com ou sem filtro
+        self.load_machines()
+    
+    def create_history_tab(self):
+        """Criar tab de histórico de clonagens"""
+        history_tab = self.tabview.tab("📜 Histórico")
+        
+        main_frame = ctk.CTkFrame(history_tab, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Header
+        header = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header.pack(fill="x", pady=(0, 15))
+        
+        ctk.CTkLabel(
+            header,
+            text="📜 Histórico de Clonagens",
+            font=ctk.CTkFont(size=18, weight="bold")
+        ).pack(side="left")
+        
+        # Filtros
+        filter_frame = ctk.CTkFrame(main_frame, fg_color="#1e293b", corner_radius=8)
+        filter_frame.pack(fill="x", pady=(0, 15))
+        
+        filter_content = ctk.CTkFrame(filter_frame, fg_color="transparent")
+        filter_content.pack(fill="x", padx=15, pady=12)
+        
+        # Filtro por período
+        ctk.CTkLabel(
+            filter_content,
+            text="Período:",
+            font=ctk.CTkFont(size=12)
+        ).pack(side="left", padx=(0, 10))
+        
+        period_var = ctk.StringVar(value="Últimas 24h")
+        period_options = ["Últimas 24h", "Últimos 7 dias", "Últimos 30 dias", "Tudo"]
+        period_menu = ctk.CTkOptionMenu(
+            filter_content,
+            variable=period_var,
+            values=period_options,
+            width=150,
+            command=lambda _: self.refresh_history()
+        )
+        period_menu.pack(side="left", padx=(0, 20))
+        self.history_period_var = period_var
+        
+        # Filtro por status
+        ctk.CTkLabel(
+            filter_content,
+            text="Status:",
+            font=ctk.CTkFont(size=12)
+        ).pack(side="left", padx=(0, 10))
+        
+        status_var = ctk.StringVar(value="Todos")
+        status_options = ["Todos", "Sucesso", "Falhas"]
+        status_menu = ctk.CTkOptionMenu(
+            filter_content,
+            variable=status_var,
+            values=status_options,
+            width=120,
+            command=lambda _: self.refresh_history()
+        )
+        status_menu.pack(side="left")
+        self.history_status_var = status_var
+        
+        # Botão refresh
+        refresh_btn = ctk.CTkButton(
+            filter_content,
+            text="🔄",
+            width=40,
+            command=self.refresh_history
+        )
+        refresh_btn.pack(side="right")
+        
+        # Lista de histórico
+        self.history_scroll = ctk.CTkScrollableFrame(main_frame)
+        self.history_scroll.pack(fill="both", expand=True)
+        
+        # Carregar histórico inicial
+        self.refresh_history()
+    
+    def refresh_history(self):
+        """Atualizar lista de histórico"""
+        # Limpar lista
+        for widget in self.history_scroll.winfo_children():
+            widget.destroy()
+        
+        # Loading
+        loading = ctk.CTkLabel(
+            self.history_scroll,
+            text="⏳ Carregando histórico...",
+            text_color="gray"
+        )
+        loading.pack(pady=50)
+        
+        def fetch_and_display():
+            try:
+                # Determinar período
+                period = self.history_period_var.get()
+                since = None
+                
+                if period == "Últimas 24h":
+                    since = (datetime.now() - timedelta(hours=24)).isoformat()
+                elif period == "Últimos 7 dias":
+                    since = (datetime.now() - timedelta(days=7)).isoformat()
+                elif period == "Últimos 30 dias":
+                    since = (datetime.now() - timedelta(days=30)).isoformat()
+                
+                # Determinar filtro de status
+                status = self.history_status_var.get()
+                success_filter = None
+                if status == "Sucesso":
+                    success_filter = True
+                elif status == "Falhas":
+                    success_filter = False
+                
+                # Buscar histórico
+                query = self.supabase.table('clone_history').select('*')
+                
+                if since:
+                    query = query.gte('cloned_at', since)
+                
+                if success_filter is not None:
+                    query = query.eq('success', success_filter)
+                
+                query = query.order('cloned_at', desc=True).limit(100)
+                
+                response = run_async(query.execute())
+                history = response.data if response.data else []
+                
+                self.safe_after(0, lambda: self.display_history(history))
+                
+            except Exception as e:
+                logger.error(f"Erro ao buscar histórico: {e}")
+                self.safe_after(0, lambda: self.show_history_error(str(e)))
+        
+        threading.Thread(target=fetch_and_display, daemon=True).start()
+    
+    def display_history(self, history: List[Dict]):
+        """Exibir histórico na interface"""
+        for widget in self.history_scroll.winfo_children():
+            widget.destroy()
+        
+        if not history:
+            no_data = ctk.CTkLabel(
+                self.history_scroll,
+                text="Nenhum registro de clonagem encontrado",
+                text_color="gray",
+                font=ctk.CTkFont(size=12)
+            )
+            no_data.pack(pady=50)
+            return
+        
+        # Estatísticas
+        total = len(history)
+        success_count = sum(1 for h in history if h.get('success'))
+        fail_count = total - success_count
+        
+        stats_frame = ctk.CTkFrame(self.history_scroll, fg_color="#1e293b")
+        stats_frame.pack(fill="x", pady=(0, 15), padx=5)
+        
+        stats_content = ctk.CTkFrame(stats_frame, fg_color="transparent")
+        stats_content.pack(fill="x", padx=15, pady=12)
+        
+        ctk.CTkLabel(
+            stats_content,
+            text=f"Total: {total} • ✅ Sucesso: {success_count} • ❌ Falhas: {fail_count}",
+            font=ctk.CTkFont(size=12, weight="bold")
+        ).pack(anchor="w")
+        
+        # Listar histórico
+        for entry in history:
+            card = self.create_history_card(entry)
+            card.pack(fill="x", pady=5, padx=5)
+    
+    def create_history_card(self, entry: Dict):
+        """Criar card de entrada de histórico"""
+        card = ctk.CTkFrame(self.history_scroll, fg_color="#1e293b", corner_radius=8)
+        
+        content = ctk.CTkFrame(card, fg_color="transparent")
+        content.pack(fill="x", padx=15, pady=12)
+        
+        # Header
+        header_frame = ctk.CTkFrame(content, fg_color="transparent")
+        header_frame.pack(fill="x")
+        
+        success = entry.get('success', True)
+        status_icon = "✅" if success else "❌"
+        
+        ctk.CTkLabel(
+            header_frame,
+            text=f"{status_icon} {entry['domain']}",
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).pack(side="left")
+        
+        # Timestamp
+        cloned_at = datetime.fromisoformat(entry['cloned_at'].replace('Z', '+00:00'))
+        time_str = cloned_at.strftime("%d/%m/%Y %H:%M:%S")
+        
+        ctk.CTkLabel(
+            header_frame,
+            text=time_str,
+            font=ctk.CTkFont(size=10),
+            text_color="#94a3b8"
+        ).pack(side="right")
+        
+        # Machine e Operador
+        ctk.CTkLabel(
+            content,
+            text=f"🖥️ {entry['machine_id']} • 👤 {entry.get('operator_email', 'Desconhecido')}",
+            font=ctk.CTkFont(size=11),
+            text_color="gray"
+        ).pack(anchor="w", pady=(3, 0))
+        
+        # Erro (se houver)
+        if not success and entry.get('error_message'):
+            error_frame = ctk.CTkFrame(content, fg_color="#7f1d1d", corner_radius=4)
+            error_frame.pack(fill="x", pady=(5, 0))
+            
+            error_text = entry['error_message'][:100]
+            if len(entry['error_message']) > 100:
+                error_text += "..."
+            
+            error_label = ctk.CTkLabel(
+                error_frame,
+                text=f"❌ Erro: {error_text}",
+                font=ctk.CTkFont(size=10),
+                text_color="#fca5a5",
+                wraplength=700
+            )
+            error_label.pack(anchor="w", padx=8, pady=4)
+        
+        return card
+    
+    def show_history_error(self, error: str):
+        """Mostrar erro ao carregar histórico"""
+        for widget in self.history_scroll.winfo_children():
+            widget.destroy()
+        
+        ctk.CTkLabel(
+            self.history_scroll,
+            text=f"Erro ao carregar histórico:\n{error}",
+            text_color="#ef4444",
+            font=ctk.CTkFont(size=12)
+        ).pack(pady=50)
+    
+    def register_clone_history(
+        self, 
+        session: Dict, 
+        success: bool = True, 
+        error_message: str = None
+    ):
+        """Registrar clonagem no histórico"""
+        try:
+            run_async(self.supabase.table('clone_history').insert({
+                'session_id': f"{session['machine_id']}-{session['tab_id']}",
+                'machine_id': session['machine_id'],
+                'domain': session['domain'],
+                'url': session['url'],
+                'operator_id': self.current_user_id,
+                'operator_email': self.current_user_email,
+                'source': 'desktop_app',
+                'success': success,
+                'error_message': error_message
+            }).execute())
+            
+            logger.info(f"📝 Clonagem registrada no histórico")
+            
+        except Exception as e:
+            # Não falhar se não conseguir registrar
+            logger.error(f"Erro ao registrar histórico: {e}")
+    
+    def show_success_message(self, title: str, message: str):
+        """Mostrar mensagem de sucesso"""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(title)
+        dialog.geometry("400x200")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Centralizar
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 200
+        y = (dialog.winfo_screenheight() // 2) - 100
+        dialog.geometry(f"400x200+{x}+{y}")
+        
+        # Conteúdo
+        frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        ctk.CTkLabel(
+            frame,
+            text="✅",
+            font=ctk.CTkFont(size=32)
+        ).pack(pady=(10, 10))
+        
+        ctk.CTkLabel(
+            frame,
+            text=message,
+            font=ctk.CTkFont(size=12),
+            wraplength=350
+        ).pack(pady=(0, 20))
+        
+        ctk.CTkButton(
+            frame,
+            text="OK",
+            width=100,
+            command=dialog.destroy
+        ).pack()
+        
+        # Auto-fechar após 2 segundos
+        dialog.after(2000, dialog.destroy)
+    
+    def copy_to_clipboard(self, text: str):
+        """Copiar texto para clipboard"""
+        try:
+            # Tentar usar pyperclip primeiro (melhor opção)
+            try:
+                import pyperclip
+                pyperclip.copy(text)
+                logger.info("✅ Texto copiado via pyperclip")
+            except ImportError:
+                # Fallback para tkinter clipboard
+                self.clipboard_clear()
+                self.clipboard_append(text)
+                self.update()
+                logger.info("✅ Texto copiado via tkinter")
+            
+            self.show_success_message("Sucesso", "Dados copiados para clipboard!")
+            
+        except Exception as e:
+            logger.error(f"Erro ao copiar: {e}")
+            self.show_error_dialog("Erro", f"Não foi possível copiar:\n{str(e)}")
+    
+    def export_session_json(self, session: Dict):
+        """Exportar sessão para arquivo JSON"""
+        try:
+            from tkinter import filedialog
+            
+            # Sugerir nome de arquivo
+            filename = f"session_{session['domain']}_{session['tab_id']}.json"
+            
+            # Abrir diálogo de salvar
+            filepath = filedialog.asksaveasfilename(
+                defaultextension=".json",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+                initialfile=filename
+            )
+            
+            if filepath:
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    json.dump(session, f, indent=2, ensure_ascii=False)
+                
+                logger.info(f"✅ Sessão exportada para: {filepath}")
+                self.show_success_message("Exportado", f"Sessão salva em:\n{filepath}")
+                
+        except Exception as e:
+            logger.error(f"Erro ao exportar: {e}")
+            self.show_error_dialog("Erro", f"Não foi possível exportar:\n{str(e)}")
+    
+    def open_cloned_session_and_close(self, session: Dict, dialog):
+        """Abrir sessão clonada e fechar modal"""
+        self.open_cloned_session(session)
+        dialog.destroy()
+    
+    def create_info_section(self, parent, title: str, content: str):
+        """Criar seção de informação formatada"""
+        frame = ctk.CTkFrame(parent, fg_color="#1e293b")
+        frame.pack(fill="x", pady=5, padx=10)
+        
+        ctk.CTkLabel(
+            frame,
+            text=title,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#94a3b8"
+        ).pack(anchor="w", padx=10, pady=(5, 2))
+        
+        ctk.CTkLabel(
+            frame,
+            text=content,
+            font=ctk.CTkFont(size=10),
+            wraplength=700,
+            justify="left"
+        ).pack(anchor="w", padx=10, pady=(0, 5))
     
     def handle_logout(self):
         """Processar logout"""

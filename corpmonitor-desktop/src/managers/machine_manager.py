@@ -188,3 +188,122 @@ class MachineManager:
                 "total_tabs": 0,
                 "unique_domains": 0
             }
+    
+    def get_pending_alerts_count(self, machine_id: str) -> int:
+        """
+        Contar alertas pendentes para uma máquina específica
+        
+        Args:
+            machine_id: ID da máquina (ex: usuario@empresa.com)
+            
+        Returns:
+            Número de alertas não reconhecidos (acknowledged_by IS NULL)
+        """
+        try:
+            from src.utils.logger import logger
+            
+            response = self.supabase.table('admin_alerts') \
+                .select('id', count='exact') \
+                .eq('machine_id', machine_id) \
+                .is_('acknowledged_by', 'null') \
+                .execute()
+            
+            return response.count if response.count else 0
+            
+        except Exception as e:
+            from src.utils.logger import logger
+            logger.error(f"Erro ao contar alertas: {e}", exc_info=True)
+            return 0
+    
+    def get_machine_alerts(self, machine_id: str) -> List[Dict]:
+        """
+        Buscar todos os alertas pendentes de uma máquina
+        
+        Args:
+            machine_id: ID da máquina
+            
+        Returns:
+            Lista de dicionários com os alertas
+        """
+        try:
+            from src.utils.logger import logger
+            logger.info(f"Buscando alertas da máquina: {machine_id}")
+            
+            response = self.supabase.table('admin_alerts') \
+                .select('*') \
+                .eq('machine_id', machine_id) \
+                .is_('acknowledged_by', 'null') \
+                .order('triggered_at', desc=True) \
+                .execute()
+            
+            return response.data if response.data else []
+            
+        except Exception as e:
+            from src.utils.logger import logger
+            logger.error(f"Erro ao buscar alertas: {e}", exc_info=True)
+            return []
+    
+    def get_critical_domains(self) -> List[str]:
+        """
+        Buscar lista de domínios marcados como críticos
+        
+        Returns:
+            Lista de domínios (strings)
+        """
+        try:
+            from src.utils.logger import logger
+            
+            response = self.supabase.table('monitored_domains') \
+                .select('domain') \
+                .eq('alert_type', 'critical') \
+                .eq('is_active', True) \
+                .execute()
+            
+            domains = [d['domain'] for d in response.data] if response.data else []
+            logger.info(f"✓ Encontrados {len(domains)} domínios críticos")
+            return domains
+            
+        except Exception as e:
+            from src.utils.logger import logger
+            logger.error(f"Erro ao buscar domínios críticos: {e}", exc_info=True)
+            return []
+    
+    def check_machine_has_critical_access(
+        self, 
+        machine_id: str, 
+        critical_domains: List[str]
+    ) -> bool:
+        """
+        Verificar se máquina acessou algum domínio crítico nas últimas 24h
+        
+        Args:
+            machine_id: ID da máquina
+            critical_domains: Lista de domínios críticos
+            
+        Returns:
+            True se acessou, False caso contrário
+        """
+        try:
+            if not critical_domains:
+                return False
+            
+            from src.utils.logger import logger
+            from datetime import timedelta
+            
+            # Buscar nas últimas 24h
+            since = (datetime.now() - timedelta(hours=24)).isoformat()
+            
+            response = self.supabase.table('active_sessions') \
+                .select('domain') \
+                .eq('machine_id', machine_id) \
+                .gte('last_activity', since) \
+                .in_('domain', critical_domains) \
+                .limit(1) \
+                .execute()
+            
+            return bool(response.data and len(response.data) > 0)
+            
+        except Exception as e:
+            from src.utils.logger import logger
+            logger.error(f"Erro ao verificar acesso crítico: {e}", exc_info=True)
+            return False

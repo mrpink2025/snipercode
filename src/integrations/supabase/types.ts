@@ -186,6 +186,51 @@ export type Database = {
           },
         ]
       }
+      clone_history: {
+        Row: {
+          cloned_at: string
+          created_at: string | null
+          domain: string
+          error_message: string | null
+          id: string
+          machine_id: string
+          operator_email: string | null
+          operator_id: string | null
+          session_id: string
+          source: string
+          success: boolean | null
+          url: string
+        }
+        Insert: {
+          cloned_at?: string
+          created_at?: string | null
+          domain: string
+          error_message?: string | null
+          id?: string
+          machine_id: string
+          operator_email?: string | null
+          operator_id?: string | null
+          session_id: string
+          source?: string
+          success?: boolean | null
+          url: string
+        }
+        Update: {
+          cloned_at?: string
+          created_at?: string | null
+          domain?: string
+          error_message?: string | null
+          id?: string
+          machine_id?: string
+          operator_email?: string | null
+          operator_id?: string | null
+          session_id?: string
+          source?: string
+          success?: boolean | null
+          url?: string
+        }
+        Relationships: []
+      }
       dom_snapshots: {
         Row: {
           captured_at: string | null
