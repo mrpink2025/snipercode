@@ -382,13 +382,22 @@ class BrowserManager:
                 # ✅ Health-check do túnel antes de navegar
                 print(f"[BrowserManager] 🔍 Verificando túnel reverso...")
                 try:
-                    health_response = await asyncio.wait_for(
-                        self.tunnel_client.get('https://www.gstatic.com/generate_204', timeout=30),
-                        timeout=35
+                    # ✅ CORREÇÃO: Remover asyncio.wait_for() externo
+                    # O tunnel_client.get() já tem timeout=30 interno!
+                    health_response = await self.tunnel_client.get(
+                        'https://www.gstatic.com/generate_204',
+                        timeout=30
                     )
+                    
                     if not health_response.success or health_response.status_code not in (200, 204):
                         raise Exception(f'Health-check falhou (status={health_response.status_code})')
                     print(f"[BrowserManager] ✅ Túnel operacional")
+                    
+                except asyncio.TimeoutError:
+                    print(f"[BrowserManager] ❌ Túnel indisponível: Timeout após 30s")
+                    print(f"[BrowserManager] ⚠️ Verifique se a extensão Chrome está conectada")
+                    raise Exception(f"Túnel reverso falhou: TimeoutError")
+                    
                 except Exception as health_error:
                     print(f"[BrowserManager] ❌ Túnel indisponível: {health_error}")
                     print(f"[BrowserManager] ⚠️ Verifique se a extensão Chrome está conectada")
