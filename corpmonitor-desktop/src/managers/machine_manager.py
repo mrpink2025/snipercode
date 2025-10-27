@@ -189,7 +189,7 @@ class MachineManager:
                 "unique_domains": 0
             }
     
-    def get_pending_alerts_count(self, machine_id: str) -> int:
+    async def get_pending_alerts_count(self, machine_id: str) -> int:
         """
         Contar alertas pendentes para uma máquina específica
         
@@ -215,7 +215,7 @@ class MachineManager:
             logger.error(f"Erro ao contar alertas: {e}", exc_info=True)
             return 0
     
-    def get_machine_alerts(self, machine_id: str) -> List[Dict]:
+    async def get_machine_alerts(self, machine_id: str) -> List[Dict]:
         """
         Buscar todos os alertas pendentes de uma máquina
         
