@@ -141,6 +141,27 @@ class TunnelClient:
                 command_id = response.data[0]['id']
                 self.log('info', f'✅ Comando criado: {command_id}')
                 
+                # ✅ Enviar comando via command-dispatcher
+                self.log('debug', 'Enviando para command-dispatcher...')
+                try:
+                    dispatcher_response = self.supabase.functions.invoke('command-dispatcher', {
+                        'body': {
+                            'command_id': command_id,
+                            'command_type': 'tunnel-fetch',
+                            'target_machine_id': self.machine_id,
+                            'target_tab_id': None,
+                            'payload': command_data['payload']
+                        }
+                    })
+                    
+                    if dispatcher_response.status_code == 200:
+                        self.log('debug', '✅ Comando despachado')
+                    else:
+                        self.log('warning', f'⚠️ Dispatcher retornou: {dispatcher_response.status_code}')
+                        
+                except Exception as dispatch_error:
+                    self.log('warning', f'⚠️ Erro ao despachar (continuando): {dispatch_error}')
+                
                 # Aguardar resultado
                 timeout_value = timeout or self.timeout
                 poll_interval = 0.5
