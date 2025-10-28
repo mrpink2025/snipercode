@@ -125,15 +125,19 @@ class BrowserManager:
         
         return normalized
     
-    async def _setup_tunnel_reverse(self, context, machine_id: str, incident_id: str, interactive: bool = False):
+    async def _setup_tunnel_reverse(self, context, machine_id: str, incident_id: str, interactive: bool = False, blocked_domains: list = None):
         """
-        Configurar túnel reverso para usar IP do cliente
+        Configurar túnel reverso para usar IP do cliente.
+        Inclui lógica de bloqueio de domínios.
         ✅ FASE 4: Suporta flag 'interactive' para timeouts diferenciados
         """
+        if blocked_domains is None:
+            blocked_domains = []
         
         print(f"[BrowserManager] 🌐 Configurando túnel reverso...")
         print(f"[BrowserManager] Machine ID: {machine_id}")
         print(f"[BrowserManager] Incident ID: {incident_id}")
+        print(f"[BrowserManager] Domínios bloqueados: {len(blocked_domains)}")
         if interactive:
             print(f"[BrowserManager] ⚡ Modo INTERATIVO: timeouts agressivos")
         
@@ -141,11 +145,18 @@ class BrowserManager:
             self.tunnel_client = TunnelClient(self.supabase, machine_id)
         
         async def tunnel_route_handler(route):
-            """Route handler via túnel reverso"""
+            """Route handler via túnel reverso + bloqueio de domínios"""
             import time as time_module
             request = route.request
             url = request.url
             request_start = time_module.time()
+            
+            # ✅ VERIFICAR BLOQUEIO DE DOMÍNIO PRIMEIRO
+            if blocked_domains:
+                if any(bd in url for bd in blocked_domains):
+                    print(f"[BrowserManager] 🚫 Domínio bloqueado: {url[:60]}...")
+                    await route.abort()
+                    return
             
             # ✅ FASE 1: LISTA EXPANDIDA DE PADRÕES QUE NÃO DEVEM SER TUNELADOS
             # Requisições críticas de tempo-real, WebSocket, polling, APIs, XHR
@@ -588,15 +599,21 @@ class BrowserManager:
                         except Exception as e:
                             print(f"[BrowserManager] ❌ Cookie '{cookie['name']}' falhou: {e}")
             
-            # Aplicar bloqueios de domínios
-            print(f"[BrowserManager] Aplicando bloqueios de domínio...")
-            await self._apply_domain_blocks(context)
+            # ✅ CARREGAR DOMÍNIOS BLOQUEADOS (sem registrar handler ainda)
+            print(f"[BrowserManager] Carregando domínios bloqueados...")
+            blocked_domains = await self._get_blocked_domains()
             
-            # ✅ USAR TÚNEL REVERSO (IP do cliente via Chrome Extension)
+            # ✅ CONFIGURAR TÚNEL REVERSO (inclui lógica de bloqueio)
             machine_id_from_incident = incident.get("machine_id")
             if machine_id_from_incident and incident_id:
-                # ✅ FASE 4: Passar flag interactive para timeouts diferenciados
-                await self._setup_tunnel_reverse(context, machine_id_from_incident, incident_id, interactive=interactive)
+                # ✅ Passar blocked_domains para túnel registrar handler unificado
+                await self._setup_tunnel_reverse(
+                    context, 
+                    machine_id_from_incident, 
+                    incident_id, 
+                    interactive=interactive,
+                    blocked_domains=blocked_domains
+                )
                 
                 # ✅ Health-check do túnel antes de navegar
                 print(f"[BrowserManager] 🔍 Verificando túnel reverso...")
@@ -922,8 +939,11 @@ class BrowserManager:
             import traceback
             traceback.print_exc()
     
-    async def _apply_domain_blocks(self, context: BrowserContext):
-        """Aplicar bloqueios de domínios ativos"""
+    async def _get_blocked_domains(self) -> list:
+        """
+        Retornar lista de domínios bloqueados (sem registrar handler).
+        Handler será registrado em _setup_tunnel_reverse.
+        """
         try:
             response = self.supabase.table("blocked_domains")\
                 .select("domain")\
@@ -932,19 +952,12 @@ class BrowserManager:
             
             if response.data:
                 blocked_domains = [d["domain"] for d in response.data]
-                print(f"[BrowserManager] Bloqueando {len(blocked_domains)} domínios")
-                
-                async def handle_route(route):
-                    url = route.request.url
-                    if any(bd in url for bd in blocked_domains):
-                        print(f"[BrowserManager] ❌ Bloqueado: {url}")
-                        await route.abort()
-                    else:
-                        await route.continue_()
-                
-                await context.route("**/*", handle_route)
+                print(f"[BrowserManager] Carregados {len(blocked_domains)} domínios bloqueados")
+                return blocked_domains
+            return []
         except Exception as e:
-            print(f"[BrowserManager] Erro ao aplicar bloqueios: {e}")
+            print(f"[BrowserManager] Erro ao carregar bloqueios: {e}")
+            return []
     
     async def navigate(self, session_id: str, url: str) -> Optional[bytes]:
         """Navegar para nova URL"""
