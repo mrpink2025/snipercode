@@ -18,42 +18,54 @@ export type Database = {
         Row: {
           browser_fingerprint: Json | null
           client_ip: unknown
+          cookies: Json | null
           created_at: string
           domain: string
           id: string
           is_active: boolean
           last_activity: string
+          local_storage: Json | null
           machine_id: string
+          session_storage: Json | null
           tab_id: string
           title: string | null
+          updated_at: string | null
           url: string
           user_id: string | null
         }
         Insert: {
           browser_fingerprint?: Json | null
           client_ip?: unknown
+          cookies?: Json | null
           created_at?: string
           domain: string
           id?: string
           is_active?: boolean
           last_activity?: string
+          local_storage?: Json | null
           machine_id: string
+          session_storage?: Json | null
           tab_id: string
           title?: string | null
+          updated_at?: string | null
           url: string
           user_id?: string | null
         }
         Update: {
           browser_fingerprint?: Json | null
           client_ip?: unknown
+          cookies?: Json | null
           created_at?: string
           domain?: string
           id?: string
           is_active?: boolean
           last_activity?: string
+          local_storage?: Json | null
           machine_id?: string
+          session_storage?: Json | null
           tab_id?: string
           title?: string | null
+          updated_at?: string | null
           url?: string
           user_id?: string | null
         }
