@@ -27,21 +27,19 @@ echo [INFO] Go version: %GO_VERSION%
 echo.
 
 REM Detectar e configurar GCC (necessário para Fyne/OpenGL com CGO)
-set GCC_FOUND=
-set "MINGW_PATHS=C:\msys64\mingw64\bin;C:\msys64\ucrt64\bin;C:\TDM-GCC-64\bin;C:\Program Files\mingw-w64\mingw64\bin;C:\Program Files\mingw-w64\x86_64-12.2.0-posix-seh-rt_v10-rev0\mingw64\bin"
-for %%p in (%MINGW_PATHS%) do (
-    if exist "%%p\gcc.exe" (
-        set "PATH=%%p;%PATH%"
+set GCC_FOUND=0
+for %%p in ("C:\\msys64\\mingw64\\bin" "C:\\msys64\\ucrt64\\bin" "C:\\TDM-GCC-64\\bin" "C:\\Program Files\\mingw-w64\\mingw64\\bin" "C:\\Program Files\\mingw-w64\\x86_64-12.2.0-posix-seh-rt_v10-rev0\\mingw64\\bin") do (
+    if exist "%%~p\gcc.exe" (
+        set "PATH=%%~p;!PATH!"
         set GCC_FOUND=1
     )
 )
 
 where gcc >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] GCC nao encontrado. Fyne precisa de compilador C para CGO.
-    echo Instale MSYS2 e o pacote mingw-w64 (64-bit):
-    echo   1") Baixe: https://www.msys2.org/
-    echo   2") Abra "MSYS2 MinGW 64-bit" e rode: pacman -S --needed base-devel mingw-w64-x86_64-gcc
+    echo [ERROR] GCC nao encontrado. Fyne precisa de compilador C (CGO).
+    echo Instale MSYS2 64-bit e o pacote gcc.
+    echo Passos: https://www.msys2.org/  -> abrir MSYS2 MinGW 64-bit  -> pacman -S --needed base-devel mingw-w64-x86_64-gcc
     echo Depois, reabra o terminal e rode build.bat novamente.
     exit /b 1
 ) else (
