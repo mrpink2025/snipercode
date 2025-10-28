@@ -43,6 +43,9 @@ class BrowserManager:
         # ✅ NOVO: Controle de realtime durante sessões
         self.realtime_manager = realtime_manager
         self.realtime_suspended = False
+        
+        # ✅ FASE 5: Semáforo para paralelismo controlado de requests tuneladas
+        self.tunnel_semaphore = asyncio.Semaphore(3)  # Máximo 3 requests simultâneas
     
     @staticmethod
     def escape_js_string(text: str) -> str:
@@ -50,8 +53,28 @@ class BrowserManager:
         return json.dumps(text)[1:-1]  # Remove aspas do JSON
     
     @staticmethod
-    def _tunnel_timeout_for(url: str) -> int:
-        """Determinar timeout adequado baseado no tipo de recurso"""
+    def _tunnel_timeout_for(url: str, interactive: bool = False) -> int:
+        """
+        ✅ FASE 4: Determinar timeout adequado baseado no tipo de recurso e modo
+        Modo interativo: timeouts mais agressivos (usuário esperando)
+        Modo headless: timeouts mais permissivos
+        """
+        
+        # ✅ NOVO: Timeouts mais agressivos em modo interativo
+        if interactive:
+            # APIs e ações do usuário - resposta rápida
+            if '/api/' in url or '&act=' in url or '?ui=2' in url:
+                return 10
+            # Recursos médios (JS/CSS)
+            if any(ext in url for ext in ['.js', '.css']):
+                return 30
+            # Imagens
+            if any(ext in url for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif']):
+                return 20
+            # Padrão interativo
+            return 20
+        
+        # Modo headless: pode esperar mais (mantém lógica atual)
         # Long-polling (Gmail, Slack, etc) - até 2 minutos
         if any(p in url for p in ['/logstreamz', '/sync/', '/longpoll', '/stream', '/channel/bind']):
             return 120
@@ -102,14 +125,17 @@ class BrowserManager:
         
         return normalized
     
-    async def _setup_tunnel_reverse(self, context, machine_id: str, incident_id: str):
+    async def _setup_tunnel_reverse(self, context, machine_id: str, incident_id: str, interactive: bool = False):
         """
         Configurar túnel reverso para usar IP do cliente
+        ✅ FASE 4: Suporta flag 'interactive' para timeouts diferenciados
         """
         
         print(f"[BrowserManager] 🌐 Configurando túnel reverso...")
         print(f"[BrowserManager] Machine ID: {machine_id}")
         print(f"[BrowserManager] Incident ID: {incident_id}")
+        if interactive:
+            print(f"[BrowserManager] ⚡ Modo INTERATIVO: timeouts agressivos")
         
         if not self.tunnel_client:
             self.tunnel_client = TunnelClient(self.supabase, machine_id)
@@ -121,29 +147,95 @@ class BrowserManager:
             url = request.url
             request_start = time_module.time()
             
-            # ✅ LISTA DE PADRÕES QUE NÃO DEVEM SER TUNELADOS
-            # Requisições críticas de tempo-real, WebSocket, polling, APIs
+            # ✅ FASE 1: LISTA EXPANDIDA DE PADRÕES QUE NÃO DEVEM SER TUNELADOS
+            # Requisições críticas de tempo-real, WebSocket, polling, APIs, XHR
             SKIP_TUNNEL_PATTERNS = [
+                # WebSocket e Streaming
                 '/websocket', '/ws/', 'wss://',           # WebSocket connections
                 '/polling', '/sync/', '/realtime',        # Polling/Sync APIs
                 '/longpoll', '/streaming', '/api/v1/stream',  # Streaming
+                '/eventsource', '/sse', '/subscribe', '/channel/',  # SSE/Subscriptions
+                '/socket.io/', '/sockjs/',                # Socket libs
+                
+                # ✅ NOVO: Gmail XHR/Fetch (abrir emails, threads, busca)
+                '?ui=2&ik=',           # Gmail UI API
+                '&act=',               # Gmail actions (open, star, archive)
+                '&_reqid=',            # Gmail request ID
+                '&view=up',            # Gmail thread view
+                '&view=cv',            # Gmail conversation view
+                '&search=',            # Gmail search
+                '/mail/u/0/?',         # Gmail XHR endpoint
+                
+                # ✅ NOVO: Outros webmails
+                'outlook.live.com/owa/',       # Outlook XHR
+                'outlook.office365.com/owa/',  # Outlook 365
+                '/api/v2/messages',            # API genérica de mensagens
+                
+                # ✅ NOVO: Single Page Apps (React/Angular/Vue/Next.js)
+                '/__data.json',        # SvelteKit
+                '/_next/data/',        # Next.js
+                '/api/trpc/',          # tRPC
+                '?__WB_REVISION__',    # Workbox (PWA)
+                
+                # Google APIs e serviços
                 'apis.google.com', 'clients2.google.com', # Google APIs
                 'play.google.com', '/talkgadget/',        # Google services
                 '/logstreamz', '/metrics', '/analytics',  # Telemetry
-                '.woff', '.woff2',                        # Fonts (já em cache)
-                '/socket.io/', '/sockjs/',                # Socket libs
+                
+                # Recursos estáticos já em cache
+                '.woff', '.woff2',                        # Fonts
             ]
             
-            # Verificar se deve pular túnel
+            # Verificar se deve pular túnel (patterns)
             should_skip = any(pattern in url.lower() for pattern in SKIP_TUNNEL_PATTERNS)
             
             if should_skip:
                 self.tunnel_stats["bypassed"] += 1
-                print(f"[BrowserManager] ⚡ DIRETO (bypass): {url[:80]}...")
+                print(f"[BrowserManager] ⚡ DIRETO (bypass pattern): {url[:80]}...")
                 try:
                     await route.continue_()
                 except Exception as fallback_error:
                     print(f"[BrowserManager] ⚠️ Fallback necessário: {fallback_error}")
+                    await route.fallback()
+                return
+            
+            # ✅ FASE 2: Bypass por tipo de requisição (XHR/Fetch sempre direto)
+            request_type = request.resource_type  # 'xhr', 'fetch', 'document', etc
+            request_method = request.method
+            
+            # XHR/Fetch sempre direto (já estamos autenticados via cookies tunelados)
+            if request_type in ['xhr', 'fetch']:
+                self.tunnel_stats["bypassed"] += 1
+                print(f"[BrowserManager] ⚡ {request_type.upper()} direto: {url[:80]}...")
+                try:
+                    await route.continue_()
+                except Exception as fallback_error:
+                    await route.fallback()
+                return
+            
+            # ✅ FASE 2: POST/PUT/DELETE/PATCH sempre direto (operações de estado)
+            if request_method in ['POST', 'PUT', 'DELETE', 'PATCH']:
+                self.tunnel_stats["bypassed"] += 1
+                print(f"[BrowserManager] ⚡ {request_method} direto: {url[:80]}...")
+                try:
+                    await route.continue_()
+                except Exception as fallback_error:
+                    await route.fallback()
+                return
+            
+            # ✅ FASE 2: Bypass por headers críticos (SSE, WebSocket, gRPC)
+            accept_header = (request.headers.get('accept') or '').lower()
+            upgrade_header = (request.headers.get('upgrade') or '').lower()
+            content_type = (request.headers.get('content-type') or '').lower()
+            
+            if ('text/event-stream' in accept_header or 
+                upgrade_header == 'websocket' or 
+                'application/grpc-web+proto' in content_type):
+                self.tunnel_stats["bypassed"] += 1
+                print(f"[BrowserManager] ⚡ DIRETO (header crítico): {url[:80]}...")
+                try:
+                    await route.continue_()
+                except Exception as fallback_error:
                     await route.fallback()
                 return
             
@@ -154,7 +246,7 @@ class BrowserManager:
             
             self.tunnel_stats["requests"] += 1
             
-            # Verificar cache
+            # ✅ FASE 3: Verificar cache com prefetch assíncrono
             cached = self.resource_cache.get(url)
             if cached:
                 content, status, headers = cached
@@ -163,6 +255,12 @@ class BrowserManager:
                 print(f"[BrowserManager] ⚡ Cache: {url[:60]}... ({elapsed:.0f}ms)")
                 
                 await route.fulfill(status=status, headers=headers, body=content)
+                
+                # ✅ FASE 3: Prefetch assíncrono se recurso está próximo de expirar
+                # (não espera - executa em background)
+                if self.resource_cache.is_expiring_soon(url):
+                    asyncio.create_task(self._prefetch_resource(url, incident_id))
+                
                 return
             
             print(f"[BrowserManager] 🌐 TÚNEL: {url[:80]}...")
@@ -176,16 +274,19 @@ class BrowserManager:
                     'Referer': request.headers.get('referer', ''),
                 }
                 
-                # Fazer requisição via túnel com timeout inteligente
-                timeout = self._tunnel_timeout_for(url)
-                tunnel_response: TunnelResponse = await self.tunnel_client.fetch(
-                    url=url,
-                    method=request.method,
-                    headers=request_headers,
-                    timeout=timeout,
-                    incident_id=incident_id,
-                    max_retries=5 if timeout > 60 else 3  # Mais retries para long-poll
-                )
+                # ✅ FASE 4: Timeout inteligente considerando modo interativo
+                timeout = self._tunnel_timeout_for(url, interactive=interactive)
+                
+                # ✅ FASE 5: Paralelizar com semáforo (max 3 simultâneas)
+                async with self.tunnel_semaphore:
+                    tunnel_response: TunnelResponse = await self.tunnel_client.fetch(
+                        url=url,
+                        method=request.method,
+                        headers=request_headers,
+                        timeout=timeout,
+                        incident_id=incident_id,
+                        max_retries=5 if timeout > 60 else 3  # Mais retries para long-poll
+                    )
                 
                 if not tunnel_response.success:
                     raise Exception(f"Túnel falhou: {tunnel_response.error}")
@@ -432,7 +533,8 @@ class BrowserManager:
             # ✅ USAR TÚNEL REVERSO (IP do cliente via Chrome Extension)
             machine_id_from_incident = incident.get("machine_id")
             if machine_id_from_incident and incident_id:
-                await self._setup_tunnel_reverse(context, machine_id_from_incident, incident_id)
+                # ✅ FASE 4: Passar flag interactive para timeouts diferenciados
+                await self._setup_tunnel_reverse(context, machine_id_from_incident, incident_id, interactive=interactive)
                 
                 # ✅ Health-check do túnel antes de navegar
                 print(f"[BrowserManager] 🔍 Verificando túnel reverso...")
@@ -605,6 +707,42 @@ class BrowserManager:
             import traceback
             traceback.print_exc()
             return None
+    
+    async def _prefetch_resource(self, url: str, incident_id: str):
+        """
+        ✅ FASE 3: Atualizar cache em background sem bloquear navegação
+        
+        Args:
+            url: URL do recurso a atualizar
+            incident_id: ID do incidente para log
+        """
+        try:
+            if not self.tunnel_client:
+                return
+            
+            # Fazer request tunelada com timeout curto (não é crítico)
+            tunnel_response = await self.tunnel_client.fetch(
+                url=url,
+                method='GET',
+                timeout=30,
+                incident_id=incident_id,
+                max_retries=1  # Só 1 retry (não é crítico)
+            )
+            
+            if tunnel_response.success:
+                # Atualizar cache silenciosamente
+                self.resource_cache.set(
+                    url, 
+                    tunnel_response.bytes, 
+                    tunnel_response.status_code, 
+                    tunnel_response.headers
+                )
+                print(f"[BrowserManager] ♻️ Cache atualizado (prefetch): {url[:60]}...")
+            
+        except Exception as e:
+            # Falha silenciosa - cache antigo ainda válido
+            print(f"[BrowserManager] ⚠️ Prefetch falhou (não crítico): {url[:40]}... - {e}")
+            pass
     
     async def _inject_fingerprint_overrides(self, context: BrowserContext, fingerprint: Dict):
         """Injetar scripts para sobrescrever propriedades do navigator/window"""

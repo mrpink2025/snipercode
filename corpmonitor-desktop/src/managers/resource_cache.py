@@ -92,6 +92,31 @@ class ResourceCache:
         self.hits += 1
         return (resource.content, resource.status, resource.headers)
     
+    def is_expiring_soon(self, url: str, threshold: float = 0.8) -> bool:
+        """
+        ✅ FASE 3: Verificar se recurso está próximo de expirar
+        
+        Args:
+            url: URL do recurso
+            threshold: Percentual de TTL para considerar "expirando" (padrão: 80%)
+        
+        Returns:
+            True se recurso existe e está em >80% do TTL
+        """
+        if not self._is_cacheable(url):
+            return False
+        
+        key = self._get_cache_key(url)
+        
+        if key not in self._cache:
+            return False
+        
+        resource = self._cache[key]
+        age = time.time() - resource.cached_at
+        
+        # Se já passou >80% do TTL, retorna True para prefetch
+        return age > (self.ttl_seconds * threshold)
+    
     def set(self, url: str, content: bytes, status: int, headers: Dict[str, str]):
         """Adicionar recurso ao cache"""
         if not self._is_cacheable(url):
