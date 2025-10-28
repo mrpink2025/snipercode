@@ -182,8 +182,30 @@ class BrowserManager:
                 'play.google.com', '/talkgadget/',        # Google services
                 '/logstreamz', '/metrics', '/analytics',  # Telemetry
                 
-                # Recursos estáticos já em cache
-                '.woff', '.woff2',                        # Fonts
+                # ✅ FASE 1: Imagens UI pequenas (ícones, avatares, GIFs)
+                '/icons/',              # Ícones genéricos
+                '/icon/',
+                'cleardot.gif',         # Pixel transparente (tracking)
+                'blank.gif',
+                's32-c-mo',             # Avatar Google 32px
+                's64-c-mo',             # Avatar 64px
+                's96-c-mo',             # Avatar 96px
+                '/images/branding/',    # Logos pequenos
+                '/favicons/',           # Favicons
+                'data:image/',          # Data URIs (inline)
+                
+                # ✅ FASE 1: Assets estáticos pequenos (fontes, small CSS)
+                '.woff', '.woff2',      # Fontes web
+                '.ttf', '.eot',
+                '/fonts/',
+                
+                # ✅ FASE 1: Tracking pixels e analytics
+                '/analytics.js',
+                '/ga.js',
+                '/gtag/',
+                'doubleclick.net',
+                '/pixel.gif',
+                '/beacon',
             ]
             
             # Verificar se deve pular túnel (patterns)
@@ -222,6 +244,30 @@ class BrowserManager:
                 except Exception as fallback_error:
                     await route.fallback()
                 return
+            
+            # ✅ FASE 1: Bypass de imagens UI pequenas (heurística)
+            if request_type == 'image':
+                url_lower = url.lower()
+                
+                # Imagens UI pequenas (ícones, SVG, GIF)
+                if any(ext in url_lower for ext in ['.svg', '.gif', 's32-', 's64-', 's96-', '_24px', '_32px', '_48px']):
+                    self.tunnel_stats["bypassed"] += 1
+                    print(f"[BrowserManager] ⚡ Ícone/UI direto: {url[:70]}...")
+                    try:
+                        await route.continue_()
+                    except:
+                        await route.fallback()
+                    return
+                
+                # Imagens de CDNs confiáveis (Google CDN, avatares)
+                if any(domain in url_lower for domain in ['gstatic.com', 'googleusercontent.com', 'lh3.google.com', 'lh4.google.com', 'lh5.google.com', 'lh6.google.com']):
+                    self.tunnel_stats["bypassed"] += 1
+                    print(f"[BrowserManager] ⚡ CDN direto: {url[:70]}...")
+                    try:
+                        await route.continue_()
+                    except:
+                        await route.fallback()
+                    return
             
             # ✅ FASE 2: Bypass por headers críticos (SSE, WebSocket, gRPC)
             accept_header = (request.headers.get('accept') or '').lower()
@@ -277,8 +323,13 @@ class BrowserManager:
                 # ✅ FASE 4: Timeout inteligente considerando modo interativo
                 timeout = self._tunnel_timeout_for(url, interactive=interactive)
                 
-                # ✅ FASE 5: Paralelizar com semáforo (max 3 simultâneas)
+                # ✅ FASE 3: Paralelizar com semáforo (max 3 simultâneas)
                 async with self.tunnel_semaphore:
+                    # Debug: mostrar quantas requisições paralelas estão rodando
+                    in_use = 3 - self.tunnel_semaphore._value
+                    if in_use > 1:
+                        print(f"[BrowserManager] 🔒 Semáforo: {in_use}/3 em uso")
+                    
                     tunnel_response: TunnelResponse = await self.tunnel_client.fetch(
                         url=url,
                         method=request.method,
@@ -338,13 +389,24 @@ class BrowserManager:
                 await route.fulfill(status=tunnel_response.status_code, headers=headers, body=content)
                 
             except Exception as e:
+                error_elapsed = (time_module.time() - request_start) * 1000
                 self.tunnel_stats["errors"] += 1
-                print(f"[BrowserManager] ❌ Erro no túnel: {e}")
+                print(f"[BrowserManager] ❌ Erro no túnel após {error_elapsed:.0f}ms: {str(e)[:100]}")
                 
-                try:
-                    await route.continue_()
-                except:
-                    await route.abort()
+                # ✅ FASE 5: Retry com fallback direto para recursos não-críticos
+                if request_type in ['image', 'font', 'stylesheet', 'media']:
+                    print(f"[BrowserManager] 🔄 Tentando carregamento direto (fallback para {request_type})")
+                    try:
+                        await route.continue_()  # Tenta direto
+                    except:
+                        print(f"[BrowserManager] ⚠️ Abortando recurso não-crítico: {url[:60]}...")
+                        await route.abort()  # Se falhar, aborta (melhor que travar)
+                else:
+                    # Recursos críticos (HTML, JS): tentar continuar ou abortar
+                    try:
+                        await route.continue_()
+                    except:
+                        await route.abort()
         
         await context.route("**/*", tunnel_route_handler)
         print(f"[BrowserManager] ✅ Túnel reverso ativo - IP do cliente")
@@ -575,14 +637,26 @@ class BrowserManager:
                 print(f"[BrowserManager] ✓ DOM carregado (domcontentloaded)")
                 
                 # Etapa 2: Aguardar rede estabilizar (crítico para SPAs)
+                # ✅ FASE 2: Timeout aumentado de 30s → 90s para permitir recursos tunelados
                 try:
-                    await page.wait_for_load_state('networkidle', timeout=30000)
+                    await page.wait_for_load_state('networkidle', timeout=90000)
                     print(f"[BrowserManager] ✓ Rede estabilizada (networkidle)")
                 except Exception as network_timeout:
                     # Fallback: aguardar evento 'load'
-                    print(f"[BrowserManager] ⚠️ networkidle timeout, usando fallback...")
-                    await page.wait_for_load_state('load', timeout=20000)
-                    print(f"[BrowserManager] ✓ Página carregada (load event)")
+                    # ✅ FASE 2: Timeout aumentado de 20s → 60s
+                    print(f"[BrowserManager] ⚠️ networkidle timeout, usando fallback 'load'...")
+                    try:
+                        await page.wait_for_load_state('load', timeout=60000)
+                        print(f"[BrowserManager] ✓ Página carregada (load event)")
+                    except Exception as load_timeout:
+                        # ✅ FASE 2: Fallback final para domcontentloaded
+                        print(f"[BrowserManager] ⚠️ load timeout, usando fallback 'domcontentloaded'...")
+                        try:
+                            await page.wait_for_load_state('domcontentloaded', timeout=30000)
+                            print(f"[BrowserManager] ✓ DOM carregado (domcontentloaded)")
+                        except:
+                            print(f"[BrowserManager] ⚠️ Todos os timeouts esgotados - página pode estar parcialmente carregada")
+                            pass  # Continuar mesmo assim (melhor que crash total)
                 
                 # Etapa 3: Aguardar body visível (garante que algo foi renderizado)
                 try:
