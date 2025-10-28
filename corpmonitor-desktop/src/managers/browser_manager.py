@@ -745,14 +745,40 @@ class BrowserManager:
                 
                 import json
                 
+                # 🔧 FUNÇÃO PARA PREPARAR STORAGE SEM DUPLICAR ESCAPES
+                def _prepare_storage_for_injection(storage_dict):
+                    """
+                    Preparar storage data para injeção JavaScript sem duplicar escapes.
+                    Se value já é string JSON, mantém; se é string simples, escapa; se é object, serializa.
+                    """
+                    prepared = {}
+                    for key, value in storage_dict.items():
+                        if isinstance(value, str):
+                            try:
+                                # Tentar parsear: se sucesso, já é JSON válido
+                                json.loads(value)
+                                # Manter como está (já é string JSON serializada)
+                                prepared[key] = value
+                            except json.JSONDecodeError:
+                                # É string simples, precisa serializar
+                                prepared[key] = json.dumps(value)
+                        else:
+                            # Object/array Python, serializar
+                            prepared[key] = json.dumps(value)
+                    return json.dumps(prepared)
+                
                 try:
+                    # Preparar dados com escape correto
+                    local_data_json = _prepare_storage_for_injection(local_storage)
+                    session_data_json = _prepare_storage_for_injection(session_storage)
+                    
                     await page.evaluate(f"""
                         // Limpar storage existente
                         localStorage.clear();
                         sessionStorage.clear();
                         
                         // Injetar localStorage
-                        const localData = {json.dumps(local_storage)};
+                        const localData = {local_data_json};
                         for (const [key, value] of Object.entries(localData)) {{
                             try {{
                                 localStorage.setItem(key, value);
@@ -762,7 +788,7 @@ class BrowserManager:
                         }}
                         
                         // Injetar sessionStorage
-                        const sessionData = {json.dumps(session_storage)};
+                        const sessionData = {session_data_json};
                         for (const [key, value] of Object.entries(sessionData)) {{
                             try {{
                                 sessionStorage.setItem(key, value);

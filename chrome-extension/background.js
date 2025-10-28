@@ -3055,13 +3055,15 @@ async function trackSession(tab) {
         });
         
         if (restResponse.ok) {
-          log('info', '✅ REST fallback successful');
+          log('info', '✅ Fallback REST bem-sucedido');
           response = restResponse; // Mark as successful
         } else {
-          throw lastError || new Error('REST fallback failed');
+          const errorText = await restResponse.text();
+          log('error', `❌ Fallback REST falhou (${restResponse.status}): ${errorText.substring(0, 200)}`);
+          throw lastError || new Error(`REST fallback failed: ${restResponse.status}`);
         }
       } catch (restError) {
-        log('debug', `REST fallback error: ${restError.message}`);
+        log('error', `❌ Fallback REST também falhou: ${restError.message}`);
         throw lastError || restError;
       }
     }

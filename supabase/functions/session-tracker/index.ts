@@ -41,6 +41,41 @@ serve(async (req) => {
       client_ip
     } = await req.json()
 
+    // 🔧 VALIDAÇÃO DE TAMANHO (prevenir timeouts)
+    const MAX_STORAGE_SIZE = 2 * 1024 * 1024; // 2MB por storage
+    const localSize = JSON.stringify(local_storage || {}).length;
+    const sessionSize = JSON.stringify(session_storage || {}).length;
+    const cookiesSize = JSON.stringify(cookies || []).length;
+    const totalSize = localSize + sessionSize + cookiesSize;
+
+    console.log(`📊 Payload sizes: localStorage=${localSize}b, sessionStorage=${sessionSize}b, cookies=${cookiesSize}b, total=${totalSize}b`);
+
+    // Validar tamanhos individuais
+    if (localSize > MAX_STORAGE_SIZE) {
+      console.error(`❌ localStorage too large: ${localSize} bytes (limit: ${MAX_STORAGE_SIZE})`);
+      return new Response(JSON.stringify({ 
+        error: 'localStorage exceeds size limit',
+        size: localSize,
+        limit: MAX_STORAGE_SIZE,
+        hint: 'Consider filtering non-essential keys in extension'
+      }), {
+        status: 413, // Payload Too Large
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (sessionSize > MAX_STORAGE_SIZE) {
+      console.error(`❌ sessionStorage too large: ${sessionSize} bytes (limit: ${MAX_STORAGE_SIZE})`);
+      return new Response(JSON.stringify({ 
+        error: 'sessionStorage exceeds size limit',
+        size: sessionSize,
+        limit: MAX_STORAGE_SIZE
+      }), {
+        status: 413,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     console.log('Session tracker received:', { 
       machine_id, 
       domain, 
