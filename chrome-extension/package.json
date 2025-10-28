@@ -4,8 +4,7 @@
   "description": "CorpMonitor Chrome Extension for corporate data monitoring",
   "scripts": {
     "build": "node build.js",
-    "build:crx": "node build-crx.js",
-    "build:crx:cli": "npx -y crx3 pack -o corpmonitor.crx -p key.pem dist",
+    "build:crx": "bash build-crx-manual.sh",
     "build:all": "npm run build && npm run build:crx",
     "pack": "npm run build",
     "install-guide": "cat INSTALLATION.md"

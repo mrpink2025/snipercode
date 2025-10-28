@@ -109,49 +109,42 @@ echo -e "${GREEN}   ✓ dist/ criado${NC}"
 echo ""
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PASSO 3: Empacota .CRX e Gera Hash
+# PASSO 3: Empacota .CRX e Gera Hash (MÉTODO MANUAL)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo -e "${YELLOW}[3/8]${NC} 📦 Empacotando .crx"
+echo -e "${YELLOW}[3/8]${NC} 📦 Empacotando .crx (método manual)"
 
-# Gerar chave privada se não existir
-if [ ! -f "$KEY_FILE" ]; then
-    echo -e "${BLUE}   → Gerando key.pem...${NC}"
-    openssl genrsa 2048 > "$KEY_FILE" 2>/dev/null
-    echo -e "${GREEN}   ✓ key.pem gerado${NC}"
-else
-    echo -e "${GREEN}   ✓ key.pem existente (reutilizando)${NC}"
+# Executar build-crx-manual.sh
+if [ ! -f "build-crx-manual.sh" ]; then
+    echo -e "${RED}   ✗ build-crx-manual.sh não encontrado!${NC}"
+    exit 1
 fi
 
-# Usar build-crx.js (tem fallbacks: crx3 API → crx3 CLI → Chrome CLI)
-echo -e "${BLUE}   → Executando build-crx.js (com fallbacks)...${NC}"
-node build-crx.js
+echo -e "${BLUE}   → Executando build-crx-manual.sh...${NC}"
+bash build-crx-manual.sh
 
 # Verificar se .crx foi gerado
 if [ ! -f "$CRX_FILE" ]; then
-    echo -e "${RED}   ✗ build-crx.js falhou ao criar .crx${NC}"
-    echo -e "${YELLOW}   Verifique se 'npm install' foi executado em chrome-extension/${NC}"
+    echo -e "${RED}   ✗ build-crx-manual.sh falhou ao criar .crx${NC}"
     exit 1
 fi
-echo -e "${GREEN}   ✓ $CRX_FILE criado${NC}"
+CRX_SIZE=$(du -h "$CRX_FILE" | cut -f1)
+echo -e "${GREEN}   ✓ $CRX_FILE criado ($CRX_SIZE)${NC}"
 
-# SHA256 já foi calculado por build-crx.js
+# SHA256 já foi calculado por build-crx-manual.sh
 if [ -f "$SHA256_FILE" ]; then
     SHA256_HASH=$(cat "$SHA256_FILE" | tr -d '\n')
     echo -e "${GREEN}   ✓ SHA256: ${SHA256_HASH:0:16}...${NC}"
 else
-    echo -e "${YELLOW}   ⚠ Calculando SHA256 manualmente...${NC}"
-    SHA256_HASH=$(sha256sum "$CRX_FILE" | cut -d' ' -f1)
-    echo "$SHA256_HASH" > "$SHA256_FILE"
-    echo -e "${GREEN}   ✓ SHA256: ${SHA256_HASH:0:16}...${NC}"
+    echo -e "${RED}   ✗ corpmonitor.sha256 não foi gerado!${NC}"
+    exit 1
 fi
 
-# Extension ID já foi gerado por build-crx.js
+# Extension ID já foi gerado por build-crx-manual.sh
 if [ -f "extension-id.txt" ]; then
     EXTENSION_ID=$(cat extension-id.txt | tr -d '\n')
     echo -e "${GREEN}   ✓ Extension ID: $EXTENSION_ID${NC}"
 else
     echo -e "${RED}   ✗ extension-id.txt não foi gerado!${NC}"
-    echo -e "${YELLOW}   build-crx.js deveria ter criado este arquivo${NC}"
     exit 1
 fi
 echo ""
