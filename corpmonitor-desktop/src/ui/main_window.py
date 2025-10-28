@@ -460,7 +460,7 @@ class MainWindow(ctk.CTk):
         self.filter_critical_only.pack(side="left")
         
         # Info sobre quantidade de domínios críticos
-        critical_domains = run_async(self.machine_manager.get_critical_domains())
+        critical_domains = self.machine_manager.get_critical_domains()
         critical_count = len(critical_domains)
         
         if critical_count > 0:
