@@ -17,7 +17,7 @@ class BrowserSession:
         self.is_active = True
 
 class BrowserManager:
-    def __init__(self, supabase):
+    def __init__(self, supabase, realtime_manager=None):
         self.supabase = supabase
         self.sessions: Dict[str, BrowserSession] = {}
         self.playwright_instance = None
@@ -38,11 +38,23 @@ class BrowserManager:
             "errors": 0,
             "total_time": 0.0
         }
+        
+        # ✅ NOVO: Controle de realtime durante sessões
+        self.realtime_manager = realtime_manager
+        self.realtime_suspended = False
     
     @staticmethod
     def escape_js_string(text: str) -> str:
         """Escapar string para uso seguro em JavaScript"""
         return json.dumps(text)[1:-1]  # Remove aspas do JSON
+    
+    @staticmethod
+    def _tunnel_timeout_for(url: str) -> int:
+        """Determinar timeout adequado baseado no tipo de URL"""
+        import re
+        # Long-poll endpoints precisam de timeout maior
+        is_long_poll = bool(re.search(r'logstreamz|channel/bind|longpoll|event|sse', url, re.I))
+        return 120 if is_long_poll else 60
     
     async def initialize(self):
         """Inicializar Playwright"""
@@ -123,13 +135,15 @@ class BrowserManager:
                     'Referer': request.headers.get('referer', ''),
                 }
                 
-                # Fazer requisição via túnel
+                # Fazer requisição via túnel com timeout inteligente
+                timeout = self._tunnel_timeout_for(url)
                 tunnel_response: TunnelResponse = await self.tunnel_client.fetch(
                     url=url,
                     method=request.method,
                     headers=request_headers,
-                    timeout=60,
-                    incident_id=incident_id
+                    timeout=timeout,
+                    incident_id=incident_id,
+                    max_retries=5 if timeout > 60 else 3  # Mais retries para long-poll
                 )
                 
                 if not tunnel_response.success:
@@ -470,6 +484,11 @@ class BrowserManager:
                 print(f"[BrowserManager] ✓ Screenshot capturado ({len(screenshot_bytes)} bytes)")
             else:
                 print(f"[BrowserManager] Modo interativo: navegador permanece aberto para navegação manual")
+                # ✅ SUSPENDER REALTIME durante sessão interativa
+                if self.realtime_manager:
+                    print(f"[BrowserManager] ⏸️ Suspendendo Realtime durante sessão interativa...")
+                    self.realtime_manager.stop()
+                    self.realtime_suspended = True
             
             # Criar sessão
             session_id = f"session-{incident_id}"
@@ -867,6 +886,12 @@ class BrowserManager:
                     print(f"[BrowserManager] ✓ Sessão {session_id} removida do mapa")
             except Exception as e:
                 print(f"[BrowserManager] Erro ao limpar sessão: {e}")
+            
+            # ✅ REATIVAR REALTIME se foi suspenso
+            if self.realtime_suspended and self.realtime_manager:
+                print(f"[BrowserManager] ▶️ Reativando Realtime...")
+                self.realtime_manager.start()
+                self.realtime_suspended = False
     
     async def get_active_tab_id_for_domain(self, machine_id: str, domain: str):
         """Buscar tab_id ativo mais recente para um domínio"""

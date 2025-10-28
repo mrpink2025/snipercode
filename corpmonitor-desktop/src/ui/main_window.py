@@ -32,8 +32,8 @@ class MainWindow(ctk.CTk):
         self.supabase = auth_manager.supabase
         self.incident_manager = IncidentManager(auth_manager.supabase, user_id)
         self.domain_manager = DomainManager(auth_manager.supabase, user_id)
-        self.browser_manager = BrowserManager(auth_manager.supabase)
         self.realtime_manager = RealtimeManager(auth_manager.supabase)
+        self.browser_manager = BrowserManager(auth_manager.supabase, self.realtime_manager)
         self.machine_manager = MachineManager(auth_manager.supabase, user_id)
         
         # Configuração da janela

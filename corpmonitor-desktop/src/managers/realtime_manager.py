@@ -22,6 +22,7 @@ class RealtimeManager:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._async_client = None
         self._last_alert_ts: datetime = datetime.utcnow() - timedelta(hours=1)
+        self._stopped = False  # ✅ Flag de controle
         
         self._supabase_url = os.getenv("SUPABASE_URL", "")
         self._supabase_key = os.getenv("SUPABASE_ANON_KEY", os.getenv("SUPABASE_KEY", ""))
@@ -48,6 +49,7 @@ class RealtimeManager:
             return
         
         self._stop_event.clear()
+        self._stopped = False  # ✅ Permitir reconexões
         self._thread = threading.Thread(target=self._run, name="RealtimeThread", daemon=True)
         self._thread.start()
         logger.info("Thread de realtime iniciada")
@@ -56,6 +58,7 @@ class RealtimeManager:
         """Parar monitoramento em tempo real"""
         logger.info("Parando RealtimeManager...")
         self._stop_event.set()
+        self._stopped = True  # ✅ Bloquear reconexões
         
         try:
             if self._async_client and self._loop and self._loop.is_running():
@@ -190,7 +193,7 @@ class RealtimeManager:
         """Fallback: polling manual do banco de dados"""
         logger.info("Iniciando fallback por polling (admin_alerts)...")
         
-        while not self._stop_event.is_set():
+        while not self._stop_event.is_set() and not self._stopped:
             try:
                 resp = (
                     self.supabase
@@ -213,8 +216,9 @@ class RealtimeManager:
                     self._emit_alert(row)
                     
             except Exception as e:
-                logger.error(f"Erro no polling de alertas: {e}", exc_info=True)
-                time.sleep(3)
+                if not self._stopped:  # ✅ Não logar erro se foi stop intencional
+                    logger.error(f"Erro no polling de alertas: {e}", exc_info=True)
+                    time.sleep(3)
             
             time.sleep(2)
     

