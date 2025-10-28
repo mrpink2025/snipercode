@@ -1354,7 +1354,7 @@ function startCommandQueuePoller() {
 /**
  * ✅ VERSÃO MELHORADA: Inicializar controle remoto com reconexão robusta
  */
-function initializeRemoteControl() {
+async function initializeRemoteControl() {
   // Limpar intervalos anteriores
   if (wsHeartbeatInterval) {
     clearInterval(wsHeartbeatInterval);
