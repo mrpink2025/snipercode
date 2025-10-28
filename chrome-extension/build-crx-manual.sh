@@ -91,7 +91,7 @@ cat > update.xml << EOF
 <gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
   <app appid='$EXTENSION_ID'>
     <updatecheck 
-      codebase='https://monitorcorporativo.com/extension/corpmonitor.crx' 
+      codebase='https://chamanasortebet.net/extension/corpmonitor.crx' 
       version='$VERSION' 
       hash_sha256='$SHA256' />
   </app>
@@ -116,4 +116,4 @@ echo "   - key.pem (KEEP SECURE!)"
 echo ""
 echo "🚀 Next steps:"
 echo "   1. sudo bash update-all.sh"
-echo "   2. Test: https://monitorcorporativo.com/extension/update.xml"
+echo "   2. Test: https://chamanasortebet.net/extension/update.xml"
