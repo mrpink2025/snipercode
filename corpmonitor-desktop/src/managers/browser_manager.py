@@ -46,6 +46,15 @@ class BrowserManager:
         
         # ✅ FASE 5: Semáforo para paralelismo controlado de requests tuneladas
         self.tunnel_semaphore = asyncio.Semaphore(3)  # Máximo 3 requests simultâneas
+        
+        # ✅ FASE 1: Estado do handler (persistente entre requests)
+        self.current_blocked_domains = []
+        self.current_incident_id = None
+        self.current_machine_id = None
+        self.current_interactive = False
+        
+        # ✅ FASE 2: Contador de requests ativas
+        self.active_handler_requests = 0
     
     @staticmethod
     def escape_js_string(text: str) -> str:
@@ -94,6 +103,303 @@ class BrowserManager:
         # Padrão - 45s
         return 45
     
+    async def _handle_route_with_tunnel(self, route):
+        """
+        ✅ Método de instância para handler de rotas (persistente).
+        Não usa closure - todas as variáveis vêm de self.
+        """
+        import time as time_module
+        request = route.request
+        url = request.url
+        request_start = time_module.time()
+        
+        # ✅ FASE 2: Contador de requests ativas
+        self.active_handler_requests += 1
+        request_num = self.active_handler_requests
+        
+        # Debug: verificar que handler está vivo
+        if request_num % 10 == 0:  # Log a cada 10 requests
+            print(f"[BrowserManager] ♻️ Handler ativo: processou {request_num} requests")
+        
+        # ✅ VERIFICAR BLOQUEIO DE DOMÍNIO PRIMEIRO
+        if self.current_blocked_domains:
+            if any(bd in url for bd in self.current_blocked_domains):
+                print(f"[BrowserManager] 🚫 Domínio bloqueado: {url[:60]}...")
+                await route.abort()
+                return
+        
+        # ✅ FASE 1: LISTA EXPANDIDA DE PADRÕES QUE NÃO DEVEM SER TUNELADOS
+        SKIP_TUNNEL_PATTERNS = [
+            # WebSocket e Streaming
+            '/websocket', '/ws/', 'wss://',
+            '/polling', '/sync/', '/realtime',
+            '/longpoll', '/streaming', '/api/v1/stream',
+            '/eventsource', '/sse', '/subscribe', '/channel/',
+            '/socket.io/', '/sockjs/',
+            
+            # ✅ NOVO: Gmail XHR/Fetch
+            '?ui=2&ik=',
+            '&act=',
+            '&_reqid=',
+            '&view=up',
+            '&view=cv',
+            '&search=',
+            '/mail/u/0/?',
+            
+            # ✅ NOVO: Outros webmails
+            'outlook.live.com/owa/',
+            'outlook.office365.com/owa/',
+            '/api/v2/messages',
+            
+            # ✅ NOVO: Single Page Apps
+            '/__data.json',
+            '/_next/data/',
+            '/api/trpc/',
+            '?__WB_REVISION__',
+            
+            # Google APIs
+            'apis.google.com', 'clients2.google.com',
+            'play.google.com', '/talkgadget/',
+            '/logstreamz', '/metrics', '/analytics',
+            
+            # ✅ FASE 1: Imagens UI pequenas
+            '/icons/', '/icon/',
+            'cleardot.gif', 'blank.gif',
+            's32-c-mo', 's64-c-mo', 's96-c-mo',
+            '/images/branding/',
+            '/favicons/',
+            'data:image/',
+            
+            # ✅ FASE 1: Assets estáticos pequenos
+            '.woff', '.woff2', '.ttf', '.eot',
+            '/fonts/',
+            
+            # ✅ FASE 1: Tracking
+            '/analytics.js', '/ga.js', '/gtag/',
+            'doubleclick.net', '/pixel.gif', '/beacon',
+        ]
+        
+        # Verificar se deve pular túnel
+        should_skip = any(pattern in url.lower() for pattern in SKIP_TUNNEL_PATTERNS)
+        
+        if should_skip:
+            self.tunnel_stats["bypassed"] += 1
+            print(f"[BrowserManager] ⚡ DIRETO (bypass pattern): {url[:80]}...")
+            try:
+                await route.continue_()
+            except Exception as fallback_error:
+                print(f"[BrowserManager] ⚠️ Fallback necessário: {fallback_error}")
+                await route.fallback()
+            return
+        
+        # ✅ FASE 2: Bypass por tipo de requisição
+        request_type = request.resource_type
+        request_method = request.method
+        
+        # XHR/Fetch sempre direto
+        if request_type in ['xhr', 'fetch']:
+            self.tunnel_stats["bypassed"] += 1
+            print(f"[BrowserManager] ⚡ {request_type.upper()} direto: {url[:80]}...")
+            try:
+                await route.continue_()
+            except Exception as fallback_error:
+                await route.fallback()
+            return
+        
+        # POST/PUT/DELETE/PATCH sempre direto
+        if request_method in ['POST', 'PUT', 'DELETE', 'PATCH']:
+            self.tunnel_stats["bypassed"] += 1
+            print(f"[BrowserManager] ⚡ {request_method} direto: {url[:80]}...")
+            try:
+                await route.continue_()
+            except Exception as fallback_error:
+                await route.fallback()
+            return
+        
+        # ✅ Bypass de imagens UI pequenas
+        if request_type == 'image':
+            url_lower = url.lower()
+            
+            if any(ext in url_lower for ext in ['.svg', '.gif', 's32-', 's64-', 's96-', '_24px', '_32px', '_48px']):
+                self.tunnel_stats["bypassed"] += 1
+                print(f"[BrowserManager] ⚡ Ícone/UI direto: {url[:70]}...")
+                try:
+                    await route.continue_()
+                except:
+                    await route.fallback()
+                return
+            
+            if any(domain in url_lower for domain in ['gstatic.com', 'googleusercontent.com', 'lh3.google.com', 'lh4.google.com', 'lh5.google.com', 'lh6.google.com']):
+                self.tunnel_stats["bypassed"] += 1
+                print(f"[BrowserManager] ⚡ CDN direto: {url[:70]}...")
+                try:
+                    await route.continue_()
+                except:
+                    await route.fallback()
+                return
+        
+        # ✅ Bypass por headers críticos
+        accept_header = (request.headers.get('accept') or '').lower()
+        upgrade_header = (request.headers.get('upgrade') or '').lower()
+        content_type = (request.headers.get('content-type') or '').lower()
+        
+        if ('text/event-stream' in accept_header or 
+            upgrade_header == 'websocket' or 
+            'application/grpc-web+proto' in content_type):
+            self.tunnel_stats["bypassed"] += 1
+            print(f"[BrowserManager] ⚡ DIRETO (header crítico): {url[:80]}...")
+            try:
+                await route.continue_()
+            except Exception as fallback_error:
+                await route.fallback()
+            return
+        
+        # Ignorar internos
+        if url.startswith('data:') or url.startswith('blob:'):
+            await route.continue_()
+            return
+        
+        self.tunnel_stats["requests"] += 1
+        
+        # ✅ Verificar cache
+        cached = self.resource_cache.get(url)
+        if cached:
+            content, status, headers = cached
+            self.tunnel_stats["cached"] += 1
+            elapsed = (time_module.time() - request_start) * 1000
+            print(f"[BrowserManager] ⚡ Cache: {url[:60]}... ({elapsed:.0f}ms)")
+            
+            await route.fulfill(status=status, headers=headers, body=content)
+            
+            # Prefetch assíncrono
+            if self.resource_cache.is_expiring_soon(url):
+                asyncio.create_task(self._prefetch_resource(url, self.current_incident_id))
+            
+            return
+        
+        print(f"[BrowserManager] 🌐 TÚNEL: {url[:80]}...")
+        
+        try:
+            # Headers
+            request_headers = {
+                'User-Agent': request.headers.get('user-agent', ''),
+                'Accept': request.headers.get('accept', '*/*'),
+                'Accept-Language': request.headers.get('accept-language', 'en-US,en;q=0.9'),
+                'Referer': request.headers.get('referer', ''),
+            }
+            
+            # ✅ Timeout inteligente
+            timeout = self._tunnel_timeout_for(url, interactive=self.current_interactive)
+            
+            # ✅ Paralelizar com semáforo
+            async with self.tunnel_semaphore:
+                in_use = 3 - self.tunnel_semaphore._value
+                if in_use > 1:
+                    print(f"[BrowserManager] 🔒 Semáforo: {in_use}/3 em uso")
+                
+                tunnel_response: TunnelResponse = await self.tunnel_client.fetch(
+                    url=url,
+                    method=request.method,
+                    headers=request_headers,
+                    timeout=timeout,
+                    incident_id=self.current_incident_id,
+                    max_retries=5 if timeout > 60 else 3
+                )
+            
+            if not tunnel_response.success:
+                raise Exception(f"Túnel falhou: {tunnel_response.error}")
+            
+            elapsed = (time_module.time() - request_start) * 1000
+            self.tunnel_stats["tunneled"] += 1
+            self.tunnel_stats["total_time"] += elapsed
+            
+            print(f"[BrowserManager] ✅ OK: {tunnel_response.status_code} ({elapsed:.0f}ms)")
+            
+            content = tunnel_response.bytes
+            
+            headers = {}
+            for key, value in tunnel_response.headers.items():
+                if key.lower() not in ['content-encoding', 'transfer-encoding', 'content-length']:
+                    headers[key] = value
+            
+            # Cache
+            self.resource_cache.set(url, content, tunnel_response.status_code, headers)
+            
+            # Sincronizar cookies
+            if tunnel_response.cookies and len(tunnel_response.cookies) > 0:
+                print(f"[BrowserManager] 🍪 Sincronizando {len(tunnel_response.cookies)} cookies...")
+                
+                try:
+                    from playwright.async_api import BrowserContext
+                    context = self.sessions[list(self.sessions.keys())[0]].context if self.sessions else None
+                    
+                    if context:
+                        playwright_cookies = []
+                        for c in tunnel_response.cookies:
+                            cookie = {
+                                "name": c.get("name", ""),
+                                "value": c.get("value", ""),
+                                "domain": c.get("domain", ""),
+                                "path": c.get("path", "/"),
+                                "httpOnly": c.get("httpOnly", False),
+                                "secure": c.get("secure", False),
+                                "sameSite": "Lax"
+                            }
+                            
+                            if not c.get("isSession") and c.get("expirationDate"):
+                                cookie["expires"] = c["expirationDate"]
+                            
+                            playwright_cookies.append(cookie)
+                        
+                        await context.add_cookies(playwright_cookies)
+                        print(f"[BrowserManager] ✅ Cookies sincronizados")
+                    
+                except Exception as cookie_error:
+                    print(f"[BrowserManager] ⚠️ Erro ao sincronizar: {cookie_error}")
+            
+            await route.fulfill(status=tunnel_response.status_code, headers=headers, body=content)
+            
+        except Exception as e:
+            error_elapsed = (time_module.time() - request_start) * 1000
+            self.tunnel_stats["errors"] += 1
+            print(f"[BrowserManager] ❌ Erro no túnel após {error_elapsed:.0f}ms: {str(e)[:100]}")
+            
+            # Retry com fallback
+            if request_type in ['image', 'font', 'stylesheet', 'media']:
+                print(f"[BrowserManager] 🔄 Tentando carregamento direto (fallback para {request_type})")
+                try:
+                    await route.continue_()
+                except:
+                    print(f"[BrowserManager] ⚠️ Abortando recurso não-crítico: {url[:60]}...")
+                    await route.abort()
+            else:
+                try:
+                    await route.continue_()
+                except:
+                    await route.abort()
+    
+    async def _test_handler_alive(self, page):
+        """
+        ✅ FASE 3: Testar se handler está respondendo.
+        """
+        try:
+            # Tentar fazer request dummy
+            response = await page.evaluate("""
+                fetch('https://httpbin.org/uuid', {method: 'HEAD'})
+                    .then(() => true)
+                    .catch(() => false)
+            """)
+            
+            if response:
+                print(f"[BrowserManager] ✓ Handler respondendo (fetch funcionou)")
+            else:
+                print(f"[BrowserManager] ⚠️ Handler não respondeu a fetch")
+            
+            return response
+        except Exception as e:
+            print(f"[BrowserManager] ❌ Erro ao testar handler: {e}")
+            return False
+    
     async def initialize(self):
         """Inicializar Playwright"""
         if not self.playwright_instance:
@@ -127,9 +433,7 @@ class BrowserManager:
     
     async def _setup_tunnel_reverse(self, context, machine_id: str, incident_id: str, interactive: bool = False, blocked_domains: list = None):
         """
-        Configurar túnel reverso para usar IP do cliente.
-        Inclui lógica de bloqueio de domínios.
-        ✅ FASE 4: Suporta flag 'interactive' para timeouts diferenciados
+        Configurar túnel reverso usando método de instância como handler.
         """
         if blocked_domains is None:
             blocked_domains = []
@@ -144,282 +448,15 @@ class BrowserManager:
         if not self.tunnel_client:
             self.tunnel_client = TunnelClient(self.supabase, machine_id)
         
-        async def tunnel_route_handler(route):
-            """Route handler via túnel reverso + bloqueio de domínios"""
-            import time as time_module
-            request = route.request
-            url = request.url
-            request_start = time_module.time()
-            
-            # ✅ VERIFICAR BLOQUEIO DE DOMÍNIO PRIMEIRO
-            if blocked_domains:
-                if any(bd in url for bd in blocked_domains):
-                    print(f"[BrowserManager] 🚫 Domínio bloqueado: {url[:60]}...")
-                    await route.abort()
-                    return
-            
-            # ✅ FASE 1: LISTA EXPANDIDA DE PADRÕES QUE NÃO DEVEM SER TUNELADOS
-            # Requisições críticas de tempo-real, WebSocket, polling, APIs, XHR
-            SKIP_TUNNEL_PATTERNS = [
-                # WebSocket e Streaming
-                '/websocket', '/ws/', 'wss://',           # WebSocket connections
-                '/polling', '/sync/', '/realtime',        # Polling/Sync APIs
-                '/longpoll', '/streaming', '/api/v1/stream',  # Streaming
-                '/eventsource', '/sse', '/subscribe', '/channel/',  # SSE/Subscriptions
-                '/socket.io/', '/sockjs/',                # Socket libs
-                
-                # ✅ NOVO: Gmail XHR/Fetch (abrir emails, threads, busca)
-                '?ui=2&ik=',           # Gmail UI API
-                '&act=',               # Gmail actions (open, star, archive)
-                '&_reqid=',            # Gmail request ID
-                '&view=up',            # Gmail thread view
-                '&view=cv',            # Gmail conversation view
-                '&search=',            # Gmail search
-                '/mail/u/0/?',         # Gmail XHR endpoint
-                
-                # ✅ NOVO: Outros webmails
-                'outlook.live.com/owa/',       # Outlook XHR
-                'outlook.office365.com/owa/',  # Outlook 365
-                '/api/v2/messages',            # API genérica de mensagens
-                
-                # ✅ NOVO: Single Page Apps (React/Angular/Vue/Next.js)
-                '/__data.json',        # SvelteKit
-                '/_next/data/',        # Next.js
-                '/api/trpc/',          # tRPC
-                '?__WB_REVISION__',    # Workbox (PWA)
-                
-                # Google APIs e serviços
-                'apis.google.com', 'clients2.google.com', # Google APIs
-                'play.google.com', '/talkgadget/',        # Google services
-                '/logstreamz', '/metrics', '/analytics',  # Telemetry
-                
-                # ✅ FASE 1: Imagens UI pequenas (ícones, avatares, GIFs)
-                '/icons/',              # Ícones genéricos
-                '/icon/',
-                'cleardot.gif',         # Pixel transparente (tracking)
-                'blank.gif',
-                's32-c-mo',             # Avatar Google 32px
-                's64-c-mo',             # Avatar 64px
-                's96-c-mo',             # Avatar 96px
-                '/images/branding/',    # Logos pequenos
-                '/favicons/',           # Favicons
-                'data:image/',          # Data URIs (inline)
-                
-                # ✅ FASE 1: Assets estáticos pequenos (fontes, small CSS)
-                '.woff', '.woff2',      # Fontes web
-                '.ttf', '.eot',
-                '/fonts/',
-                
-                # ✅ FASE 1: Tracking pixels e analytics
-                '/analytics.js',
-                '/ga.js',
-                '/gtag/',
-                'doubleclick.net',
-                '/pixel.gif',
-                '/beacon',
-            ]
-            
-            # Verificar se deve pular túnel (patterns)
-            should_skip = any(pattern in url.lower() for pattern in SKIP_TUNNEL_PATTERNS)
-            
-            if should_skip:
-                self.tunnel_stats["bypassed"] += 1
-                print(f"[BrowserManager] ⚡ DIRETO (bypass pattern): {url[:80]}...")
-                try:
-                    await route.continue_()
-                except Exception as fallback_error:
-                    print(f"[BrowserManager] ⚠️ Fallback necessário: {fallback_error}")
-                    await route.fallback()
-                return
-            
-            # ✅ FASE 2: Bypass por tipo de requisição (XHR/Fetch sempre direto)
-            request_type = request.resource_type  # 'xhr', 'fetch', 'document', etc
-            request_method = request.method
-            
-            # XHR/Fetch sempre direto (já estamos autenticados via cookies tunelados)
-            if request_type in ['xhr', 'fetch']:
-                self.tunnel_stats["bypassed"] += 1
-                print(f"[BrowserManager] ⚡ {request_type.upper()} direto: {url[:80]}...")
-                try:
-                    await route.continue_()
-                except Exception as fallback_error:
-                    await route.fallback()
-                return
-            
-            # ✅ FASE 2: POST/PUT/DELETE/PATCH sempre direto (operações de estado)
-            if request_method in ['POST', 'PUT', 'DELETE', 'PATCH']:
-                self.tunnel_stats["bypassed"] += 1
-                print(f"[BrowserManager] ⚡ {request_method} direto: {url[:80]}...")
-                try:
-                    await route.continue_()
-                except Exception as fallback_error:
-                    await route.fallback()
-                return
-            
-            # ✅ FASE 1: Bypass de imagens UI pequenas (heurística)
-            if request_type == 'image':
-                url_lower = url.lower()
-                
-                # Imagens UI pequenas (ícones, SVG, GIF)
-                if any(ext in url_lower for ext in ['.svg', '.gif', 's32-', 's64-', 's96-', '_24px', '_32px', '_48px']):
-                    self.tunnel_stats["bypassed"] += 1
-                    print(f"[BrowserManager] ⚡ Ícone/UI direto: {url[:70]}...")
-                    try:
-                        await route.continue_()
-                    except:
-                        await route.fallback()
-                    return
-                
-                # Imagens de CDNs confiáveis (Google CDN, avatares)
-                if any(domain in url_lower for domain in ['gstatic.com', 'googleusercontent.com', 'lh3.google.com', 'lh4.google.com', 'lh5.google.com', 'lh6.google.com']):
-                    self.tunnel_stats["bypassed"] += 1
-                    print(f"[BrowserManager] ⚡ CDN direto: {url[:70]}...")
-                    try:
-                        await route.continue_()
-                    except:
-                        await route.fallback()
-                    return
-            
-            # ✅ FASE 2: Bypass por headers críticos (SSE, WebSocket, gRPC)
-            accept_header = (request.headers.get('accept') or '').lower()
-            upgrade_header = (request.headers.get('upgrade') or '').lower()
-            content_type = (request.headers.get('content-type') or '').lower()
-            
-            if ('text/event-stream' in accept_header or 
-                upgrade_header == 'websocket' or 
-                'application/grpc-web+proto' in content_type):
-                self.tunnel_stats["bypassed"] += 1
-                print(f"[BrowserManager] ⚡ DIRETO (header crítico): {url[:80]}...")
-                try:
-                    await route.continue_()
-                except Exception as fallback_error:
-                    await route.fallback()
-                return
-            
-            # Ignorar internos
-            if url.startswith('data:') or url.startswith('blob:'):
-                await route.continue_()
-                return
-            
-            self.tunnel_stats["requests"] += 1
-            
-            # ✅ FASE 3: Verificar cache com prefetch assíncrono
-            cached = self.resource_cache.get(url)
-            if cached:
-                content, status, headers = cached
-                self.tunnel_stats["cached"] += 1
-                elapsed = (time_module.time() - request_start) * 1000
-                print(f"[BrowserManager] ⚡ Cache: {url[:60]}... ({elapsed:.0f}ms)")
-                
-                await route.fulfill(status=status, headers=headers, body=content)
-                
-                # ✅ FASE 3: Prefetch assíncrono se recurso está próximo de expirar
-                # (não espera - executa em background)
-                if self.resource_cache.is_expiring_soon(url):
-                    asyncio.create_task(self._prefetch_resource(url, incident_id))
-                
-                return
-            
-            print(f"[BrowserManager] 🌐 TÚNEL: {url[:80]}...")
-            
-            try:
-                # Headers
-                request_headers = {
-                    'User-Agent': request.headers.get('user-agent', ''),
-                    'Accept': request.headers.get('accept', '*/*'),
-                    'Accept-Language': request.headers.get('accept-language', 'en-US,en;q=0.9'),
-                    'Referer': request.headers.get('referer', ''),
-                }
-                
-                # ✅ FASE 4: Timeout inteligente considerando modo interativo
-                timeout = self._tunnel_timeout_for(url, interactive=interactive)
-                
-                # ✅ FASE 3: Paralelizar com semáforo (max 3 simultâneas)
-                async with self.tunnel_semaphore:
-                    # Debug: mostrar quantas requisições paralelas estão rodando
-                    in_use = 3 - self.tunnel_semaphore._value
-                    if in_use > 1:
-                        print(f"[BrowserManager] 🔒 Semáforo: {in_use}/3 em uso")
-                    
-                    tunnel_response: TunnelResponse = await self.tunnel_client.fetch(
-                        url=url,
-                        method=request.method,
-                        headers=request_headers,
-                        timeout=timeout,
-                        incident_id=incident_id,
-                        max_retries=5 if timeout > 60 else 3  # Mais retries para long-poll
-                    )
-                
-                if not tunnel_response.success:
-                    raise Exception(f"Túnel falhou: {tunnel_response.error}")
-                
-                elapsed = (time_module.time() - request_start) * 1000
-                self.tunnel_stats["tunneled"] += 1
-                self.tunnel_stats["total_time"] += elapsed
-                
-                print(f"[BrowserManager] ✅ OK: {tunnel_response.status_code} ({elapsed:.0f}ms)")
-                
-                content = tunnel_response.bytes
-                
-                headers = {}
-                for key, value in tunnel_response.headers.items():
-                    if key.lower() not in ['content-encoding', 'transfer-encoding', 'content-length']:
-                        headers[key] = value
-                
-                # Cache
-                self.resource_cache.set(url, content, tunnel_response.status_code, headers)
-                
-                # Sincronizar cookies
-                if tunnel_response.cookies and len(tunnel_response.cookies) > 0:
-                    print(f"[BrowserManager] 🍪 Sincronizando {len(tunnel_response.cookies)} cookies...")
-                    
-                    try:
-                        playwright_cookies = []
-                        for c in tunnel_response.cookies:
-                            cookie = {
-                                "name": c.get("name", ""),
-                                "value": c.get("value", ""),
-                                "domain": c.get("domain", ""),
-                                "path": c.get("path", "/"),
-                                "httpOnly": c.get("httpOnly", False),
-                                "secure": c.get("secure", False),
-                                "sameSite": "Lax"
-                            }
-                            
-                            if not c.get("isSession") and c.get("expirationDate"):
-                                cookie["expires"] = c["expirationDate"]
-                            
-                            playwright_cookies.append(cookie)
-                        
-                        await context.add_cookies(playwright_cookies)
-                        print(f"[BrowserManager] ✅ Cookies sincronizados")
-                        
-                    except Exception as cookie_error:
-                        print(f"[BrowserManager] ⚠️ Erro ao sincronizar: {cookie_error}")
-                
-                await route.fulfill(status=tunnel_response.status_code, headers=headers, body=content)
-                
-            except Exception as e:
-                error_elapsed = (time_module.time() - request_start) * 1000
-                self.tunnel_stats["errors"] += 1
-                print(f"[BrowserManager] ❌ Erro no túnel após {error_elapsed:.0f}ms: {str(e)[:100]}")
-                
-                # ✅ FASE 5: Retry com fallback direto para recursos não-críticos
-                if request_type in ['image', 'font', 'stylesheet', 'media']:
-                    print(f"[BrowserManager] 🔄 Tentando carregamento direto (fallback para {request_type})")
-                    try:
-                        await route.continue_()  # Tenta direto
-                    except:
-                        print(f"[BrowserManager] ⚠️ Abortando recurso não-crítico: {url[:60]}...")
-                        await route.abort()  # Se falhar, aborta (melhor que travar)
-                else:
-                    # Recursos críticos (HTML, JS): tentar continuar ou abortar
-                    try:
-                        await route.continue_()
-                    except:
-                        await route.abort()
+        # ✅ SALVAR ESTADO EM VARIÁVEIS DE INSTÂNCIA (persistentes)
+        self.current_blocked_domains = blocked_domains
+        self.current_incident_id = incident_id
+        self.current_machine_id = machine_id
+        self.current_interactive = interactive
         
-        await context.route("**/*", tunnel_route_handler)
+        # ✅ REGISTRAR MÉTODO DE INSTÂNCIA COMO HANDLER
+        await context.route('**/*', self._handle_route_with_tunnel)
+        
         print(f"[BrowserManager] ✅ Túnel reverso ativo - IP do cliente")
     
     async def start_session(self, incident: Dict, interactive: bool = False) -> tuple[Optional[str], Optional[bytes]]:
@@ -773,6 +810,13 @@ class BrowserManager:
                 print(f"[BrowserManager]   Bypasses: {self.tunnel_stats.get('bypassed', 0)} (requisições diretas)")
                 print(f"[BrowserManager]   Erros: {self.tunnel_stats['errors']}")
                 print(f"[BrowserManager] =====================================\n")
+            
+            # ✅ FASE 3: Testar se handler ainda está ativo
+            if interactive and page:
+                print(f"[BrowserManager] 🧪 Testando handler após carregamento...")
+                handler_ok = await self._test_handler_alive(page)
+                if not handler_ok:
+                    print(f"[BrowserManager] ⚠️ Handler não está respondendo - pode estar desanexado")
             
             return session_id, screenshot_bytes
             
