@@ -1,0 +1,28 @@
+# Binaries
+corpmonitor
+corpmonitor.exe
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Env files
+.env
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Go
+vendor/
+go.sum
+
+# OS
+.DS_Store
+Thumbs.db
