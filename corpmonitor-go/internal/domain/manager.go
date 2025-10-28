@@ -115,7 +115,7 @@ func (m *Manager) UnblockDomain(ctx context.Context, domain string) error {
 	_, _, err = m.supabase.From("blocked_domains").
 		Update(string(data), "", "").
 		Eq("domain", domain).
-		Eq("is_active", true).
+		Eq("is_active", "true").
 		Execute()
 
 	if err != nil {
@@ -131,7 +131,7 @@ func (m *Manager) IsBlocked(ctx context.Context, domain string) (bool, error) {
 	resp, _, err := m.supabase.From("blocked_domains").
 		Select("id", "", false).
 		Eq("domain", domain).
-		Eq("is_active", true).
+		Eq("is_active", "true").
 		Execute()
 
 	if err != nil {
@@ -153,7 +153,7 @@ func (m *Manager) ListBlockedDomains(ctx context.Context, activeOnly bool) ([]Bl
 		Order("created_at.desc", nil)
 
 	if activeOnly {
-		query = query.Eq("is_active", true)
+		query = query.Eq("is_active", "true")
 	}
 
 	resp, _, err := query.Execute()
@@ -233,7 +233,7 @@ func (m *Manager) ListMonitoredDomains(ctx context.Context, activeOnly bool) ([]
 		Order("created_at.desc", nil)
 
 	if activeOnly {
-		query = query.Eq("is_active", true)
+		query = query.Eq("is_active", "true")
 	}
 
 	resp, _, err := query.Execute()
@@ -301,7 +301,7 @@ func (m *Manager) IsTrusted(ctx context.Context, domain string) (bool, error) {
 	resp, _, err := m.supabase.From("trusted_domains").
 		Select("id", "", false).
 		Eq("domain", domain).
-		Eq("is_active", true).
+		Eq("is_active", "true").
 		Execute()
 
 	if err != nil {
@@ -320,7 +320,7 @@ func (m *Manager) IsTrusted(ctx context.Context, domain string) (bool, error) {
 func (m *Manager) ListTrustedDomains(ctx context.Context) ([]TrustedDomain, error) {
 	resp, _, err := m.supabase.From("trusted_domains").
 		Select("*", "", false).
-		Eq("is_active", true).
+		Eq("is_active", "true").
 		Order("created_at.desc", nil).
 		Execute()
 
