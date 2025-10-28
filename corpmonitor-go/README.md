@@ -68,7 +68,7 @@ corpmonitor-go/
 ## 🔍 Status
 
 - ✅ **Semana 1**: Login + Auth + Setup (CONCLUÍDO)
-- 🚧 **Semana 2**: Realtime + Tunnel (EM ANDAMENTO)
+- ✅ **Semana 2**: Realtime + Tunnel (CONCLUÍDO)
 - 📅 **Semana 3**: Browser (ChromeDP)
 - 📅 **Semana 4**: Managers
 - 📅 **Semana 5**: UI completa
@@ -78,10 +78,9 @@ corpmonitor-go/
 
 Logs são salvos em `logs/corpmonitor_YYYYMMDD.log`
 
-## ✅ Testes (Semana 1)
+## ✅ Testes
 
-Para validar esta entrega:
-
+### Semana 1 - Auth + Setup
 ```bash
 # 1. Compilar
 go build -o corpmonitor cmd/corpmonitor/main.go
@@ -99,3 +98,46 @@ Expectativa:
 - ❌ Login rejeita operator/approver
 - ✅ Logs estruturados no arquivo e console
 - ✅ Dashboard mostra nome do usuário e role
+
+### Semana 2 - Realtime + Tunnel
+```bash
+# Executar testes unitários
+go test ./internal/realtime/... -v
+go test ./internal/tunnel/... -v
+
+# Testar conexão WebSocket (requer desktop client Python ativo)
+# O RealtimeManager se conecta automaticamente ao iniciar a aplicação
+# Verificar nos logs: "Realtime conectado com sucesso"
+
+# Testar TunnelClient
+# O cliente faz polling automático com exponential backoff
+# Stats são rastreadas: TotalRequests, SuccessfulRequests, FailedRequests
+```
+
+Expectativa:
+- ✅ WebSocket conecta e reconecta automaticamente
+- ✅ Heartbeat mantém conexão viva (15s)
+- ✅ Backoff exponencial em caso de erro (1s → 60s)
+- ✅ TunnelClient faz polling com timeout configurável
+- ✅ Stats tracking funcional
+- ✅ Callbacks de alerta e status funcionam
+
+### Características Implementadas (Semana 2)
+
+**RealtimeManager (`internal/realtime/manager.go`)**:
+- ✅ WebSocket com gorilla/websocket
+- ✅ Goroutines dedicadas: readPump (leitura) + heartbeatLoop (ping 15s)
+- ✅ Reconnection automática com exponential backoff (1s → 60s)
+- ✅ Join em canal Supabase Realtime
+- ✅ Callbacks para alertas e mudanças de status
+- ✅ Thread-safe com sync.RWMutex
+- ✅ Context-based cancellation
+
+**TunnelClient (`internal/tunnel/client.go`)**:
+- ✅ Polling com select + time.Ticker
+- ✅ Exponential backoff (500ms → 5s)
+- ✅ Timeout configurável por requisição
+- ✅ Stats tracking (total, success, failed, bytes)
+- ✅ Fluent API com FetchOptions
+- ✅ WaitForConnection helper
+- ✅ Thread-safe com sync.RWMutex
