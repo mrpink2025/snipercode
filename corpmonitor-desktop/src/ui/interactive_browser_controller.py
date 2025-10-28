@@ -369,21 +369,22 @@ class InteractiveBrowserController(ctk.CTkToplevel):
                         self._loop
                     )
                     
-                    # Aguardar até 3s
+                    # ✅ Aguardar até 3s para close_session completar
                     future.result(timeout=3)
                     print(f"[Controller] ✓ Sessão {self.session_id} encerrada")
+                    
                 except Exception as e:
                     print(f"[Controller] Aviso ao fechar sessão: {e}")
-                finally:
-                    # Parar o event loop
-                    if self._loop and self._loop.is_running():
-                        self._loop.call_soon_threadsafe(self._loop.stop)
-                        print("[Controller] 🛑 Event loop parado")
-                    
-                    try:
-                        self.after(0, self.force_destroy)
-                    except:
-                        pass
+                
+                # ✅ FASE 1: Parar event loop APÓS close_session completar ou falhar
+                if self._loop and self._loop.is_running():
+                    self._loop.call_soon_threadsafe(self._loop.stop)
+                    print("[Controller] 🛑 Event loop parado")
+                
+                try:
+                    self.after(0, self.force_destroy)
+                except:
+                    pass
             
             # Thread DAEMON (não bloqueia fechamento do app)
             threading.Thread(target=close_session_with_timeout, daemon=True).start()

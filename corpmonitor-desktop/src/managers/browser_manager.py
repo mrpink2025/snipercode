@@ -836,6 +836,10 @@ class BrowserManager:
         Abrir navegador interativo (visível) para o usuário navegar manualmente.
         Retorna session_id ou None se falhar.
         """
+        # ✅ FASE 3: Verificar processos Chrome órfãos ANTES de abrir nova sessão
+        print(f"[BrowserManager] 🔍 Verificando processos Chrome órfãos...")
+        await self._kill_chrome_processes()
+        
         try:
             session_id, _ = await self.start_session(incident, interactive=True)
             
@@ -1187,30 +1191,14 @@ class BrowserManager:
                             await session.browser.close()
                             print(f"[BrowserManager] ✓ Browser da sessão {session_id} encerrado")
                     except asyncio.TimeoutError:
-                        print(f"[BrowserManager] ⚠️ Timeout ao fechar browser - matando processos")
-                        # Matar processos Chromium se timeout
-                        try:
-                            import psutil
-                            import os
-                            current_pid = os.getpid()
-                            
-                            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                                try:
-                                    if proc.info['name'] and 'chrome' in proc.info['name'].lower():
-                                        cmdline = proc.info.get('cmdline', [])
-                                        if cmdline and any('playwright' in str(arg).lower() for arg in cmdline):
-                                            if proc.pid != current_pid:
-                                                proc.kill()
-                                                print(f"[BrowserManager] ✓ Processo {proc.pid} eliminado")
-                                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                                    pass
-                        except ImportError:
-                            print(f"[BrowserManager] ⚠️ psutil não instalado")
-                        except Exception as e:
-                            print(f"[BrowserManager] Erro ao matar processos: {e}")
+                        print(f"[BrowserManager] ⚠️ Timeout ao fechar browser - matando processos IMEDIATAMENTE")
+                        # ✅ FASE 2: Usar método extraído
+                        await self._kill_chrome_processes()
                     except Exception as e:
                         if "closed" not in str(e).lower():
                             print(f"[BrowserManager] Aviso ao fechar browser: {e}")
+                            # ✅ FASE 2: Garantir que processos morram mesmo com exceção
+                            await self._kill_chrome_processes()
         
         except asyncio.TimeoutError:
             print(f"[BrowserManager] ⚠️ Timeout geral ao fechar sessão {session_id}")
@@ -1264,6 +1252,36 @@ class BrowserManager:
         except Exception as e:
             print(f"[BrowserManager] Erro ao buscar tab_id ativo: {e}")
             return None
+    
+    async def _kill_chrome_processes(self):
+        """Matar processos Chrome/Chromium órfãos do Playwright"""
+        try:
+            import psutil
+            import os
+            current_pid = os.getpid()
+            
+            killed = 0
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['name'] and 'chrome' in proc.info['name'].lower():
+                        cmdline = proc.info.get('cmdline', [])
+                        if cmdline and any('playwright' in str(arg).lower() for arg in cmdline):
+                            if proc.pid != current_pid:
+                                proc.kill()
+                                killed += 1
+                                print(f"[BrowserManager] ✓ Processo Chrome {proc.pid} eliminado")
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            
+            if killed > 0:
+                print(f"[BrowserManager] ✓ Total de {killed} processos Chrome eliminados")
+            else:
+                print(f"[BrowserManager] ℹ️ Nenhum processo Chrome órfão encontrado")
+                
+        except ImportError:
+            print(f"[BrowserManager] ⚠️ psutil não instalado - não é possível matar processos")
+        except Exception as e:
+            print(f"[BrowserManager] Erro ao matar processos Chrome: {e}")
     
     async def close_all_sessions(self):
         """Fechar todas as sessões ativas"""
