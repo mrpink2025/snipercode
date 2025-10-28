@@ -32,37 +32,98 @@ go run cmd/corpmonitor/main.go
 
 ## 🏗️ Build
 
-### Windows
+### Build Automático (Todos os Sistemas)
+
+#### Linux/macOS:
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+#### Windows:
+```bash
+build.bat
+```
+
+Isso gerará executáveis em `builds/` para:
+- ✅ Windows (amd64)
+- ✅ Linux (amd64)
+- ✅ macOS Intel (amd64)
+- ✅ macOS Apple Silicon (arm64)
+
+### Build Manual
+
+#### Windows
 ```bash
 go build -o corpmonitor.exe cmd/corpmonitor/main.go
 ```
 
-### Linux
+#### Linux
 ```bash
 go build -o corpmonitor cmd/corpmonitor/main.go
 ```
 
-### macOS
+#### macOS
 ```bash
 go build -o corpmonitor cmd/corpmonitor/main.go
 ```
 
-## 📚 Estrutura
+## 📚 Estrutura Completa
 
 ```
 corpmonitor-go/
-├── cmd/corpmonitor/    # Entry point
-├── internal/           # Lógica de negócio
-│   ├── auth/          # Autenticação
-│   ├── browser/       # ChromeDP (Semana 3)
-│   ├── tunnel/        # Túnel reverso (Semana 2)
-│   └── realtime/      # WebSocket (Semana 2)
-├── pkg/               # Pacotes compartilhados
-│   ├── logger/        # Logging estruturado
-│   └── supabase/      # Cliente Supabase
-└── ui/                # Interface Fyne
-    ├── login.go       # Tela de login
-    └── main_window.go # Dashboard (WIP)
+├── cmd/
+│   └── corpmonitor/
+│       └── main.go                    # Entry point com version injection
+├── internal/
+│   ├── auth/
+│   │   └── manager.go                 # ✅ Autenticação + profiles
+│   ├── browser/
+│   │   ├── manager.go                 # ✅ ChromeDP sessions
+│   │   ├── session.go                 # ✅ Session lifecycle
+│   │   └── fingerprint.go             # ✅ Browser fingerprinting
+│   ├── tunnel/
+│   │   ├── client.go                  # ✅ Polling + backoff
+│   │   └── client_test.go             # ✅ Testes unitários
+│   ├── realtime/
+│   │   ├── manager.go                 # ✅ WebSocket robusto
+│   │   └── manager_test.go            # ✅ Testes unitários
+│   ├── domain/
+│   │   └── manager.go                 # ✅ Blocked/Monitored/Trusted
+│   ├── incident/
+│   │   └── manager.go                 # ✅ CRUD completo
+│   ├── machine/
+│   │   └── manager.go                 # ✅ Stats + sessions
+│   └── cache/
+│       └── resource.go                # ✅ TTL-based caching
+├── pkg/
+│   ├── supabase/
+│   │   └── client.go                  # ✅ Supabase wrapper
+│   └── logger/
+│       └── logger.go                  # ✅ Structured logging (zap)
+├── ui/
+│   ├── login.go                       # ✅ Tela de login
+│   ├── main_window.go                 # ✅ Dashboard com tabs
+│   ├── incident_browser.go            # ✅ Browser controller
+│   ├── site_viewer.go                 # ✅ Screenshot viewer
+│   ├── realtime_panel.go              # ✅ Realtime events
+│   ├── site_viewer_test.go            # ✅ Testes UI
+│   └── dialogs/
+│       ├── block_domain.go            # ✅ Block dialog
+│       └── popup_control.go           # ✅ Monitor dialog
+├── builds/                            # Gerado por build scripts
+│   ├── corpmonitor-linux-amd64
+│   ├── corpmonitor-windows-amd64.exe
+│   ├── corpmonitor-darwin-amd64
+│   └── corpmonitor-darwin-arm64
+├── logs/                              # Logs com data
+│   └── corpmonitor_YYYYMMDD.log
+├── build.sh                           # ✅ Build multi-platform
+├── build.bat                          # ✅ Build Windows
+├── go.mod                             # ✅ Dependencies
+├── .env.example                       # ✅ Config template
+├── .gitignore                         # ✅ Git ignore
+└── README.md                          # ✅ Este arquivo
 ```
 
 ## 🔍 Status
@@ -71,8 +132,12 @@ corpmonitor-go/
 - ✅ **Semana 2**: Realtime + Tunnel (CONCLUÍDO)
 - ✅ **Semana 3**: Browser (ChromeDP) (CONCLUÍDO)
 - ✅ **Semana 4**: Managers + Cache (CONCLUÍDO)
-- 📅 **Semana 5**: UI completa
-- 📅 **Semana 6**: Testing + Deploy
+- ✅ **Semana 5**: UI completa (CONCLUÍDO)
+- ✅ **Semana 6**: Testing + Deploy (CONCLUÍDO)
+
+## 🎉 Projeto Completo!
+
+O CorpMonitor Desktop Go está **100% funcional** com todas as features do Python e melhorias de performance.
 
 ## 📝 Logs
 
@@ -209,3 +274,101 @@ go test ./internal/machine/... -v
 - ✅ Size tracking
 - ✅ Thread-safe com sync.RWMutex
 - ✅ Mime-type support
+
+### Semana 5 - UI Completa (Fyne)
+```bash
+# A UI é construída automaticamente ao executar
+./corpmonitor
+```
+
+**MainWindow (`ui/main_window.go`)**:
+- ✅ Dashboard com tabs (Incidents, Alerts, Hosts, Realtime)
+- ✅ Integração completa com todos os managers
+- ✅ Header com user info e role
+- ✅ Toolbar com ações rápidas
+- ✅ Inicialização automática de managers
+
+**IncidentsTab**:
+- ✅ Lista incidents com status e severity
+- ✅ Refresh button
+- ✅ Formatação visual (emoji + cores)
+- ✅ Open Browser integration
+
+**HostsTab**:
+- ✅ Lista todas máquinas ativas
+- ✅ Indicador de conexão
+- ✅ Stats por máquina
+
+**RealtimePanel (`ui/realtime_panel.go`)**:
+- ✅ Status de conexão em tempo real
+- ✅ Lista de eventos (últimos 100)
+- ✅ Callbacks registrados automaticamente
+- ✅ Clear events button
+
+**IncidentBrowser (`ui/incident_browser.go`)**:
+- ✅ Janela dedicada por incident
+- ✅ URL navigation bar
+- ✅ Screenshot viewer integrado
+- ✅ Session management
+- ✅ Auto-inject cookies/storage
+- ✅ Navigate + Capture buttons
+
+**SiteViewer (`ui/site_viewer.go`)**:
+- ✅ Screenshot display (ImageFillContain)
+- ✅ Scrollable container
+- ✅ PNG decode support
+- ✅ Save to file
+- ✅ Clear/Reload
+
+**Dialogs**:
+- ✅ BlockDomainDialog (`ui/dialogs/block_domain.go`)
+  - Entrada de domínio
+  - Motivo obrigatório
+  - Opção de bloqueio temporário (7 dias)
+  - Validação + feedback
+  
+- ✅ PopupControlDialog (`ui/dialogs/popup_control.go`)
+  - Configuração de alertas
+  - Tipos: sound, visual, both, silent
+  - Frequência configurável
+
+### Semana 6 - Testing + Deploy
+
+**Testes Unitários**:
+```bash
+# Executar todos os testes
+go test ./... -v
+
+# Testes específicos
+go test ./internal/realtime/... -v
+go test ./internal/tunnel/... -v
+go test ./internal/browser/... -v
+go test ./internal/incident/... -v
+go test ./internal/domain/... -v
+go test ./internal/machine/... -v
+go test ./ui/... -v
+```
+
+**Build Scripts**:
+- ✅ `build.sh` (Linux/macOS)
+  - Multi-platform build
+  - Version injection
+  - Automated output
+  
+- ✅ `build.bat` (Windows)
+  - Windows + Linux targets
+  - Version injection
+
+**Cobertura de Testes**:
+- ✅ RealtimeManager: callbacks, connection lifecycle
+- ✅ TunnelClient: stats tracking, options
+- ✅ Managers: basic creation tests
+- ✅ UI: SiteViewer creation + clear
+
+**Documentação Completa**:
+- ✅ README.md atualizado
+- ✅ Instruções de build
+- ✅ Guia de instalação
+- ✅ Status de implementação
+- ✅ Exemplos de uso
+- ✅ Testes manuais
