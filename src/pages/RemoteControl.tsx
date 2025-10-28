@@ -51,6 +51,7 @@ interface ActiveSession {
   created_at: string;
   last_activity: string;
   is_active: boolean;
+  isOnline?: boolean; // ✅ Status de conexão WebSocket
 }
 
 interface MonitoredDomain {
@@ -137,6 +138,9 @@ const RemoteControl = () => {
   };
 
   const fetchActiveSessions = async () => {
+    // ✅ Filtrar por last_activity nos últimos 5 minutos (apenas abas realmente abertas)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    
     const { data, error } = await supabase
       .from('active_sessions')
       .select('*')
@@ -144,6 +148,7 @@ const RemoteControl = () => {
       .not('machine_id', 'is', null)
       .neq('machine_id', 'unknown')
       .neq('machine_id', '')
+      .gte('last_activity', fiveMinutesAgo) // ✅ Apenas abas com atividade recente
       .order('last_activity', { ascending: false });
     
     if (error) {
@@ -151,7 +156,22 @@ const RemoteControl = () => {
       return;
     }
     
-    setActiveSessions(data || []);
+    // ✅ Buscar status de conexão WebSocket para cada máquina
+    const { data: wsConnections } = await supabase
+      .from('websocket_connections')
+      .select('machine_id, is_active, last_ping_at')
+      .eq('is_active', true);
+    
+    // ✅ Enriquecer sessões com status online
+    const sessionsWithStatus = (data || []).map(session => ({
+      ...session,
+      isOnline: wsConnections?.some(ws => 
+        ws.machine_id === session.machine_id && 
+        ws.is_active
+      ) ?? false
+    }));
+    
+    setActiveSessions(sessionsWithStatus);
   };
 
   const fetchMonitoredDomains = async () => {
@@ -456,7 +476,19 @@ const RemoteControl = () => {
                             {activeSessions.map((session) => (
                               <TableRow key={session.id}>
                                 <TableCell className="font-medium">
-                                  {session.machine_id}
+                                  <div className="flex items-center gap-2">
+                                    {session.isOnline && (
+                                      <Badge variant="default" className="bg-green-500">
+                                        Online
+                                      </Badge>
+                                    )}
+                                    {!session.isOnline && (
+                                      <Badge variant="secondary">
+                                        Offline
+                                      </Badge>
+                                    )}
+                                    <span>{session.machine_id}</span>
+                                  </div>
                                 </TableCell>
                                 <TableCell>
                                   <Badge variant="outline">{session.domain}</Badge>

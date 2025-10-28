@@ -19,6 +19,7 @@ import Logs from "./pages/Logs";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
 import RemoteControl from "./pages/RemoteControl";
+import MonitoredMachines from "./pages/MonitoredMachines";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Support from "./pages/Support";
 import Alerts from "./pages/Alerts";
@@ -147,6 +148,14 @@ function App() {
                 element={
                   <ProtectedRoute requiredRole="admin">
                     <RemoteControl />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/monitored-machines" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <MonitoredMachines />
                   </ProtectedRoute>
                 } 
               />

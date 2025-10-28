@@ -8,7 +8,8 @@ import {
   Clock,
   MonitorSpeaker,
   Bell,
-  ShieldAlert
+  ShieldAlert,
+  Monitor
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ const Sidebar = () => {
     { name: "Anti-Phishing", href: "/phishing", icon: ShieldAlert },
     { name: "Hosts Monitorados", href: "/hosts", icon: Shield },
     { name: "Controle Remoto", href: "/remote-control", icon: MonitorSpeaker, adminOnly: true },
+    { name: "Computadores", href: "/monitored-machines", icon: Monitor, adminOnly: true },
     { name: "Auditoria", href: "/audit", icon: FileText },
     { name: "Logs do Sistema", href: "/logs", icon: Database },
     { name: "Histórico", href: "/history", icon: Clock },

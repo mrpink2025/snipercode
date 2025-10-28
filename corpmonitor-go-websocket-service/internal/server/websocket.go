@@ -90,11 +90,35 @@ func (c *Client) readPump() {
 				c.MachineID = machineID
 				log.Printf("📡 Cliente subscrito: %s", c.MachineID)
 
+				// ✅ NOVO: Atualizar is_active = true no banco
+				if err := c.bridge.UpdateWebSocketStatus(machineID, true); err != nil {
+					log.Printf("⚠️ Erro ao atualizar status WebSocket: %v", err)
+				} else {
+					log.Printf("✅ Status WebSocket atualizado: %s = ONLINE", machineID)
+				}
+
 				// Enviar confirmação
 				response := map[string]interface{}{
 					"type":    "subscribed",
 					"status":  "ok",
 					"machine": machineID,
+				}
+				data, _ := json.Marshal(response)
+				c.Send <- data
+			}
+		}
+
+		// ✅ NOVO: Comando: ping (atualizar last_ping_at)
+		if msgType, ok := msg["type"].(string); ok && msgType == "ping" {
+			if c.MachineID != "" {
+				if err := c.bridge.UpdateWebSocketPing(c.MachineID); err != nil {
+					log.Printf("⚠️ Erro ao atualizar ping: %v", err)
+				}
+				
+				// Enviar pong
+				response := map[string]interface{}{
+					"type":   "pong",
+					"status": "ok",
 				}
 				data, _ := json.Marshal(response)
 				c.Send <- data

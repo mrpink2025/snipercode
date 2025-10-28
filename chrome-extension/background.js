@@ -529,10 +529,37 @@ chrome.tabs.onCreated.addListener(async (tab) => {
   }
 });
 
-// Listen for tab removal to clean up sessions
-chrome.tabs.onRemoved.addListener((tabId) => {
+// ✅ NOVO: Listen for tab removal and notify session-tracker
+chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
+  log('debug', `🗑️ Tab ${tabId} removed, closing session...`);
+  
+  // Get tab info from activeSessions if available
+  const sessionData = activeSessions.get(tabId);
+  
+  // Send close event to session-tracker
+  try {
+    await fetch(`${CONFIG.API_BASE}/session-tracker`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': CONFIG.SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify({
+        action: 'close',
+        machine_id: machineId || 'unknown',
+        tab_id: tabId.toString(),
+        domain: sessionData?.domain || 'unknown',
+        url: sessionData?.url || 'unknown'
+      })
+    });
+    log('info', `✅ Session closed for tab ${tabId}`);
+  } catch (error) {
+    log('warn', `⚠️ Failed to notify session close for tab ${tabId}:`, error);
+  }
+  
+  // Clean up local session
   if (activeSessions.has(tabId)) {
-    closeSession(tabId);
+    activeSessions.delete(tabId);
   }
 });
 

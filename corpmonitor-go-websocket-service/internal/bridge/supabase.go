@@ -223,3 +223,17 @@ func (b *SupabaseBridge) Stop() {
 		b.supabaseConn.Close()
 	}
 }
+
+// ✅ NOVO: Atualizar status WebSocket (is_active)
+func (b *SupabaseBridge) UpdateWebSocketStatus(machineID string, isActive bool) error {
+	// TODO: Implementar chamada ao Supabase para atualizar websocket_connections
+	// Por enquanto, retornar nil (será implementado via REST API)
+	return nil
+}
+
+// ✅ NOVO: Atualizar ping WebSocket (last_ping_at)
+func (b *SupabaseBridge) UpdateWebSocketPing(machineID string) error {
+	// TODO: Implementar chamada ao Supabase para atualizar last_ping_at
+	// Por enquanto, retornar nil (será implementado via REST API)
+	return nil
+}
