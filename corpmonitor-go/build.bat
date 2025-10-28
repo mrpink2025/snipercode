@@ -24,7 +24,7 @@ if %ERRORLEVEL% NEQ 0 (
 REM Verificar versão do Go
 for /f "tokens=3" %%i in ('go version') do set GO_VERSION=%%i
 echo [INFO] Go version: %GO_VERSION%
-echo.
+echo(
 
 REM Detectar e configurar GCC (necessário para Fyne/OpenGL com CGO)
 set GCC_FOUND=0
@@ -37,9 +37,9 @@ for %%p in ("C:\\msys64\\mingw64\\bin" "C:\\msys64\\ucrt64\\bin" "C:\\TDM-GCC-64
 
 where gcc >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] GCC nao encontrado. Fyne precisa de compilador C (CGO).
+    echo [ERROR] GCC nao encontrado. Fyne precisa de compilador C ^(CGO^).
     echo Instale MSYS2 64-bit e o pacote gcc.
-    echo Passos: https://www.msys2.org/  -> abrir MSYS2 MinGW 64-bit  -> pacman -S --needed base-devel mingw-w64-x86_64-gcc
+    echo Passos: https://www.msys2.org/  -^> abrir MSYS2 MinGW 64-bit  -^> pacman -S --needed base-devel mingw-w64-x86_64-gcc
     echo Depois, reabra o terminal e rode build.bat novamente.
     exit /b 1
 ) else (
@@ -62,7 +62,7 @@ if not exist .env (
     echo [INFO] .env encontrado
 )
 
-echo.
+echo(
 REM Criar diretório de builds
 if not exist builds mkdir builds
 if not exist builds\hashes mkdir builds\hashes
@@ -78,10 +78,10 @@ if %ERRORLEVEL% NEQ 0 (
 echo [INFO] Limpando builds anteriores...
 del /Q builds\*.exe 2>nul
 del /Q builds\hashes\*.sha256 2>nul
-echo.
+echo(
 
 REM Build para Windows (amd64)
-echo [1/1] Building Windows (amd64) a partir de main.go...
+echo [1/1] Building Windows ^(amd64^) a partir de main.go...
 set GOOS=windows
 set GOARCH=amd64
 go build -trimpath -ldflags "-s -w -H=windowsgui -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-windows-amd64.exe .\main.go
@@ -91,7 +91,7 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 echo [OK] Windows build completo
-echo.
+echo(
 
 REM (Compilacao multi-plataforma desabilitada neste script Windows)
 
@@ -104,22 +104,22 @@ REM Gerar hashes SHA256
 echo ======================================
 echo Gerando hashes SHA256...
 echo ======================================
-echo.
+echo(
 
 for %%f in (builds\%APP_NAME%-*) do (
     echo Gerando hash para %%~nxf...
     certutil -hashfile "%%f" SHA256 | findstr /V ":" > "builds\hashes\%%~nxf.sha256"
 )
 
-echo.
+echo(
 echo ======================================
 echo BUILD COMPLETO - v%VERSION%
 echo ======================================
-echo.
+echo(
 echo Arquivos gerados em builds\:
-echo.
+echo(
 dir /B builds\%APP_NAME%-*
-echo.
+echo(
 
 REM Mostrar tamanhos dos arquivos
 echo Tamanhos:
@@ -129,14 +129,14 @@ for %%f in (builds\%APP_NAME%-*) do (
     echo   %%~nxf: !size_mb! MB
 )
 
-echo.
+echo(
 echo Hashes SHA256 salvos em builds\hashes\
-echo.
+echo(
 echo Pronto para distribuir:
 echo   [Windows] builds\%APP_NAME%-windows-amd64.exe
-echo.
+echo(
 echo Para verificar integridade:
 echo   certutil -hashfile builds\%APP_NAME%-windows-amd64.exe SHA256
-echo.
+echo(
 
 endlocal
