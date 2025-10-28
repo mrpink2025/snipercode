@@ -6,6 +6,7 @@ import (
 
 	"github.com/corpmonitor/corpmonitor-go/pkg/logger"
 	"github.com/corpmonitor/corpmonitor-go/pkg/supabase"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -53,13 +54,13 @@ func (m *Manager) SignIn(ctx context.Context, email, password string) (bool, str
 		return false, "Credenciais inválidas: " + err.Error()
 	}
 
-	if resp.User.ID == "" {
+	if resp.User.ID == uuid.Nil {
 		return false, "Usuário não encontrado"
 	}
 
 	// Armazenar usuário
 	m.currentUser = &User{
-		ID:    resp.User.ID,
+		ID:    resp.User.ID.String(),
 		Email: resp.User.Email,
 	}
 
@@ -69,7 +70,7 @@ func (m *Manager) SignIn(ctx context.Context, email, password string) (bool, str
 	}
 
 	// Buscar perfil do usuário
-	profile, err := m.fetchProfile(ctx, resp.User.ID)
+	profile, err := m.fetchProfile(ctx, resp.User.ID.String())
 	if err != nil {
 		logger.Log.Error("Erro ao buscar perfil", zap.Error(err))
 		m.SignOut()

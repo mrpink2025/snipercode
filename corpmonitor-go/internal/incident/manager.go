@@ -234,8 +234,9 @@ func (m *Manager) GetStats(ctx context.Context) (map[string]int, error) {
 		Execute()
 	if err == nil {
 		var result []map[string]int
-		json.Unmarshal(resp, &result)
-		if len(result) > 0 {
+		if err := json.Unmarshal(resp, &result); err != nil {
+			m.logger.Error("Erro ao desserializar stats total", zap.Error(err))
+		} else if len(result) > 0 {
 			stats["total"] = result[0]["count"]
 		}
 	}
@@ -249,8 +250,10 @@ func (m *Manager) GetStats(ctx context.Context) (map[string]int, error) {
 			Execute()
 		if err == nil {
 			var result []map[string]int
-			json.Unmarshal(resp, &result)
-			if len(result) > 0 {
+			if err := json.Unmarshal(resp, &result); err != nil {
+				m.logger.Error("Erro ao desserializar stats por status",
+					zap.String("status", status), zap.Error(err))
+			} else if len(result) > 0 {
 				stats[status] = result[0]["count"]
 			}
 		}
