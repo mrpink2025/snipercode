@@ -69,8 +69,8 @@ corpmonitor-go/
 
 - ✅ **Semana 1**: Login + Auth + Setup (CONCLUÍDO)
 - ✅ **Semana 2**: Realtime + Tunnel (CONCLUÍDO)
-- 📅 **Semana 3**: Browser (ChromeDP)
-- 📅 **Semana 4**: Managers
+- ✅ **Semana 3**: Browser (ChromeDP) (CONCLUÍDO)
+- ✅ **Semana 4**: Managers + Cache (CONCLUÍDO)
 - 📅 **Semana 5**: UI completa
 - 📅 **Semana 6**: Testing + Deploy
 
@@ -141,3 +141,71 @@ Expectativa:
 - ✅ Fluent API com FetchOptions
 - ✅ WaitForConnection helper
 - ✅ Thread-safe com sync.RWMutex
+
+### Semana 3 - Browser (ChromeDP)
+```bash
+# Testar BrowserManager
+go test ./internal/browser/... -v
+
+# O BrowserManager requer Chrome/Chromium instalado
+# Cria sessões isoladas com contextos ChromeDP independentes
+```
+
+**BrowserManager (`internal/browser/manager.go`)**:
+- ✅ ChromeDP com contextos isolados por sessão
+- ✅ Cookie injection (suporta JSON e map formats)
+- ✅ localStorage e sessionStorage injection
+- ✅ Reverse tunnel (fetch interception com postMessage)
+- ✅ Screenshot capture (FullScreenshot com qualidade 90)
+- ✅ Navigate + ExecuteScript helpers
+- ✅ Session lifecycle management
+- ✅ ResourceCache para otimização
+- ✅ Fingerprinting (UserAgent, Platform, WebGL, Canvas)
+
+**Características**:
+- Headless mode desabilitado para inspeção visual
+- User-Agent customizado (anti-detection)
+- Disable web security (para CORS)
+- Window size: 1920x1080
+- Fingerprint collection via JS
+
+### Semana 4 - Managers + Cache
+```bash
+# Testar Managers
+go test ./internal/incident/... -v
+go test ./internal/domain/... -v
+go test ./internal/machine/... -v
+```
+
+**IncidentManager (`internal/incident/manager.go`)**:
+- ✅ CRUD completo (Create, Read, Update, Delete)
+- ✅ List com filtros (status, severity, ordenação)
+- ✅ UpdateStatus (new → in-progress → resolved → closed)
+- ✅ Assign (atribuir a usuário)
+- ✅ MarkAsViewed (rastreamento de visualização)
+- ✅ Resolve (com resolution notes)
+- ✅ GetStats (estatísticas agregadas)
+
+**DomainManager (`internal/domain/manager.go`)**:
+- ✅ BlockedDomains (Block, Unblock, IsBlocked, List)
+- ✅ MonitoredDomains (Add, Remove, List com alert configs)
+- ✅ TrustedDomains (Add, Remove, IsTrusted, List)
+- ✅ Suporte a expiração de bloqueios
+- ✅ Metadata flexível (JSON fields)
+- ✅ Active/Inactive toggles
+
+**MachineManager (`internal/machine/manager.go`)**:
+- ✅ GetActiveSessions (lista sessões ativas por máquina)
+- ✅ GetWebSocketConnection (verifica conexão WebSocket)
+- ✅ IsConnected (check com timeout 2min)
+- ✅ GetStats (estatísticas completas: sessions, incidents, blocked domains)
+- ✅ ListAllMachines (todas máquinas com atividade)
+- ✅ CloseSession (encerrar sessão específica)
+
+**ResourceCache (`internal/cache/resource.go`)**:
+- ✅ Set/Get/Delete operations
+- ✅ TTL-based expiration
+- ✅ CleanExpired helper
+- ✅ Size tracking
+- ✅ Thread-safe com sync.RWMutex
+- ✅ Mime-type support
