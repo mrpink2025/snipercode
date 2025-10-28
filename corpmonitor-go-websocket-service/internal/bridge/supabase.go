@@ -229,12 +229,6 @@ func (b *SupabaseBridge) Stop() {
 
 // ✅ NOVO: Atualizar status WebSocket (is_active)
 func (b *SupabaseBridge) UpdateWebSocketStatus(machineID string, isActive bool) error {
-	import (
-		"bytes"
-		"fmt"
-		"net/http"
-	)
-	
 	// Extrair URL base do Supabase (remover /realtime/v1/websocket)
 	baseURL := strings.Replace(b.supabaseURL, "/realtime/v1/websocket", "", 1)
 	url := baseURL + "/rest/v1/websocket_connections"
@@ -276,12 +270,6 @@ func (b *SupabaseBridge) UpdateWebSocketStatus(machineID string, isActive bool) 
 
 // ✅ NOVO: Atualizar ping WebSocket (last_ping_at)
 func (b *SupabaseBridge) UpdateWebSocketPing(machineID string) error {
-	import (
-		"bytes"
-		"fmt"
-		"net/http"
-	)
-	
 	// Extrair URL base do Supabase
 	baseURL := strings.Replace(b.supabaseURL, "/realtime/v1/websocket", "", 1)
 	url := baseURL + "/rest/v1/websocket_connections?machine_id=eq." + machineID
