@@ -39,7 +39,7 @@ REM Build para Windows (amd64)
 echo [1/4] Building for Windows (amd64)...
 set GOOS=windows
 set GOARCH=amd64
-go build -trimpath -ldflags "-s -w -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-windows-amd64.exe cmd\corpmonitor\main.go
+go build -trimpath -ldflags "-s -w -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-windows-amd64.exe .\cmd\corpmonitor\main.go
 
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Falha no build Windows
@@ -52,7 +52,7 @@ REM Build para Linux (amd64)
 echo [2/4] Building for Linux (amd64)...
 set GOOS=linux
 set GOARCH=amd64
-go build -trimpath -ldflags "-s -w -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-linux-amd64 cmd\corpmonitor\main.go
+go build -trimpath -ldflags "-s -w -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-linux-amd64 .\cmd\corpmonitor\main.go
 
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Falha no build Linux
@@ -65,7 +65,7 @@ REM Build para macOS Intel (amd64)
 echo [3/4] Building for macOS Intel (amd64)...
 set GOOS=darwin
 set GOARCH=amd64
-go build -trimpath -ldflags "-s -w -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-darwin-amd64 cmd\corpmonitor\main.go
+go build -trimpath -ldflags "-s -w -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-darwin-amd64 .\cmd\corpmonitor\main.go
 
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Falha no build macOS Intel
@@ -78,7 +78,7 @@ REM Build para macOS Apple Silicon (arm64)
 echo [4/4] Building for macOS Apple Silicon (arm64)...
 set GOOS=darwin
 set GOARCH=arm64
-go build -trimpath -ldflags "-s -w -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-darwin-arm64 cmd\corpmonitor\main.go
+go build -trimpath -ldflags "-s -w -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-darwin-arm64 .\cmd\corpmonitor\main.go
 
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Falha no build macOS ARM
