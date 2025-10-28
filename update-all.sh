@@ -255,7 +255,7 @@ echo ""
 echo -e "${YELLOW}[7/8]${NC} ✅ Validação final"
 
 # URLs
-BASE_URL="https://monitorcorporativo.com/extension"
+BASE_URL="https://chamanasortebet.net/extension"
 UPDATE_XML_URL="$BASE_URL/update.xml"
 CRX_URL="$BASE_URL/corpmonitor.crx"
 SHA256_URL="$BASE_URL/corpmonitor.sha256"
