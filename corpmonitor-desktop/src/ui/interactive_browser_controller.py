@@ -12,12 +12,13 @@ from src.config.supabase_config import supabase
 class InteractiveBrowserController(ctk.CTkToplevel):
     """Janela de controle que acompanha o navegador interativo"""
     
-    def __init__(self, parent, incident: Dict, browser_manager: BrowserManager, auth_manager):
+    def __init__(self, parent, incident: Dict, browser_manager: BrowserManager, auth_manager, enable_tunnel: bool = True):
         super().__init__(parent)
         
         self.incident = incident
         self.browser_manager = browser_manager
         self.auth_manager = auth_manager
+        self.enable_tunnel = enable_tunnel  # ✅ Armazenar modo de túnel
         self.session_id = None
         self._destroyed = False
         self._loop = None  # Event loop dedicado para Playwright
@@ -210,7 +211,10 @@ class InteractiveBrowserController(ctk.CTkToplevel):
             # Criar task para iniciar browser
             async def start_browser():
                 try:
-                    session_id = await self.browser_manager.open_interactive_browser(self.incident)
+                    session_id = await self.browser_manager.open_interactive_browser(
+                        self.incident,
+                        enable_tunnel=self.enable_tunnel  # ✅ Passar modo de túnel
+                    )
                     return session_id
                 except Exception as e:
                     print(f"[Controller] ❌ Erro ao iniciar navegador: {e}")
@@ -247,7 +251,11 @@ class InteractiveBrowserController(ctk.CTkToplevel):
     
     def on_browser_ready(self):
         """Callback quando navegador está pronto"""
-        self.status_label.configure(text="✅ Status: Conectado", text_color="#22c55e")
+        tunnel_status = "com túnel DNS" if self.enable_tunnel else "SEM túnel (IP do servidor)"
+        self.status_label.configure(
+            text=f"✅ Status: Conectado {tunnel_status}", 
+            text_color="#22c55e"
+        )
         
         # Habilitar botões
         self.btn_refresh.configure(state="normal")

@@ -789,24 +789,47 @@ class MainWindow(ctk.CTk):
         )
         status_badge.pack(side="left")
         
-        # Botão Ver Site (Interativo) com proteção
-        def safe_view_site():
+        # ✅ Frame para 2 botões (Simples + Avançado)
+        buttons_frame = ctk.CTkFrame(header, fg_color="transparent")
+        buttons_frame.pack(side="right")
+        
+        # Botão Browser Simples (SEM túnel)
+        def safe_view_site_simple():
+            try:
+                if card.winfo_exists():
+                    self.open_interactive_browser_simple(incident)
+            except Exception as e:
+                logger.warning(f"Erro ao abrir browser simples: {e}")
+        
+        simple_btn = ctk.CTkButton(
+            buttons_frame,
+            text="🌐 Simples",
+            width=100,
+            height=28,
+            fg_color="#10b981",  # Verde
+            hover_color="#059669",
+            command=safe_view_site_simple
+        )
+        simple_btn.pack(side="left", padx=(0, 5))
+        
+        # Botão Browser Avançado (COM túnel)
+        def safe_view_site_advanced():
             try:
                 if card.winfo_exists():
                     self.open_interactive_browser(incident)
             except Exception as e:
-                logger.warning(f"Erro ao abrir site: {e}")
+                logger.warning(f"Erro ao abrir browser avançado: {e}")
         
-        view_btn = ctk.CTkButton(
-            header,
-            text="🌐 Ver Site",
-            width=130,
+        advanced_btn = ctk.CTkButton(
+            buttons_frame,
+            text="🔒 Avançado",
+            width=100,
             height=28,
-            fg_color="#22c55e",
-            hover_color="#16a34a",
-            command=safe_view_site
+            fg_color="#8b5cf6",  # Roxo
+            hover_color="#7c3aed",
+            command=safe_view_site_advanced
         )
-        view_btn.pack(side="right")
+        advanced_btn.pack(side="left")
         
         # Detalhes
         details = ctk.CTkFrame(card, fg_color="transparent")
@@ -828,7 +851,7 @@ class MainWindow(ctk.CTk):
         self.site_viewer = SiteViewer(self, incident, self.browser_manager)
     
     def open_interactive_browser(self, incident: Dict):
-        """Abrir controlador de navegador interativo"""
+        """Abrir controlador de navegador interativo COM túnel DNS reverso (modo avançado)"""
         from src.ui.interactive_browser_controller import InteractiveBrowserController
         
         # ✅ Pausar auto-refresh
@@ -861,6 +884,57 @@ class MainWindow(ctk.CTk):
             if hasattr(self, 'active_interactions'):
                 self.active_interactions.discard('incident_browser')
                 logger.info("🔓 Auto-refresh retomado (navegador interativo fechado)")
+        
+        controller.bind("<Destroy>", lambda e: on_controller_close())
+        
+        # Agendar atualização das abas após 2 segundos
+        def refresh_after_view():
+            import time
+            time.sleep(2)
+            self.safe_after(0, lambda: self.load_incidents(viewed=False))
+            self.safe_after(0, lambda: self.load_incidents(viewed=True))
+        
+        threading.Thread(target=refresh_after_view, daemon=True).start()
+    
+    def open_interactive_browser_simple(self, incident: Dict):
+        """
+        Abrir navegador interativo SEM túnel DNS reverso (modo simples).
+        Mesmo comportamento do open_interactive_browser(), mas com enable_tunnel=False.
+        """
+        from src.ui.interactive_browser_controller import InteractiveBrowserController
+        
+        # ✅ Pausar auto-refresh
+        self.active_interactions.add('incident_browser_simple')
+        logger.info("🔒 Auto-refresh pausado (navegador simples aberto)")
+        
+        # Marcar incidente como visualizado em background
+        incident_id = incident.get('id')
+        if incident_id:
+            def mark_viewed():
+                try:
+                    success = self.incident_manager.mark_incident_as_viewed(incident_id)
+                    logger.info(f"Incidente {incident_id} marcado como visualizado: {success}")
+                except Exception as e:
+                    logger.error(f"Erro ao marcar incidente como visualizado: {e}", exc_info=True)
+            
+            import threading
+            threading.Thread(target=mark_viewed, daemon=True).start()
+        
+        # ✅ Criar controller com enable_tunnel=False
+        controller = InteractiveBrowserController(
+            parent=self,
+            incident=incident,
+            browser_manager=self.browser_manager,
+            auth_manager=self.auth_manager,
+            enable_tunnel=False  # ✅ NOVO: Desabilitar túnel
+        )
+        controller.focus()
+        
+        # ✅ Retomar auto-refresh quando fechar
+        def on_controller_close():
+            if hasattr(self, 'active_interactions'):
+                self.active_interactions.discard('incident_browser_simple')
+                logger.info("🔓 Auto-refresh retomado (navegador simples fechado)")
         
         controller.bind("<Destroy>", lambda e: on_controller_close())
         

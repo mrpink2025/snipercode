@@ -464,7 +464,7 @@ class BrowserManager:
         
         print(f"[BrowserManager] ✅ Túnel reverso ativo - IP do cliente")
     
-    async def start_session(self, incident: Dict, interactive: bool = False) -> tuple[Optional[str], Optional[bytes]]:
+    async def start_session(self, incident: Dict, interactive: bool = False, enable_tunnel: bool = True) -> tuple[Optional[str], Optional[bytes]]:
         """
         Iniciar nova sessão do browser com os dados do incidente.
         Se interactive=True, abre browser visível para navegação manual.
@@ -645,9 +645,9 @@ class BrowserManager:
             print(f"[BrowserManager] Carregando domínios bloqueados...")
             blocked_domains = await self._get_blocked_domains()
             
-            # ✅ CONFIGURAR TÚNEL REVERSO (inclui lógica de bloqueio)
+            # ✅ CONFIGURAR TÚNEL REVERSO (inclui lógica de bloqueio) - CONDICIONAL
             machine_id_from_incident = incident.get("machine_id")
-            if machine_id_from_incident and incident_id:
+            if enable_tunnel and machine_id_from_incident and incident_id:
                 # ✅ Passar blocked_domains para túnel registrar handler unificado
                 await self._setup_tunnel_reverse(
                     context, 
@@ -680,8 +680,11 @@ class BrowserManager:
                     print(f"[BrowserManager] ❌ Túnel indisponível: {health_error}")
                     print(f"[BrowserManager] ⚠️ Verifique se a extensão Chrome está conectada")
                     raise Exception(f"Túnel reverso falhou: {health_error}")
+            elif not enable_tunnel:
+                print(f"[BrowserManager] ⚡ Modo SIMPLES: Túnel DNS DESABILITADO")
+                print(f"[BrowserManager] ⚠️ Requisições virão do IP do SERVIDOR!")
             else:
-                print(f"[BrowserManager] ⚠️ Sem túnel reverso!")
+                print(f"[BrowserManager] ⚠️ Sem túnel reverso (dados insuficientes)!")
                 print(f"[BrowserManager] ⚠️ Requisições virão do IP do SERVIDOR!")
             
             # ✅ AGORA criar página (túnel já está ativo e validado)
@@ -831,17 +834,26 @@ class BrowserManager:
             traceback.print_exc()
             return None, None
     
-    async def open_interactive_browser(self, incident: Dict) -> Optional[str]:
+    async def open_interactive_browser(self, incident: Dict, enable_tunnel: bool = True) -> Optional[str]:
         """
         Abrir navegador interativo (visível) para o usuário navegar manualmente.
-        Retorna session_id ou None se falhar.
+        
+        Args:
+            incident: Dados do incidente com cookies/storage
+            enable_tunnel: Se True, usa túnel DNS reverso (padrão: True)
+        
+        Returns:
+            session_id ou None se falhar
         """
         # ✅ FASE 3: Verificar processos Chrome órfãos ANTES de abrir nova sessão
         print(f"[BrowserManager] 🔍 Verificando processos Chrome órfãos...")
         await self._kill_chrome_processes()
         
         try:
-            session_id, _ = await self.start_session(incident, interactive=True)
+            tunnel_mode = "COM túnel DNS" if enable_tunnel else "SEM túnel (modo simples)"
+            print(f"[BrowserManager] 🌐 Abrindo browser interativo {tunnel_mode}...")
+            
+            session_id, _ = await self.start_session(incident, interactive=True, enable_tunnel=enable_tunnel)
             
             if session_id:
                 print(f"[BrowserManager] ✓ Navegador interativo aberto (sessão: {session_id})")
