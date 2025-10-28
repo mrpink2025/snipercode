@@ -6,7 +6,8 @@ Gerencia máquinas monitoradas via active_sessions
 
 from supabase import Client
 from typing import List, Dict, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from threading import Lock
 
 
 class MachineManager:
@@ -37,13 +38,30 @@ class MachineManager:
             if active_only:
                 query = query.eq("is_active", True)
             
-            response = query.execute()
-            sessions = response.data if response.data else []
+            try:
+                response = query.execute()
+                if not response or response.data is None:
+                    logger.warning("Resposta vazia da query")
+                    sessions = []
+                else:
+                    sessions = response.data
+            except Exception as e:
+                logger.error(f"Erro ao buscar máquinas: {e}", exc_info=True)
+                return []
             
             # Agrupar por machine_id
             machines_dict = {}
             for session in sessions:
-                machine_id = session['machine_id']
+                # ✅ Validar dados essenciais
+                machine_id = session.get('machine_id')
+                if not machine_id:
+                    logger.warning(f"Session sem machine_id: {session.get('id')}")
+                    continue
+                
+                last_activity = session.get('last_activity')
+                if not last_activity:
+                    logger.warning(f"Session {machine_id} sem last_activity")
+                    continue
                 
                 # Filtrar por termo de busca
                 if search_term and search_term.lower() not in machine_id.lower():
@@ -53,29 +71,35 @@ class MachineManager:
                     machines_dict[machine_id] = {
                         "machine_id": machine_id,
                         "tabs_count": 0,
-                        "domains": set(),
-                        "last_activity": session['last_activity'],
-                        "is_active": session['is_active'],
+                        "domains": [],  # ✅ Lista vazia em vez de set()
+                        "last_activity": last_activity,
+                        "is_active": session.get('is_active', False),
                         "sessions": []
                     }
                 
                 machines_dict[machine_id]["tabs_count"] += 1
-                machines_dict[machine_id]["domains"].add(session['domain'])
+                domain = session.get('domain')
+                if domain and domain not in machines_dict[machine_id]["domains"]:
+                    machines_dict[machine_id]["domains"].append(domain)
                 machines_dict[machine_id]["sessions"].append(session)
                 
                 # Atualizar última atividade se mais recente
-                if session['last_activity'] > machines_dict[machine_id]["last_activity"]:
-                    machines_dict[machine_id]["last_activity"] = session['last_activity']
+                if last_activity > machines_dict[machine_id]["last_activity"]:
+                    machines_dict[machine_id]["last_activity"] = last_activity
             
             # Converter para lista e formatar
             machines_list = []
             for machine in machines_dict.values():
-                machine['domains'] = list(machine['domains'])
+                # domains já é lista
                 machine['domains_count'] = len(machine['domains'])
                 
-                # Determinar se está realmente ativa (última atividade < 5min)
+                # ✅ Determinar se está realmente ativa com timezone correto
                 last_activity = datetime.fromisoformat(machine['last_activity'].replace('Z', '+00:00'))
-                is_recently_active = (datetime.now(last_activity.tzinfo) - last_activity) < timedelta(minutes=5)
+                if last_activity.tzinfo is None:
+                    last_activity = last_activity.replace(tzinfo=timezone.utc)
+                
+                now_utc = datetime.now(timezone.utc)
+                is_recently_active = (now_utc - last_activity) < timedelta(minutes=5)
                 machine['is_recently_active'] = is_recently_active
                 
                 machines_list.append(machine)
@@ -157,17 +181,28 @@ class MachineManager:
             domains = set()
             total_tabs = len(sessions)
             
-            now = datetime.now()
+            # ✅ Usar UTC consistentemente
+            now_utc = datetime.now(timezone.utc)
             
             for session in sessions:
-                machine_id = session['machine_id']
+                machine_id = session.get('machine_id')
+                if not machine_id:
+                    continue
+                    
                 machines.add(machine_id)
-                domains.add(session['domain'])
+                domain = session.get('domain')
+                if domain:
+                    domains.add(domain)
                 
                 # Máquina ativa se última atividade < 5min
-                last_activity = datetime.fromisoformat(session['last_activity'].replace('Z', '+00:00'))
-                if (now.replace(tzinfo=last_activity.tzinfo) - last_activity) < timedelta(minutes=5):
-                    active_machines.add(machine_id)
+                last_activity_str = session.get('last_activity')
+                if last_activity_str:
+                    last_activity = datetime.fromisoformat(last_activity_str.replace('Z', '+00:00'))
+                    if last_activity.tzinfo is None:
+                        last_activity = last_activity.replace(tzinfo=timezone.utc)
+                    
+                    if (now_utc - last_activity) < timedelta(minutes=5):
+                        active_machines.add(machine_id)
             
             kpis = {
                 "total_machines": len(machines),
@@ -189,7 +224,7 @@ class MachineManager:
                 "unique_domains": 0
             }
     
-    async def get_pending_alerts_count(self, machine_id: str) -> int:
+    def get_pending_alerts_count(self, machine_id: str) -> int:
         """
         Contar alertas pendentes para uma máquina específica
         
@@ -215,7 +250,7 @@ class MachineManager:
             logger.error(f"Erro ao contar alertas: {e}", exc_info=True)
             return 0
     
-    async def get_machine_alerts(self, machine_id: str) -> List[Dict]:
+    def get_machine_alerts(self, machine_id: str) -> List[Dict]:
         """
         Buscar todos os alertas pendentes de uma máquina
         
@@ -243,7 +278,7 @@ class MachineManager:
             logger.error(f"Erro ao buscar alertas: {e}", exc_info=True)
             return []
     
-    async def get_critical_domains(self) -> List[str]:
+    def get_critical_domains(self) -> List[str]:
         """
         Buscar lista de domínios marcados como críticos
         
@@ -268,7 +303,7 @@ class MachineManager:
             logger.error(f"Erro ao buscar domínios críticos: {e}", exc_info=True)
             return []
     
-    async def check_machine_has_critical_access(
+    def check_machine_has_critical_access(
         self, 
         machine_id: str, 
         critical_domains: List[str]

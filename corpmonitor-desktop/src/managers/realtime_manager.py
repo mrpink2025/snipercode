@@ -58,24 +58,38 @@ class RealtimeManager:
         logger.info("Thread de realtime iniciada")
     
     def stop(self):
-        """Parar monitoramento em tempo real"""
+        """Parar monitoramento com limpeza completa"""
         logger.info("Parando RealtimeManager...")
         self._stop_event.set()
         self._stopped = True  # ✅ Bloquear reconexões
         
         try:
             if self._async_client and self._loop and self._loop.is_running():
-                fut = asyncio.run_coroutine_threadsafe(self._async_client.close(), self._loop)
+                fut = asyncio.run_coroutine_threadsafe(
+                    self._close_realtime_client(), 
+                    self._loop
+                )
                 try:
                     fut.result(timeout=REALTIME_CLOSE_TIMEOUT)
                 except Exception as e:
-                    logger.warning(f"Timeout ao fechar cliente realtime: {e}")
+                    logger.warning(f"Timeout ao fechar: {e}")
         except Exception as e:
-            logger.warning(f"Erro ao fechar cliente realtime: {e}")
+            logger.warning(f"Erro ao fechar: {e}")
+        finally:
+            self._async_client = None
+            # ✅ Limpar callbacks completamente
+            self.alert_callbacks.clear()
+            self.connection_status_callbacks.clear()
         
-        self._async_client = None
-        self.alert_callbacks.clear()
-        logger.info("RealtimeManager parado")
+        logger.info("RealtimeManager parado completamente")
+    
+    async def _close_realtime_client(self):
+        """Fechar cliente realtime de forma segura"""
+        if self._async_client:
+            try:
+                await self._async_client.close()
+            except Exception as e:
+                logger.warning(f"Erro ao fechar async client: {e}")
     
     def _notify_connection_status(self, mode: str):
         """Notificar callbacks sobre mudança de status de conexão"""
@@ -232,7 +246,8 @@ class RealtimeManager:
         """Fallback: polling manual do banco de dados"""
         logger.info("Iniciando fallback por polling (admin_alerts)...")
         
-        while not self._stop_event.is_set() and not self._stopped:
+        # ✅ Usar apenas um flag
+        while not self._stop_event.is_set():
             try:
                 resp = (
                     self.supabase
@@ -255,18 +270,28 @@ class RealtimeManager:
                     self._emit_alert(row)
                     
             except Exception as e:
-                if not self._stopped:  # ✅ Não logar erro se foi stop intencional
+                # ✅ Só logar se não foi stop intencional
+                if not self._stop_event.is_set():
                     logger.error(f"Erro no polling de alertas: {e}", exc_info=True)
-                    time.sleep(3)
+                time.sleep(3)
             
             time.sleep(2)
+        
+        logger.info("Polling finalizado")
     
     def _parse_ts(self, ts: str) -> datetime:
-        """Parsear timestamp ISO"""
+        """Parsear timestamp ISO mantendo timezone"""
         try:
-            return datetime.fromisoformat(ts.replace("Z", "+00:00")).replace(tzinfo=None)
-        except Exception:
-            return datetime.utcnow()
+            from datetime import timezone
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            # ✅ Manter timezone, não remover!
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except Exception as e:
+            logger.warning(f"Erro ao parsear timestamp {ts}: {e}")
+            from datetime import timezone
+            return datetime.now(timezone.utc)
     
     def _on_alert_payload(self, payload: dict):
         """Callback para eventos do websocket"""

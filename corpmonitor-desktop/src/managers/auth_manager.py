@@ -17,7 +17,7 @@ class AuthManager:
     
     def sign_in(self, email: str, password: str) -> tuple[bool, str]:
         """
-        Login com mesmas credenciais do painel web.
+        Login com validação completa
         Retorna: (sucesso: bool, mensagem: str)
         """
         try:
@@ -26,6 +26,13 @@ class AuthManager:
                 "email": email,
                 "password": password
             })
+            
+            # ✅ Validar response
+            if not response:
+                return False, "Nenhuma resposta do servidor"
+            
+            if not hasattr(response, 'user') or response.user is None:
+                return False, "Credenciais inválidas"
             
             if response.user:
                 # Converter user para dict para facilitar acesso
@@ -45,11 +52,17 @@ class AuthManager:
                 if profile_response.data:
                     self.current_profile = profile_response.data
                     
-                    # Verificar se é admin, superadmin ou demo_admin
-                    role = self.current_profile.get("role")
+                    # ✅ Verificar role com normalização
+                    role = self.current_profile.get("role", "")
+                    
+                    # Normalizar se for lista
+                    if isinstance(role, list):
+                        role = role[0] if role else ""
+                    
+                    # Validar role
                     if role not in ["admin", "superadmin", "demo_admin"]:
                         self.sign_out()
-                        return False, "Acesso negado: apenas administradores podem usar este painel."
+                        return False, "Acesso negado: apenas administradores podem acessar."
                     
                     return True, "Login realizado com sucesso!"
                 else:
@@ -58,7 +71,9 @@ class AuthManager:
                 return False, "Credenciais inválidas."
                 
         except Exception as e:
-            return False, f"Erro ao autenticar: {str(e)}"
+            from src.utils.logger import logger
+            logger.error(f"Erro ao autenticar: {e}", exc_info=True)
+            return False, f"Erro de autenticação: {str(e)}"
     
     def sign_out(self):
         """Deslogar usuário"""

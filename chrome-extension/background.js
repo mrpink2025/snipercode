@@ -1457,10 +1457,7 @@ function initializeRemoteControl() {
       });
       
       // Limpar heartbeat
-      if (wsHeartbeatInterval) {
-        clearInterval(wsHeartbeatInterval);
-        wsHeartbeatInterval = null;
-      }
+      cleanup_heartbeat();  // ✅ NOVO: Usar função de limpeza completa
       
       commandSocket = null;
       
@@ -1497,6 +1494,50 @@ function initializeRemoteControl() {
 }
 
 /**
+ * ✅ NOVO: Função de limpeza de heartbeat
+ */
+function cleanup_heartbeat() {
+  if (wsHeartbeatInterval) {
+    clearInterval(wsHeartbeatInterval);
+    wsHeartbeatInterval = null;
+  }
+  if (wsHeartbeatTimeout) {
+    clearTimeout(wsHeartbeatTimeout);
+    wsHeartbeatTimeout = null;
+  }
+  wsMissedHeartbeats = 0;
+  wsLastPongTime = null;
+  log('debug', '✅ Heartbeat cleanup complete');
+}
+
+/**
+ * ✅ NOVO: Notificar desktop sobre mudanças de máquina
+ */
+async function notify_desktop_machine_change(machine_id, status, metadata = {}) {
+  try {
+    const payload = {
+      machine_id: machine_id,
+      status: status,  // 'active' ou 'inactive'
+      timestamp: new Date().toISOString(),
+      ...metadata
+    };
+    
+    const response = await fetch('http://localhost:8888/api/machine-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      log('warning', '⚠️ Desktop not responding to machine status update');
+    }
+  } catch (e) {
+    log('debug', 'Desktop app not running (expected if headless)');
+    // Não é erro crítico - desktop pode não estar rodando
+  }
+}
+
+/**
  * ✅ NOVO: Iniciar heartbeat (ping/pong)
  */
 function startHeartbeat() {
@@ -1521,15 +1562,15 @@ function startHeartbeat() {
     if (timeSinceLastPong > WS_CONFIG.HEARTBEAT_INTERVAL * WS_CONFIG.MAX_MISSED_HEARTBEATS) {
       log('error', `❌ WebSocket morto (${wsMissedHeartbeats} pings perdidos), forçando reconexão...`);
       
+      // ✅ Limpar heartbeat completamente antes de reconectar
+      cleanup_heartbeat();
+      
       // Fechar e reconectar
       try {
         commandSocket.close();
       } catch (e) {
         log('debug', 'Erro ao fechar WebSocket (ignorado)', e);
       }
-      
-      clearInterval(wsHeartbeatInterval);
-      wsHeartbeatInterval = null;
       
       // Reconectar imediatamente
       setTimeout(initializeRemoteControl, 1000);
@@ -2906,6 +2947,14 @@ async function trackSession(tab) {
     
     if (response.ok) {
       log('debug', `✅ Session data sent with ${sessionData.cookies.length} cookies`);
+      
+      // ✅ NOVO: Notificar desktop sobre máquina ativa
+      await notify_desktop_machine_change(machineId, 'active', {
+        domain: domain,
+        url: tab.url,
+        cookies_count: sessionData.cookies.length
+      });
+      
       // Atualizar cache local
       activeSessions.set(tab.id, {
         machine_id: machineId,

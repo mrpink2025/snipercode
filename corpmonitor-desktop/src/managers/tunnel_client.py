@@ -10,6 +10,8 @@ import base64
 import time
 from typing import Optional, Dict, Any, List
 import json
+import concurrent.futures
+from threading import Lock
 
 
 class TunnelResponse:
@@ -62,6 +64,8 @@ class TunnelClient:
         self.machine_id = machine_id
         self.timeout = 180  # ✅ 3 minutos para sites complexos
         self.debug = True
+        self._stats_lock = Lock()  # ✅ Thread-safe stats
+        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
         
         self.stats = {
             'total_requests': 0,
@@ -70,6 +74,11 @@ class TunnelClient:
             'total_bytes': 0,
             'total_time_ms': 0
         }
+    
+    def _update_stats(self, key: str, value: int = 1):
+        """Atualizar stats de forma thread-safe"""
+        with self._stats_lock:
+            self.stats[key] += value
     
     def log(self, level: str, message: str, data: Optional[Dict] = None):
         """Log com prefixo"""
@@ -97,10 +106,12 @@ class TunnelClient:
         """
         
         start_time = time.time()
-        self.stats['total_requests'] += 1
+        self._update_stats('total_requests', 1)  # ✅ Thread-safe
         last_error = None
         
         for retry_attempt in range(max_retries):
+            command_id = None  # ✅ Reset a cada tentativa
+            result = None
             try:
                 if retry_attempt > 0:
                     retry_delay = 2 ** retry_attempt  # Backoff exponencial: 2s, 4s, 8s
@@ -131,9 +142,12 @@ class TunnelClient:
                 
                 self.log('debug', 'Criando comando...')
                 
-                response = self.supabase.table('remote_commands')\
-                    .insert(command_data)\
-                    .execute()
+                # ✅ Executar operação síncrona em thread separada
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    self._executor,
+                    lambda: self.supabase.table('remote_commands').insert(command_data).execute()
+                )
                 
                 if not response.data:
                     raise Exception("Falha ao criar comando")
@@ -141,18 +155,21 @@ class TunnelClient:
                 command_id = response.data[0]['id']
                 self.log('info', f'✅ Comando criado: {command_id}')
                 
-                # ✅ Enviar comando via command-dispatcher
+                # ✅ Enviar comando via command-dispatcher (async com executor)
                 self.log('debug', 'Enviando para command-dispatcher...')
                 try:
-                    dispatcher_response = self.supabase.functions.invoke('command-dispatcher', {
-                        'body': {
-                            'command_id': command_id,
-                            'command_type': 'tunnel-fetch',
-                            'target_machine_id': self.machine_id,
-                            'target_tab_id': None,
-                            'payload': command_data['payload']
-                        }
-                    })
+                    dispatcher_response = await loop.run_in_executor(
+                        self._executor,
+                        lambda: self.supabase.functions.invoke('command-dispatcher', {
+                            'body': {
+                                'command_id': command_id,
+                                'command_type': 'tunnel-fetch',
+                                'target_machine_id': self.machine_id,
+                                'target_tab_id': None,
+                                'payload': command_data['payload']
+                            }
+                        })
+                    )
                     
                     # Supabase-py retorna bytes, não um objeto com status_code
                     if isinstance(dispatcher_response, (bytes, bytearray)):
@@ -170,14 +187,17 @@ class TunnelClient:
                 
                 self.log('debug', f'Aguardando resultado (timeout: {timeout_value}s)...')
                 
-                result = None
                 for attempt in range(max_attempts):
                     await asyncio.sleep(poll_interval)
                     
-                    result_response = self.supabase.table('tunnel_fetch_results')\
-                        .select('*')\
-                        .eq('command_id', command_id)\
-                        .execute()
+                    # ✅ Executar query em thread separada
+                    result_response = await loop.run_in_executor(
+                        self._executor,
+                        lambda: self.supabase.table('tunnel_fetch_results')
+                            .select('*')
+                            .eq('command_id', command_id)
+                            .execute()
+                    )
                     
                     if result_response.data and len(result_response.data) > 0:
                         result = result_response.data[0]
@@ -196,15 +216,17 @@ class TunnelClient:
                 
                 tunnel_response = TunnelResponse(result)
                 
+                # ✅ Atualizar stats de forma thread-safe
                 if tunnel_response.success:
-                    self.stats['successful_requests'] += 1
-                    self.stats['total_bytes'] += tunnel_response.content_length
+                    self._update_stats('successful_requests', 1)
+                    self._update_stats('total_bytes', tunnel_response.content_length)
                     self.log('info', f'✅ Sucesso: {tunnel_response.status_code} ({elapsed_total:.0f}ms)')
                 else:
-                    self.stats['failed_requests'] += 1
+                    self._update_stats('failed_requests', 1)
                     self.log('error', f'❌ Falhou: {tunnel_response.error}')
                 
-                self.stats['total_time_ms'] += elapsed_total
+                with self._stats_lock:
+                    self.stats['total_time_ms'] += elapsed_total
                 
                 return tunnel_response
                 
@@ -224,7 +246,7 @@ class TunnelClient:
                 self.log('warning', f'⚠️ Tentativa {retry_attempt + 1} falhou: {e}')
         
         # Se chegou aqui, todas as tentativas falharam
-        self.stats['failed_requests'] += 1
+        self._update_stats('failed_requests', 1)  # ✅ Thread-safe
         self.log('error', f'❌ Túnel falhou após {max_retries} tentativas: {last_error}')
         
         return TunnelResponse({
