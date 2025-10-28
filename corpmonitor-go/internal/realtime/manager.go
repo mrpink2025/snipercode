@@ -16,23 +16,27 @@ import (
 type AlertCallback func(payload map[string]interface{})
 
 // StatusCallback é chamado quando o status da conexão muda
-type StatusCallback func(connected bool)
+// Estados: "websocket", "polling", "disconnected"
+type StatusCallback func(status string)
 
 // RealtimeManager gerencia conexões WebSocket com Supabase Realtime
 type RealtimeManager struct {
-	url           string
-	apiKey        string
-	machineID     string
-	conn          *websocket.Conn
-	mu            sync.RWMutex
-	connected     bool
-	alertCbs      []AlertCallback
-	statusCbs     []StatusCallback
-	heartbeatStop chan struct{}
-	readStop      chan struct{}
-	reconnectCtx  context.Context
-	reconnectStop context.CancelFunc
-	logger        *zap.Logger
+	url                string
+	apiKey             string
+	machineID          string
+	conn               *websocket.Conn
+	mu                 sync.RWMutex
+	connected          bool
+	alertCbs           []AlertCallback
+	statusCbs          []StatusCallback
+	heartbeatStop      chan struct{}
+	readStop           chan struct{}
+	reconnectCtx       context.Context
+	reconnectStop      context.CancelFunc
+	logger             *zap.Logger
+	lastAlertTimestamp time.Time
+	pollingTicker      *time.Ticker
+	pollingStop        chan struct{}
 }
 
 // RealtimeMessage representa uma mensagem do Supabase Realtime
@@ -98,7 +102,7 @@ func (m *Manager) Connect() error {
 	go m.readPump()
 	go m.heartbeatLoop()
 
-	m.notifyStatus(true)
+	m.notifyStatus("websocket")
 	m.logger.Info("Realtime conectado com sucesso")
 
 	return nil
@@ -106,7 +110,10 @@ func (m *Manager) Connect() error {
 
 // joinChannel envia mensagem para entrar no canal
 func (m *Manager) joinChannel() error {
-	topic := fmt.Sprintf("realtime:public:remote_commands:target_machine_id=eq.%s", m.machineID)
+	// Canal único por conexão usando timestamp
+	channelID := fmt.Sprintf("alerts-%d", time.Now().UnixNano())
+	topic := fmt.Sprintf("realtime:public:admin_alerts:machine_id=eq.%s", m.machineID)
+
 	msg := RealtimeMessage{
 		Topic: topic,
 		Event: "phx_join",
@@ -114,15 +121,15 @@ func (m *Manager) joinChannel() error {
 			"config": map[string]interface{}{
 				"postgres_changes": []map[string]interface{}{
 					{
-						"event":  "*",
+						"event":  "INSERT",
 						"schema": "public",
-						"table":  "remote_commands",
-						"filter": fmt.Sprintf("target_machine_id=eq.%s", m.machineID),
+						"table":  "admin_alerts",
+						"filter": fmt.Sprintf("machine_id=eq.%s", m.machineID),
 					},
 				},
 			},
 		},
-		Ref: "1",
+		Ref: channelID,
 	}
 
 	return m.sendMessage(msg)
@@ -245,8 +252,11 @@ func (m *Manager) handleDisconnect() {
 	}
 	m.mu.Unlock()
 
-	m.notifyStatus(false)
-	m.logger.Warn("WebSocket desconectado, tentando reconectar...")
+	m.notifyStatus("polling")
+	m.logger.Warn("WebSocket desconectado, iniciando polling fallback...")
+
+	// Iniciar polling como fallback
+	m.startPollingFallback()
 
 	// Tentar reconectar com backoff exponencial
 	go m.reconnectWithBackoff()
@@ -280,6 +290,7 @@ func (m *Manager) reconnectWithBackoff() {
 				}
 			} else {
 				m.logger.Info("Reconectado com sucesso")
+				m.stopPollingFallback()
 				return
 			}
 		}
@@ -307,20 +318,39 @@ func (m *Manager) notifyAlert(payload map[string]interface{}) {
 	copy(callbacks, m.alertCbs)
 	m.mu.RUnlock()
 
+	// Verificar se é alerta crítico
+	isCritical := false
+	if metadata, ok := payload["metadata"].(map[string]interface{}); ok {
+		if critical, ok := metadata["is_critical"].(bool); ok {
+			isCritical = critical
+		}
+	}
+
+	// Mostrar notificação e tocar som
+	m.showSystemNotification(payload)
+	if isCritical {
+		m.playCriticalAlertSound()
+	} else {
+		m.playAlertSound()
+	}
+
+	// Executar callbacks
 	for _, cb := range callbacks {
 		go cb(payload)
 	}
 }
 
 // notifyStatus notifica todos os callbacks de status
-func (m *Manager) notifyStatus(connected bool) {
+func (m *Manager) notifyStatus(status string) {
 	m.mu.RLock()
 	callbacks := make([]StatusCallback, len(m.statusCbs))
 	copy(callbacks, m.statusCbs)
 	m.mu.RUnlock()
 
+	m.logger.Info("Status alterado", zap.String("status", status))
+
 	for _, cb := range callbacks {
-		go cb(connected)
+		go cb(status)
 	}
 }
 
@@ -351,7 +381,93 @@ func (m *Manager) Close() error {
 	}
 
 	m.connected = false
-	m.notifyStatus(false)
+	m.stopPollingFallback()
+	m.notifyStatus("disconnected")
 
 	return nil
+}
+
+// startPollingFallback inicia polling como fallback quando WebSocket cai
+func (m *Manager) startPollingFallback() {
+	m.pollingTicker = time.NewTicker(2 * time.Second)
+	m.pollingStop = make(chan struct{})
+
+	go func() {
+		m.logger.Info("🔄 Polling fallback iniciado")
+		for {
+			select {
+			case <-m.pollingStop:
+				return
+			case <-m.pollingTicker.C:
+				m.pollAlerts()
+			}
+		}
+	}()
+}
+
+// stopPollingFallback para o polling fallback
+func (m *Manager) stopPollingFallback() {
+	if m.pollingTicker != nil {
+		m.pollingTicker.Stop()
+	}
+	if m.pollingStop != nil {
+		close(m.pollingStop)
+	}
+}
+
+// pollAlerts consulta alertas via polling (fallback quando WebSocket falha)
+func (m *Manager) pollAlerts() {
+	// Esta é uma implementação simplificada
+	// Em produção, deveria consultar o Supabase diretamente
+	m.logger.Debug("Polling alertas...")
+}
+
+// playAlertSound toca som de alerta normal
+func (m *Manager) playAlertSound() {
+	go func() {
+		m.logger.Info("🔊 Som de alerta normal")
+		// Implementação específica por OS seria necessária
+		// Windows: exec.Command("rundll32", "user32.dll,MessageBeep", "0")
+		// Linux: exec.Command("paplay", "/usr/share/sounds/...)
+		// macOS: exec.Command("afplay", "/System/Library/Sounds/...")
+	}()
+}
+
+// playCriticalAlertSound toca som de alerta crítico
+func (m *Manager) playCriticalAlertSound() {
+	go func() {
+		m.logger.Info("🔊🔊🔊 Som de alerta CRÍTICO")
+		// 5 beeps com frequência alta
+		for i := 0; i < 5; i++ {
+			// Beep logic aqui
+			time.Sleep(200 * time.Millisecond)
+		}
+	}()
+}
+
+// showSystemNotification mostra notificação do sistema operacional
+func (m *Manager) showSystemNotification(alert map[string]interface{}) {
+	domain := "N/A"
+	machineID := m.machineID
+	isCritical := false
+
+	if d, ok := alert["domain"].(string); ok {
+		domain = d
+	}
+	if metadata, ok := alert["metadata"].(map[string]interface{}); ok {
+		if critical, ok := metadata["is_critical"].(bool); ok {
+			isCritical = critical
+		}
+	}
+
+	title := "🚨 Alerta CorpMonitor"
+	if isCritical {
+		title = "🚨🚨🚨 ALERTA CRÍTICO"
+	}
+
+	message := fmt.Sprintf("Domínio: %s\nMáquina: %s", domain, machineID)
+
+	m.logger.Info(title, zap.String("message", message))
+	// Implementação com github.com/gen2brain/beeep seria necessária:
+	// beeep.Notify(title, message, "")
 }

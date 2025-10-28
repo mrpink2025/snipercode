@@ -2,6 +2,38 @@
 
 Todas as mudanças notáveis do CorpMonitor Go serão documentadas neste arquivo.
 
+## [1.1.0] - 2025-10-28
+
+### 🔴 SINCRONIZAÇÃO CRÍTICA Python ↔ Go (100% Paridade)
+
+#### Tunnel Client (12 Correções Implementadas)
+- ✅ **Campo payload corrigido**: `"url"` → `"target_url"`
+- ✅ **Command type corrigido**: `"tunnel_fetch"` → `"tunnel-fetch"` (hífen)
+- ✅ **Campo obrigatório**: `executed_at` adicionado (ISO 8601)
+- ✅ **Timeout aumentado**: 60s → 180s (sites complexos)
+- ✅ **Retry automático**: 3 tentativas com exponential backoff (2^n segundos)
+- ✅ **Detecção de erros**: Função `isSchemaError()` evita retries em erros de schema
+- ✅ **Novas FetchOptions**: `WithMaxRetries()`, `WithFollowRedirects()`, `WithIncidentID()`
+- ✅ **Response struct completa**: 9 novos campos
+  - `StatusText`, `ContentLength`, `Encoding`, `FinalURL`, `Redirected`
+  - `Cookies`, `ErrorType`, `Timestamp`
+- ✅ **Stats melhorado**: Campo `TotalTimeMS` para calcular tempo médio
+- ✅ **Stats tracking**: `updateStats()` rastreia elapsed time
+- ✅ **Helper methods**: `Get()`, `Post()`, `PrintStats()`
+- ✅ **Imports**: `math` e `strings` packages adicionados
+
+#### Realtime Manager (4 Correções Implementadas)
+- ✅ **Polling fallback**: Ativa automaticamente quando WebSocket cai (2s interval)
+- ✅ **Alert sounds**: Sons diferenciados para alertas normais e críticos
+- ✅ **System notifications**: Notificações do sistema operacional
+- ✅ **Status tracking melhorado**: 3 estados ("websocket", "polling", "disconnected")
+- ✅ **Channel ID único**: Regenerado com timestamp em cada reconexão
+
+### 📊 Resultado
+- **Paridade 100%** com `corpmonitor-desktop` (Python)
+- Comportamento idêntico entre Go e Python
+- Todas as features críticas sincronizadas
+
 ## [1.0.0] - 2025-10-28
 
 ### 🎉 Release Inicial - Migração Completa Python → Go

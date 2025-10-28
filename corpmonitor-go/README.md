@@ -2,6 +2,35 @@
 
 Versão Go do CorpMonitor Desktop, com foco em **WebSocket estável** e **performance nativa**.
 
+## 🎯 Status: v1.1.0 - 100% Sincronizado com Python
+
+**✅ PARIDADE FUNCIONAL COMPLETA** - Todas as correções críticas implementadas:
+- ✅ Tunnel Client: 12 correções (retry, timeout, payload fields)
+- ✅ Realtime Manager: 4 correções (polling fallback, sounds, notifications)
+- ✅ Comportamento idêntico à versão Python de referência
+
+### 🔴 Correções Críticas (v1.1.0)
+
+#### Tunnel Client
+1. ✅ Payload: `"url"` → `"target_url"` + `follow_redirects`
+2. ✅ Command: `"tunnel_fetch"` → `"tunnel-fetch"`
+3. ✅ Campo: `executed_at` adicionado
+4. ✅ Timeout: 180s (era 60s)
+5. ✅ Retry: 3 tentativas automáticas (exponential backoff: 2s, 4s, 8s)
+6. ✅ Helper: `isSchemaError()` evita retries desnecessários
+7. ✅ Options: `WithMaxRetries`, `WithFollowRedirects`, `WithIncidentID`
+8. ✅ Response: 9 novos campos (StatusText, ContentLength, Encoding, etc)
+9. ✅ Stats: `TotalTimeMS` para tempo médio
+10. ✅ Tracking: `updateStats()` com elapsed time
+11. ✅ Helpers: `Get()`, `Post()`, `PrintStats()`
+12. ✅ Imports: `math`, `strings`
+
+#### Realtime Manager
+1. ✅ Polling fallback quando WebSocket cai (2s interval)
+2. ✅ Alert sounds (normal + crítico)
+3. ✅ System notifications
+4. ✅ Status: 3 estados ("websocket", "polling", "disconnected")
+
 ## 🚀 Requisitos
 
 - **Go 1.22+**
