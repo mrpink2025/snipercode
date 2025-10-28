@@ -37,7 +37,3 @@ func NewClient() (*Client, error) {
 	}, nil
 }
 
-func (c *Client) SetSession(accessToken, refreshToken string) error {
-	// Implementar autenticação com tokens
-	return c.Auth.SetSession(accessToken, refreshToken)
-}

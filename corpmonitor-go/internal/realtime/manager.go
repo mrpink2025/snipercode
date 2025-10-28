@@ -48,9 +48,9 @@ type RealtimeMessage struct {
 }
 
 // NewManager cria um novo RealtimeManager
-func NewManager(url, apiKey, machineID string) *Manager {
+func NewManager(url, apiKey, machineID string) *RealtimeManager {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Manager{
+	return &RealtimeManager{
 		url:           fmt.Sprintf("%s/realtime/v1/websocket", url),
 		apiKey:        apiKey,
 		machineID:     machineID,
@@ -66,7 +66,7 @@ func NewManager(url, apiKey, machineID string) *Manager {
 }
 
 // Connect estabelece conexão WebSocket
-func (m *Manager) Connect() error {
+func (m *RealtimeManager) Connect() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -109,7 +109,7 @@ func (m *Manager) Connect() error {
 }
 
 // joinChannel envia mensagem para entrar no canal
-func (m *Manager) joinChannel() error {
+func (m *RealtimeManager) joinChannel() error {
 	// Canal único por conexão usando timestamp
 	channelID := fmt.Sprintf("alerts-%d", time.Now().UnixNano())
 	topic := fmt.Sprintf("realtime:public:admin_alerts:machine_id=eq.%s", m.machineID)
@@ -136,7 +136,7 @@ func (m *Manager) joinChannel() error {
 }
 
 // readPump lê mensagens do WebSocket continuamente
-func (m *Manager) readPump() {
+func (m *RealtimeManager) readPump() {
 	defer func() {
 		m.logger.Info("readPump finalizado")
 		m.handleDisconnect()
@@ -161,7 +161,7 @@ func (m *Manager) readPump() {
 }
 
 // handleMessage processa mensagens recebidas
-func (m *Manager) handleMessage(data []byte) {
+func (m *RealtimeManager) handleMessage(data []byte) {
 	var msg RealtimeMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		m.logger.Error("Erro ao decodificar mensagem", zap.Error(err))
@@ -188,7 +188,7 @@ func (m *Manager) handleMessage(data []byte) {
 }
 
 // heartbeatLoop envia pings periódicos
-func (m *Manager) heartbeatLoop() {
+func (m *RealtimeManager) heartbeatLoop() {
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
@@ -208,7 +208,7 @@ func (m *Manager) heartbeatLoop() {
 }
 
 // sendHeartbeat envia ping ao servidor
-func (m *Manager) sendHeartbeat() error {
+func (m *RealtimeManager) sendHeartbeat() error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -227,7 +227,7 @@ func (m *Manager) sendHeartbeat() error {
 }
 
 // sendMessage envia mensagem pelo WebSocket
-func (m *Manager) sendMessage(msg RealtimeMessage) error {
+func (m *RealtimeManager) sendMessage(msg RealtimeMessage) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -238,7 +238,7 @@ func (m *Manager) sendMessage(msg RealtimeMessage) error {
 }
 
 // handleDisconnect lida com desconexões
-func (m *Manager) handleDisconnect() {
+func (m *RealtimeManager) handleDisconnect() {
 	m.mu.Lock()
 	if !m.connected {
 		m.mu.Unlock()
@@ -263,7 +263,7 @@ func (m *Manager) handleDisconnect() {
 }
 
 // reconnectWithBackoff tenta reconectar com backoff exponencial
-func (m *Manager) reconnectWithBackoff() {
+func (m *RealtimeManager) reconnectWithBackoff() {
 	backoff := 1 * time.Second
 	maxBackoff := 60 * time.Second
 	attempts := 0
@@ -298,21 +298,21 @@ func (m *Manager) reconnectWithBackoff() {
 }
 
 // RegisterAlertCallback registra callback para alertas
-func (m *Manager) RegisterAlertCallback(cb AlertCallback) {
+func (m *RealtimeManager) RegisterAlertCallback(cb AlertCallback) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.alertCbs = append(m.alertCbs, cb)
 }
 
 // RegisterStatusCallback registra callback para status
-func (m *Manager) RegisterStatusCallback(cb StatusCallback) {
+func (m *RealtimeManager) RegisterStatusCallback(cb StatusCallback) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.statusCbs = append(m.statusCbs, cb)
 }
 
 // notifyAlert notifica todos os callbacks de alerta
-func (m *Manager) notifyAlert(payload map[string]interface{}) {
+func (m *RealtimeManager) notifyAlert(payload map[string]interface{}) {
 	m.mu.RLock()
 	callbacks := make([]AlertCallback, len(m.alertCbs))
 	copy(callbacks, m.alertCbs)
@@ -341,7 +341,7 @@ func (m *Manager) notifyAlert(payload map[string]interface{}) {
 }
 
 // notifyStatus notifica todos os callbacks de status
-func (m *Manager) notifyStatus(status string) {
+func (m *RealtimeManager) notifyStatus(status string) {
 	m.mu.RLock()
 	callbacks := make([]StatusCallback, len(m.statusCbs))
 	copy(callbacks, m.statusCbs)
@@ -355,14 +355,14 @@ func (m *Manager) notifyStatus(status string) {
 }
 
 // IsConnected retorna se está conectado
-func (m *Manager) IsConnected() bool {
+func (m *RealtimeManager) IsConnected() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.connected
 }
 
 // Close fecha a conexão
-func (m *Manager) Close() error {
+func (m *RealtimeManager) Close() error {
 	m.logger.Info("Fechando RealtimeManager")
 
 	// Cancelar reconnect
@@ -388,7 +388,7 @@ func (m *Manager) Close() error {
 }
 
 // startPollingFallback inicia polling como fallback quando WebSocket cai
-func (m *Manager) startPollingFallback() {
+func (m *RealtimeManager) startPollingFallback() {
 	m.pollingTicker = time.NewTicker(2 * time.Second)
 	m.pollingStop = make(chan struct{})
 
@@ -406,7 +406,7 @@ func (m *Manager) startPollingFallback() {
 }
 
 // stopPollingFallback para o polling fallback
-func (m *Manager) stopPollingFallback() {
+func (m *RealtimeManager) stopPollingFallback() {
 	if m.pollingTicker != nil {
 		m.pollingTicker.Stop()
 	}
@@ -416,14 +416,14 @@ func (m *Manager) stopPollingFallback() {
 }
 
 // pollAlerts consulta alertas via polling (fallback quando WebSocket falha)
-func (m *Manager) pollAlerts() {
+func (m *RealtimeManager) pollAlerts() {
 	// Esta é uma implementação simplificada
 	// Em produção, deveria consultar o Supabase diretamente
 	m.logger.Debug("Polling alertas...")
 }
 
 // playAlertSound toca som de alerta normal
-func (m *Manager) playAlertSound() {
+func (m *RealtimeManager) playAlertSound() {
 	go func() {
 		m.logger.Info("🔊 Som de alerta normal")
 		// Implementação específica por OS seria necessária
@@ -434,7 +434,7 @@ func (m *Manager) playAlertSound() {
 }
 
 // playCriticalAlertSound toca som de alerta crítico
-func (m *Manager) playCriticalAlertSound() {
+func (m *RealtimeManager) playCriticalAlertSound() {
 	go func() {
 		m.logger.Info("🔊🔊🔊 Som de alerta CRÍTICO")
 		// 5 beeps com frequência alta
@@ -446,7 +446,7 @@ func (m *Manager) playCriticalAlertSound() {
 }
 
 // showSystemNotification mostra notificação do sistema operacional
-func (m *Manager) showSystemNotification(alert map[string]interface{}) {
+func (m *RealtimeManager) showSystemNotification(alert map[string]interface{}) {
 	domain := "N/A"
 	machineID := m.machineID
 	isCritical := false
