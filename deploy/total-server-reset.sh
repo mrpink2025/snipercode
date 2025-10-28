@@ -19,8 +19,8 @@ set -o pipefail
 GIT_REPO="${1:-https://github.com/mrpink2025/snipercode.git}"
 GIT_BRANCH="${2:-main}"
 PROJECT_DIR="/var/www/monitor-corporativo"
-DOMAIN="monitorcorporativo.com"
-ADMIN_EMAIL="admin@monitorcorporativo.com"
+DOMAIN="chamanasortebet.net"
+ADMIN_EMAIL="admin@chamanasortebet.net"
 LOG_FILE="/var/log/corpmonitor-total-reset-$(date +%Y%m%d-%H%M%S).log"
 
 # Colors
@@ -349,7 +349,7 @@ cat > /etc/nginx/sites-available/monitorcorporativo <<'EOF'
 server {
     listen 80;
     listen [::]:80;
-    server_name monitorcorporativo.com www.monitorcorporativo.com;
+    server_name chamanasortebet.net www.chamanasortebet.net;
 
     root /var/www/monitor-corporativo/dist;
     index index.html;

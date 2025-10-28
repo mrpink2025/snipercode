@@ -16,7 +16,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Variáveis de configuração
-DOMAIN="monitorcorporativo.com"
+DOMAIN="chamanasortebet.net"
 GITHUB_REPO="https://github.com/mrpink2025/snipercode"
 PROJECT_DIR="/var/www/monitor-corporativo"
 NGINX_SITES_AVAILABLE="/etc/nginx/sites-available"

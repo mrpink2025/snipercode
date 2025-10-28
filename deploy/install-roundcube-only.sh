@@ -10,7 +10,7 @@
 set -e  # Parar em qualquer erro
 
 # ============= CONFIGURAÇÕES =============
-DOMAIN="monitorcorporativo.com"
+DOMAIN="chamanasortebet.net"
 PROJECT_DIR="/var/www/monitor-corporativo"
 WEBMAIL_DIR="${PROJECT_DIR}/webmail"
 NGINX_SITE="/etc/nginx/sites-available/monitorcorporativo"

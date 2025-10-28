@@ -32,7 +32,7 @@ PROJECT_ROOT="/var/www/monitor-corporativo"
 NGINX_CONF="/etc/nginx/sites-available/monitor-corporativo"
 NGINX_ENABLED="/etc/nginx/sites-enabled/monitor-corporativo"
 BACKUP_ROOT="/var/backups/monitor-corporativo"
-DOMAIN="monitorcorporativo.com"
+DOMAIN="chamanasortebet.net"
 
 echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${MAGENTA}  ⚠️  RESET COMPLETO DO SERVIDOR  ⚠️${NC}"
@@ -369,7 +369,7 @@ cat > "$NGINX_CONF" << 'NGINX_EOF'
 server {
     listen 80;
     listen [::]:80;
-    server_name monitorcorporativo.com www.monitorcorporativo.com;
+    server_name chamanasortebet.net www.chamanasortebet.net;
 
     # Redirect HTTP to HTTPS
     return 301 https://$server_name$request_uri;
@@ -378,11 +378,11 @@ server {
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name monitorcorporativo.com www.monitorcorporativo.com;
+    server_name chamanasortebet.net www.chamanasortebet.net;
 
     # SSL Configuration (update paths to your certificates)
-    ssl_certificate /etc/letsencrypt/live/monitorcorporativo.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/monitorcorporativo.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/chamanasortebet.net/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/chamanasortebet.net/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers on;
