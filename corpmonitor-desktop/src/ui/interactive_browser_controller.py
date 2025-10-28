@@ -4,8 +4,8 @@ Janela de controle lateral para navegador interativo
 import customtkinter as ctk
 from typing import Dict, Optional
 import threading
+import asyncio
 from src.managers.browser_manager import BrowserManager
-from src.utils.async_helper import run_async
 from src.config.supabase_config import supabase
 
 
@@ -20,6 +20,7 @@ class InteractiveBrowserController(ctk.CTkToplevel):
         self.auth_manager = auth_manager
         self.session_id = None
         self._destroyed = False
+        self._loop = None  # Event loop dedicado para Playwright
         
         # Marcar incidente como visualizado
         self._mark_incident_viewed()
@@ -194,26 +195,55 @@ class InteractiveBrowserController(ctk.CTkToplevel):
         btn_close.pack(fill="x", padx=10, pady=(0, 10))
     
     def start_browser_threaded(self):
-        """Iniciar navegador em thread separada"""
+        """Iniciar navegador em thread separada com event loop dedicado"""
         # Verificar se janela foi destruída antes de começar
         if self._destroyed:
             print("[Controller] ❌ Janela foi destruída, cancelando inicialização do navegador")
             return
         
         try:
-            self.session_id = run_async(
-                self.browser_manager.open_interactive_browser(self.incident)
-            )
+            # Criar event loop dedicado para esta thread
+            self._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
+            print("[Controller] 🔄 Event loop dedicado criado")
             
-            if self.session_id:
-                self.after(0, self.on_browser_ready)
-            else:
-                self.after(0, lambda: self.on_browser_error(retry=True))
+            # Criar task para iniciar browser
+            async def start_browser():
+                try:
+                    session_id = await self.browser_manager.open_interactive_browser(self.incident)
+                    return session_id
+                except Exception as e:
+                    print(f"[Controller] ❌ Erro ao iniciar navegador: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    return None
+            
+            # Executar task
+            task = self._loop.create_task(start_browser())
+            
+            def on_task_done(future):
+                try:
+                    self.session_id = future.result()
+                    if self.session_id:
+                        self.after(0, self.on_browser_ready)
+                    else:
+                        self.after(0, lambda: self.on_browser_error(retry=True))
+                except Exception as e:
+                    print(f"[Controller] ❌ Erro no callback: {e}")
+                    self.after(0, lambda: self.on_browser_error(retry=True))
+            
+            task.add_done_callback(on_task_done)
+            
+            # Manter loop rodando para processar eventos do Playwright
+            print("[Controller] ♻️ Mantendo event loop ativo para sessão interativa...")
+            self._loop.run_forever()
+            print("[Controller] 🛑 Event loop encerrado")
+            
         except Exception as e:
-            print(f"[Controller] Erro ao iniciar navegador: {e}")
+            print(f"[Controller] ❌ Erro fatal ao iniciar navegador: {e}")
             import traceback
             traceback.print_exc()
-            self.after(0, lambda: self.on_browser_error(retry=True))
+            self.after(0, lambda: self.on_browser_error(retry=False))
     
     def on_browser_ready(self):
         """Callback quando navegador está pronto"""
@@ -233,6 +263,15 @@ class InteractiveBrowserController(ctk.CTkToplevel):
             self.status_label.configure(text="🔄 Tentando novamente...", text_color="#f59e0b")
             self.after(500, lambda: threading.Thread(target=self.start_browser_threaded, daemon=True).start())
     
+    def submit_async(self, coro):
+        """Enviar coroutine para o event loop dedicado do Playwright"""
+        if not self._loop or not self._loop.is_running():
+            print("[Controller] ⚠️ Event loop não está disponível")
+            return None
+        
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        return future
+    
     def refresh_page(self):
         """Atualizar página do navegador"""
         if not self.session_id:
@@ -240,8 +279,16 @@ class InteractiveBrowserController(ctk.CTkToplevel):
         
         def refresh():
             try:
-                run_async(self.browser_manager.navigate(self.session_id, self.incident['tab_url']))
-                self.after(0, lambda: self.show_message("✅ Página atualizada!"))
+                # Usar submit_async para enviar ao event loop do Playwright
+                future = self.submit_async(
+                    self.browser_manager.navigate(self.session_id, self.incident['tab_url'])
+                )
+                
+                if future:
+                    future.result(timeout=30)  # Aguardar até 30s
+                    self.after(0, lambda: self.show_message("✅ Página atualizada!"))
+                else:
+                    self.after(0, lambda: self.show_message("❌ Event loop indisponível"))
             except Exception as e:
                 print(f"[Controller] Erro ao atualizar: {e}")
                 self.after(0, lambda: self.show_message("❌ Erro ao atualizar"))
@@ -312,15 +359,27 @@ class InteractiveBrowserController(ctk.CTkToplevel):
         self.btn_block.configure(state="disabled")
         self.status_label.configure(text="🔄 Encerrando...", text_color="#f59e0b")
         
-        # Fechar sessão em thread DAEMON com timeout
-        if self.session_id:
+        # Fechar sessão e event loop
+        if self.session_id and self._loop and self._loop.is_running():
             def close_session_with_timeout():
                 try:
-                    run_async(self.browser_manager.close_session(self.session_id))
+                    # Enviar close_session ao event loop do Playwright
+                    future = asyncio.run_coroutine_threadsafe(
+                        self.browser_manager.close_session(self.session_id),
+                        self._loop
+                    )
+                    
+                    # Aguardar até 3s
+                    future.result(timeout=3)
                     print(f"[Controller] ✓ Sessão {self.session_id} encerrada")
                 except Exception as e:
                     print(f"[Controller] Aviso ao fechar sessão: {e}")
                 finally:
+                    # Parar o event loop
+                    if self._loop and self._loop.is_running():
+                        self._loop.call_soon_threadsafe(self._loop.stop)
+                        print("[Controller] 🛑 Event loop parado")
+                    
                     try:
                         self.after(0, self.force_destroy)
                     except:
@@ -332,6 +391,9 @@ class InteractiveBrowserController(ctk.CTkToplevel):
             # Garantir que janela fecha após 4 segundos no máximo
             self.after(4000, self.force_destroy)
         else:
+            # Se não há loop ativo, fechar diretamente
+            if self._loop:
+                self._loop.call_soon_threadsafe(self._loop.stop)
             self.force_destroy()
     
     def force_destroy(self):

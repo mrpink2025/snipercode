@@ -44,9 +44,6 @@ class BrowserManager:
         self.realtime_manager = realtime_manager
         self.realtime_suspended = False
         
-        # ✅ FASE 5: Semáforo para paralelismo controlado de requests tuneladas
-        self.tunnel_semaphore = asyncio.Semaphore(3)  # Máximo 3 requests simultâneas
-        
         # ✅ FASE 1: Estado do handler (persistente entre requests)
         self.current_blocked_domains = []
         self.current_incident_id = None
@@ -55,6 +52,10 @@ class BrowserManager:
         
         # ✅ FASE 2: Contador de requests ativas
         self.active_handler_requests = 0
+        
+        # ✅ Semáforo será criado no event loop correto
+        self.tunnel_semaphore = None
+        self.tunnel_semaphore_max = 3
     
     @staticmethod
     def escape_js_string(text: str) -> str:
@@ -453,6 +454,10 @@ class BrowserManager:
         self.current_incident_id = incident_id
         self.current_machine_id = machine_id
         self.current_interactive = interactive
+        
+        # ✅ Criar semáforo no event loop atual (Playwright)
+        self.tunnel_semaphore = asyncio.Semaphore(self.tunnel_semaphore_max)
+        print(f"[BrowserManager] ✓ Semáforo criado no event loop do Playwright")
         
         # ✅ REGISTRAR MÉTODO DE INSTÂNCIA COMO HANDLER
         await context.route('**/*', self._handle_route_with_tunnel)
