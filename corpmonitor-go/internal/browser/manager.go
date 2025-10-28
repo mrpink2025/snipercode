@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/network"
 	"github.com/corpmonitor/corpmonitor-go/internal/cache"
 	"github.com/corpmonitor/corpmonitor-go/internal/tunnel"
 	"github.com/corpmonitor/corpmonitor-go/pkg/logger"
@@ -155,7 +157,9 @@ func (m *Manager) injectCookies(ctx context.Context, incident map[string]interfa
 	for _, cookie := range cookies {
 		err := chromedp.Run(ctx,
 			chromedp.ActionFunc(func(ctx context.Context) error {
-				return chromedp.SetCookie(cookie.Name, cookie.Value).
+				expr := cdp.TimeSinceEpoch(time.Now().Add(180 * 24 * time.Hour))
+				return network.SetCookie(cookie.Name, cookie.Value).
+					WithExpires(&expr).
 					WithDomain(cookie.Domain).
 					WithPath(cookie.Path).
 					WithHTTPOnly(cookie.HTTPOnly).

@@ -6,7 +6,6 @@ import (
 
 	"github.com/corpmonitor/corpmonitor-go/pkg/logger"
 	"github.com/corpmonitor/corpmonitor-go/pkg/supabase"
-	supabasego "github.com/supabase-community/supabase-go"
 	"go.uber.org/zap"
 )
 
@@ -47,17 +46,14 @@ func (m *Manager) SignIn(ctx context.Context, email, password string) (bool, str
 	logger.Log.Info("Tentando login", zap.String("email", email))
 
 	// Autenticar via Supabase
-	resp, err := m.supabase.Auth.SignInWithPassword(ctx, supabasego.UserCredentials{
-		Email:    email,
-		Password: password,
-	})
+	resp, err := m.supabase.SignInWithEmailPassword(email, password)
 
 	if err != nil {
 		logger.Log.Error("Erro ao autenticar", zap.Error(err))
 		return false, "Credenciais inválidas: " + err.Error()
 	}
 
-	if resp.User == nil {
+	if resp.User.ID == "" {
 		return false, "Usuário não encontrado"
 	}
 
@@ -113,9 +109,7 @@ func (m *Manager) fetchProfile(ctx context.Context, userID string) (*Profile, er
 }
 
 func (m *Manager) SignOut() {
-	if m.supabase != nil && m.session != nil {
-		m.supabase.Auth.SignOut(context.Background())
-	}
+	// Limpar estado local (não há método SignOut na biblioteca)
 	m.currentUser = nil
 	m.currentProfile = nil
 	m.session = nil
