@@ -727,11 +727,13 @@ class BrowserManager:
                 print(f"[BrowserManager] ✓ Screenshot capturado ({len(screenshot_bytes)} bytes)")
             else:
                 print(f"[BrowserManager] Modo interativo: navegador permanece aberto para navegação manual")
-                # ✅ SUSPENDER REALTIME durante sessão interativa
-                if self.realtime_manager:
-                    print(f"[BrowserManager] ⏸️ Suspendendo Realtime durante sessão interativa...")
-                    self.realtime_manager.stop()
-                    self.realtime_suspended = True
+            # ✅ PAUSAR APENAS AUTO-REFRESHES (manter WebSocket do túnel ativo)
+            if self.realtime_manager:
+                print(f"[BrowserManager] ⏸️ Pausando auto-refreshes (WebSocket do túnel permanece ativo)...")
+                # NÃO chamar .stop() - isso fecha o WebSocket
+                # Apenas sinalizar que está em modo interativo (logs menos verbosos)
+                self.realtime_manager.set_interactive_mode(True)
+                self.realtime_suspended = True
             
             # Criar sessão
             session_id = f"session-{incident_id}"
@@ -1077,6 +1079,12 @@ class BrowserManager:
     
     async def close_session(self, session_id: str):
         """Fechar uma sessão específica com timeout e cleanup de processos"""
+        # ✅ RESTAURAR REALTIME se estava suspenso
+        if self.realtime_suspended and self.realtime_manager:
+            print(f"[BrowserManager] ▶️ Restaurando Realtime...")
+            self.realtime_manager.set_interactive_mode(False)
+            self.realtime_suspended = False
+        
         if session_id not in self.sessions:
             print(f"[BrowserManager] Sessão {session_id} não encontrada")
             return

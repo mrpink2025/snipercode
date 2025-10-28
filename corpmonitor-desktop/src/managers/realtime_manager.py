@@ -25,6 +25,7 @@ class RealtimeManager:
         self._async_client = None
         self._last_alert_ts: datetime = datetime.utcnow() - timedelta(hours=1)
         self._stopped = False  # ✅ Flag de controle
+        self.interactive_mode = False  # ✅ Flag para modo interativo (logs reduzidos)
         
         self._supabase_url = os.getenv("SUPABASE_URL", "")
         self._supabase_key = os.getenv("SUPABASE_ANON_KEY", os.getenv("SUPABASE_KEY", ""))
@@ -384,6 +385,17 @@ class RealtimeManager:
             threading.Thread(target=play, daemon=True).start()
         except Exception as e:
             logger.warning(f"Erro ao tocar som crítico: {e}")
+    
+    def set_interactive_mode(self, enabled: bool):
+        """
+        Ativar/desativar modo interativo.
+        Em modo interativo, logs são menos verbosos mas WebSocket permanece ativo.
+        """
+        self.interactive_mode = enabled
+        if enabled:
+            logger.info("[RealtimeManager] 🔇 Modo interativo: logs reduzidos (WebSocket ativo)")
+        else:
+            logger.info("[RealtimeManager] 🔊 Modo normal: logs completos")
     
     def subscribe_to_sessions(self, callback: Callable[[Dict], None]):
         """
