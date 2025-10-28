@@ -6,6 +6,8 @@ import winsound
 import threading
 import os
 import time
+import json
+import websocket
 from datetime import datetime, timedelta
 from src.utils.logger import logger
 
@@ -88,25 +90,61 @@ class RealtimeManager:
         self.connection_status_callbacks.append(callback)
     
     def _run(self):
-        """Thread principal do realtime"""
-        logger.info("🚀 Starting realtime manager thread...")
+        """Thread principal do realtime - Conecta ao Go WebSocket Service"""
+        logger.info("🔌 Conectando ao Go WebSocket Service...")
+        self._notify_connection_status("connecting")
         
-        if self._ws_url and self._supabase_key:
-            try:
-                logger.info("🔌 Attempting WebSocket connection...")
-                self._loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(self._loop)
-                self._notify_connection_status("connecting")
-                self._loop.run_until_complete(self._run_async_realtime())
-                return
-            except Exception as e:
-                logger.error(f"⚠️ WebSocket failed, falling back to polling: {e}", exc_info=True)
-        else:
-            logger.warning("Configuração de websocket incompleta, usando polling")
-        
-        # Fallback para polling
-        self._notify_connection_status("polling")
-        self._run_polling_loop()
+        try:
+            import websocket
+            import json
+            
+            ws_url = "ws://localhost:8765/ws"
+            logger.info(f"Conectando em {ws_url}...")
+            
+            ws = websocket.create_connection(ws_url, timeout=10)
+            logger.info("✅ Conectado ao Go WebSocket Service")
+            
+            # Enviar mensagem de subscribe
+            machine_id = os.getenv("MACHINE_ID", "unknown")
+            subscribe_msg = {
+                "type": "subscribe",
+                "machine_id": machine_id
+            }
+            ws.send(json.dumps(subscribe_msg))
+            logger.info(f"📡 Subscrito com machine_id: {machine_id}")
+            
+            self._notify_connection_status("websocket")
+            
+            # Loop de recebimento de mensagens
+            while not self._stop_event.is_set():
+                try:
+                    ws.settimeout(1.0)  # Timeout para permitir check do stop_event
+                    message = ws.recv()
+                    
+                    if message:
+                        data = json.loads(message)
+                        logger.debug(f"📬 Mensagem recebida: {data.get('event', 'unknown')}")
+                        
+                        # Processar apenas eventos postgres_changes
+                        if data.get("event") == "postgres_changes":
+                            self._on_alert_payload(data)
+                        elif data.get("type") == "subscribed":
+                            logger.info(f"✅ Subscription confirmada: {data.get('machine')}")
+                            
+                except websocket.WebSocketTimeoutException:
+                    continue
+                except Exception as e:
+                    logger.error(f"❌ Erro ao receber mensagem: {e}")
+                    break
+            
+            ws.close()
+            logger.info("🔌 Conexão WebSocket fechada")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao conectar Go WebSocket Service: {e}")
+            logger.info("🔄 Fallback para modo polling...")
+            self._notify_connection_status("polling")
+            self._run_polling_loop()
     
     async def _run_async_realtime(self):
         """Executar conexão websocket com reconexão robusta e exponential backoff"""
