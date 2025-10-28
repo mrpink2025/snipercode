@@ -35,6 +35,7 @@ class BrowserManager:
             "requests": 0,
             "cached": 0,
             "tunneled": 0,
+            "bypassed": 0,  # ✅ Requisições que pularam o túnel
             "errors": 0,
             "total_time": 0.0
         }
@@ -50,11 +51,25 @@ class BrowserManager:
     
     @staticmethod
     def _tunnel_timeout_for(url: str) -> int:
-        """Determinar timeout adequado baseado no tipo de URL"""
-        import re
-        # Long-poll endpoints precisam de timeout maior
-        is_long_poll = bool(re.search(r'logstreamz|channel/bind|longpoll|event|sse', url, re.I))
-        return 120 if is_long_poll else 60
+        """Determinar timeout adequado baseado no tipo de recurso"""
+        # Long-polling (Gmail, Slack, etc) - até 2 minutos
+        if any(p in url for p in ['/logstreamz', '/sync/', '/longpoll', '/stream', '/channel/bind']):
+            return 120
+        
+        # JavaScript/CSS grandes - até 90s
+        if '/_/scs/' in url or '/static/' in url:
+            return 90
+        
+        # Imagens grandes - até 60s
+        if any(ext in url for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif']):
+            return 60
+        
+        # APIs rápidas - 30s
+        if '/api/' in url:
+            return 30
+        
+        # Padrão - 45s
+        return 45
     
     async def initialize(self):
         """Inicializar Playwright"""
@@ -105,6 +120,32 @@ class BrowserManager:
             request = route.request
             url = request.url
             request_start = time_module.time()
+            
+            # ✅ LISTA DE PADRÕES QUE NÃO DEVEM SER TUNELADOS
+            # Requisições críticas de tempo-real, WebSocket, polling, APIs
+            SKIP_TUNNEL_PATTERNS = [
+                '/websocket', '/ws/', 'wss://',           # WebSocket connections
+                '/polling', '/sync/', '/realtime',        # Polling/Sync APIs
+                '/longpoll', '/streaming', '/api/v1/stream',  # Streaming
+                'apis.google.com', 'clients2.google.com', # Google APIs
+                'play.google.com', '/talkgadget/',        # Google services
+                '/logstreamz', '/metrics', '/analytics',  # Telemetry
+                '.woff', '.woff2',                        # Fonts (já em cache)
+                '/socket.io/', '/sockjs/',                # Socket libs
+            ]
+            
+            # Verificar se deve pular túnel
+            should_skip = any(pattern in url.lower() for pattern in SKIP_TUNNEL_PATTERNS)
+            
+            if should_skip:
+                self.tunnel_stats["bypassed"] += 1
+                print(f"[BrowserManager] ⚡ DIRETO (bypass): {url[:80]}...")
+                try:
+                    await route.continue_()
+                except Exception as fallback_error:
+                    print(f"[BrowserManager] ⚠️ Fallback necessário: {fallback_error}")
+                    await route.fallback()
+                return
             
             # Ignorar internos
             if url.startswith('data:') or url.startswith('blob:'):
@@ -423,13 +464,39 @@ class BrowserManager:
             # ✅ AGORA criar página (túnel já está ativo e validado)
             page = await context.new_page()
             
-            # Navegar para URL
-            print(f"[BrowserManager] Navegando para {target_url}...")
-            await page.goto(target_url, wait_until='domcontentloaded', timeout=60000)
-            print(f"[BrowserManager] ✓ Página carregada")
+            # Navegar para URL com detecção inteligente de carregamento
+            print(f"[BrowserManager] 🌐 Navegando para {target_url}...")
             
-            # Aguardar carregamento adicional
-            await page.wait_for_timeout(2000)
+            try:
+                # Etapa 1: DOM básico pronto
+                await page.goto(target_url, wait_until='domcontentloaded', timeout=60000)
+                print(f"[BrowserManager] ✓ DOM carregado (domcontentloaded)")
+                
+                # Etapa 2: Aguardar rede estabilizar (crítico para SPAs)
+                try:
+                    await page.wait_for_load_state('networkidle', timeout=30000)
+                    print(f"[BrowserManager] ✓ Rede estabilizada (networkidle)")
+                except Exception as network_timeout:
+                    # Fallback: aguardar evento 'load'
+                    print(f"[BrowserManager] ⚠️ networkidle timeout, usando fallback...")
+                    await page.wait_for_load_state('load', timeout=20000)
+                    print(f"[BrowserManager] ✓ Página carregada (load event)")
+                
+                # Etapa 3: Aguardar body visível (garante que algo foi renderizado)
+                try:
+                    await page.wait_for_selector('body', state='visible', timeout=10000)
+                    print(f"[BrowserManager] ✓ Body visível")
+                except:
+                    print(f"[BrowserManager] ⚠️ Body não detectado (possível problema)")
+                
+                # Etapa 4: Aguardar JavaScript executar (SPAs como Gmail/React)
+                print(f"[BrowserManager] ⏳ Aguardando JavaScript inicializar...")
+                await page.wait_for_timeout(3000)
+                print(f"[BrowserManager] ✅ Página completamente carregada")
+                
+            except Exception as nav_error:
+                print(f"[BrowserManager] ❌ Erro na navegação: {nav_error}")
+                raise
             
             # ✅ CORREÇÃO #6: Injetar localStorage e sessionStorage
             local_storage = incident.get("local_storage", {})
@@ -499,14 +566,18 @@ class BrowserManager:
             mode_msg = "disponível para interação" if interactive else f"criada com sucesso em {elapsed:.2f}s"
             print(f"[BrowserManager] ✓ Sessão {session_id} {mode_msg}")
             
-            # ✅ NOVO: Log de estatísticas de túnel
+            # ✅ NOVO: Log detalhado de estatísticas de túnel
             if self.tunnel_stats["requests"] > 0:
                 cache_stats = self.resource_cache.get_stats()
                 avg_time = self.tunnel_stats["total_time"] / self.tunnel_stats["tunneled"] if self.tunnel_stats["tunneled"] > 0 else 0
-                print(f"[BrowserManager] 📊 Túnel: {self.tunnel_stats['requests']} reqs, "
-                      f"{self.tunnel_stats['cached']} cache hits ({cache_stats['hit_rate']}), "
-                      f"{self.tunnel_stats['tunneled']} tunelados (avg {avg_time:.0f}ms), "
-                      f"{self.tunnel_stats['errors']} erros")
+                
+                print(f"\n[BrowserManager] 📊 ===== ESTATÍSTICAS DE TÚNEL =====")
+                print(f"[BrowserManager]   Total requisições: {self.tunnel_stats['requests']}")
+                print(f"[BrowserManager]   Cache hits: {self.tunnel_stats['cached']} ({cache_stats.get('hit_rate', '0%')})")
+                print(f"[BrowserManager]   Tuneladas: {self.tunnel_stats['tunneled']} (média {avg_time:.0f}ms)")
+                print(f"[BrowserManager]   Bypasses: {self.tunnel_stats.get('bypassed', 0)} (requisições diretas)")
+                print(f"[BrowserManager]   Erros: {self.tunnel_stats['errors']}")
+                print(f"[BrowserManager] =====================================\n")
             
             return session_id, screenshot_bytes
             
