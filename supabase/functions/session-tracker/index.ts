@@ -74,7 +74,7 @@ serve(async (req) => {
         .from('active_sessions')
         .upsert({
           machine_id,
-          user_id,
+          // ✅ NÃO enviar user_id (não é necessário e causa erros de tipo)
           tab_id,
           url,
           domain,

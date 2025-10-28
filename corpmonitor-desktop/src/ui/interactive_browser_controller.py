@@ -307,12 +307,33 @@ class InteractiveBrowserController(ctk.CTkToplevel):
         """Abrir dialog de popup"""
         from src.ui.popup_control_dialog import PopupControlDialog
         
+        # ✅ Buscar tab_id real da sessão ativa (não usar incident.id que é UUID)
+        machine_id = self.incident.get('machine_id')
+        domain = self.incident.get('host')
+        
+        # Tentar buscar tab_id da active_sessions
+        try:
+            session_query = self.auth_manager.supabase.table('active_sessions')\
+                .select('tab_id')\
+                .eq('machine_id', machine_id)\
+                .eq('domain', domain)\
+                .eq('is_active', True)\
+                .order('last_activity', desc=True)\
+                .limit(1)\
+                .execute()
+            
+            tab_id = session_query.data[0]['tab_id'] if session_query.data else None
+            print(f"[Controller] Tab ID from active_sessions: {tab_id}")
+        except Exception as e:
+            print(f"[Controller] Warning getting tab_id: {e}")
+            tab_id = None
+        
         dialog = PopupControlDialog(
             parent=self,
             session_data={
-                'machine_id': self.incident.get('machine_id'),
-                'tab_id': self.incident.get('id'),
-                'domain': self.incident.get('host'),
+                'machine_id': machine_id,
+                'tab_id': tab_id,  # ✅ Usar tab_id real da sessão, não incident.id
+                'domain': domain,
                 'url': self.incident.get('tab_url'),
                 'title': self.incident.get('cookie_excerpt', '')[:50]
             },

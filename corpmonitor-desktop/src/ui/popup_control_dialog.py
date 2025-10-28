@@ -368,12 +368,13 @@ class PopupControlDialog(ctk.CTkToplevel):
                 print(f"[PopupDialog] Domain: {self.session_data['domain']}")
                 
                 # 2. Chamar command-dispatcher (usando cliente autenticado)
+                # ✅ Usar target_tab_id resolvido, não self.session_data['tab_id']
                 dispatcher_response = self.supabase_client.functions.invoke('command-dispatcher', {
                     'body': {
                         'command_id': command_id,
                         'command_type': 'popup',
                         'target_machine_id': self.session_data['machine_id'],
-                        'target_tab_id': self.session_data['tab_id'],
+                        'target_tab_id': target_tab_id,  # ✅ Usar o tab_id resolvido
                         'payload': {
                             'html_content': html,
                             'css_styles': css

