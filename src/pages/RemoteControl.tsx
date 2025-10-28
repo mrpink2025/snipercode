@@ -138,8 +138,8 @@ const RemoteControl = () => {
   };
 
   const fetchActiveSessions = async () => {
-    // ✅ Filtrar por last_activity nos últimos 5 minutos (apenas abas realmente abertas)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // ✅ Filtrar por last_activity nos últimos 2 minutos (apenas abas realmente abertas)
+    const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
     
     const { data, error } = await supabase
       .from('active_sessions')
@@ -148,8 +148,10 @@ const RemoteControl = () => {
       .not('machine_id', 'is', null)
       .neq('machine_id', 'unknown')
       .neq('machine_id', '')
-      .gte('last_activity', fiveMinutesAgo) // ✅ Apenas abas com atividade recente
+      .gte('last_activity', twoMinutesAgo) // ✅ Apenas abas com atividade recente (2min)
       .order('last_activity', { ascending: false });
+    
+    console.log(`[RemoteControl] Found ${data?.length || 0} active sessions`);
     
     if (error) {
       console.error('Error fetching sessions:', error);

@@ -59,6 +59,8 @@ const MonitoredMachines = () => {
             .eq('is_active', true)
             .gte('last_activity', twoMinutesAgo);
 
+          console.log(`[MonitoredMachines] Machine ${ws.machine_id}: ${sessions?.length || 0} active sessions`);
+
           if (sessionsError) {
             console.error('Error fetching sessions:', sessionsError);
             return {

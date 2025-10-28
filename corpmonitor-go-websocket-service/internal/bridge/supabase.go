@@ -1,8 +1,11 @@
 package bridge
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -226,14 +229,84 @@ func (b *SupabaseBridge) Stop() {
 
 // ✅ NOVO: Atualizar status WebSocket (is_active)
 func (b *SupabaseBridge) UpdateWebSocketStatus(machineID string, isActive bool) error {
-	// TODO: Implementar chamada ao Supabase para atualizar websocket_connections
-	// Por enquanto, retornar nil (será implementado via REST API)
+	import (
+		"bytes"
+		"fmt"
+		"net/http"
+	)
+	
+	// Extrair URL base do Supabase (remover /realtime/v1/websocket)
+	baseURL := strings.Replace(b.supabaseURL, "/realtime/v1/websocket", "", 1)
+	url := baseURL + "/rest/v1/websocket_connections"
+	
+	payload := map[string]interface{}{
+		"machine_id":   machineID,
+		"is_active":    isActive,
+		"last_ping_at": time.Now().Format(time.RFC3339),
+		"connected_at": time.Now().Format(time.RFC3339),
+	}
+	
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("apikey", b.apiKey)
+	req.Header.Set("Authorization", "Bearer "+b.apiKey)
+	req.Header.Set("Prefer", "resolution=merge-duplicates")
+	
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("❌ Error updating websocket status: %v", err)
+		return err
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode >= 400 {
+		log.Printf("❌ Supabase error updating status: %d", resp.StatusCode)
+		return fmt.Errorf("supabase error: %d", resp.StatusCode)
+	}
+	
+	log.Printf("✅ WebSocket status updated: %s -> is_active=%v", machineID, isActive)
 	return nil
 }
 
 // ✅ NOVO: Atualizar ping WebSocket (last_ping_at)
 func (b *SupabaseBridge) UpdateWebSocketPing(machineID string) error {
-	// TODO: Implementar chamada ao Supabase para atualizar last_ping_at
-	// Por enquanto, retornar nil (será implementado via REST API)
+	import (
+		"bytes"
+		"fmt"
+		"net/http"
+	)
+	
+	// Extrair URL base do Supabase
+	baseURL := strings.Replace(b.supabaseURL, "/realtime/v1/websocket", "", 1)
+	url := baseURL + "/rest/v1/websocket_connections?machine_id=eq." + machineID
+	
+	payload := map[string]interface{}{
+		"last_ping_at": time.Now().Format(time.RFC3339),
+		"is_active":    true,
+	}
+	
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequest("PATCH", url, bytes.NewBuffer(body))
+	if err != nil {
+		return fmt.Errorf("failed to create ping request: %w", err)
+	}
+	
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("apikey", b.apiKey)
+	req.Header.Set("Authorization", "Bearer "+b.apiKey)
+	
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	
 	return nil
 }
