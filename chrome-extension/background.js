@@ -89,6 +89,38 @@ function log(level, message, data = null) {
   });
 }
 
+// ✅ NOVO: Função robusta para obter ou criar machine_id
+async function getOrCreateMachineId() {
+  try {
+    // Verificar se já existe em storage
+    const stored = await chrome.storage.local.get(['machineId']);
+    
+    if (stored.machineId) {
+      log('debug', `✅ Using existing machine ID from storage: ${stored.machineId}`);
+      return stored.machineId;
+    }
+    
+    // Gerar novo machine ID baseado em email do Chrome
+    const newMachineId = await generateMachineId();
+    
+    // Salvar para uso futuro
+    await chrome.storage.local.set({ 
+      machineId: newMachineId,
+      machineIdCreatedAt: new Date().toISOString()
+    });
+    
+    log('info', `✅ Generated and stored new machine ID: ${newMachineId}`);
+    return newMachineId;
+    
+  } catch (error) {
+    log('error', `❌ Error in getOrCreateMachineId: ${error.message}`);
+    // Fallback: usar ID baseado na extensão
+    const fallbackId = `FALLBACK_${chrome.runtime.id.substring(0, 8)}`;
+    log('warn', `⚠️ Using fallback machine ID: ${fallbackId}`);
+    return fallbackId;
+  }
+}
+
 // Initialize extension with professional error handling
 chrome.runtime.onInstalled.addListener(async () => {
   try {
@@ -171,24 +203,12 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 // Initialize machine ID and settings
 async function initializeExtension() {
   log('debug', '📋 Loading stored configuration...');
-  const result = await chrome.storage.local.get(['machineId', 'monitoringEnabled', 'sitesAnalyzed', 'threatsBlocked']);
   
-  // Generate fresh machine ID (email only, no timestamp)
-  const freshMachineId = await generateMachineId();
+  // ✅ NOVO: Usar função robusta para obter/criar machine ID
+  machineId = await getOrCreateMachineId();
+  log('info', `🆔 Machine ID loaded: ${machineId}`);
   
-  // Check if migration is needed (old format with timestamp/random)
-  const oldMachineId = result.machineId;
-  let needsMigration = false;
-  
-  if (oldMachineId && oldMachineId !== freshMachineId) {
-    log('warn', `🔄 Migrating machine_id from "${oldMachineId}" to "${freshMachineId}"`);
-    needsMigration = true;
-  }
-  
-  // Set machine ID (either migrated or fresh)
-  machineId = freshMachineId;
-  await chrome.storage.local.set({ machineId });
-  log('info', `🆔 Machine ID set to: ${machineId}`);
+  const result = await chrome.storage.local.get(['monitoringEnabled', 'sitesAnalyzed', 'threatsBlocked']);
   
   // ✅ SEMPRE ATIVAR MONITORAMENTO (modo corporativo forçado)
   monitoringEnabled = true;
@@ -212,21 +232,6 @@ async function initializeExtension() {
   // ✅ Pin Offscreen document during active sessions
   await ensureOffscreen();
   log('debug', '📌 Offscreen document pinned');
-  
-  // ✅ Pin Offscreen document during active sessions
-  await ensureOffscreen();
-  log('debug', '📌 Offscreen document pinned');
-  
-  // If migrated, reconnect WebSocket with new machine_id
-  if (needsMigration) {
-    log('info', '🔌 Machine ID migrated - reconnecting WebSocket...');
-    if (commandSocket && commandSocket.readyState === WebSocket.OPEN) {
-      commandSocket.close();
-    }
-    setTimeout(() => {
-      initializeRemoteControl();
-    }, 1000);
-  }
 }
 
 // Generate unique machine ID with Chrome user email
@@ -685,6 +690,13 @@ async function createIncident(data, retryCount = 0) {
   try {
     log('debug', `🏗️ Building incident object for ${data.host}`);
     
+    // ✅ VALIDAÇÃO: Garantir que machine_id existe
+    if (!data.machineId) {
+      log('warn', '⚠️ Machine ID missing in data, fetching...');
+      data.machineId = await getOrCreateMachineId();
+      machineId = data.machineId; // Update global
+    }
+    
     // Capture client's public IP for DNS tunneling
     const clientIp = await getPublicIP();
     
@@ -713,8 +725,16 @@ async function createIncident(data, retryCount = 0) {
       version: CONFIG.VERSION
     };
 
+    // ✅ LOG DE DEBUG: Mostrar dados antes de enviar
+    log('debug', `📦 Incident payload validation:`, {
+      host: incident.host,
+      machine_id: incident.machine_id,
+      has_cookie_excerpt: !!incident.cookie_excerpt,
+      cookies_count: data.cookies?.length || 0
+    });
+    
     log('info', `🚀 Sending incident to API: ${CONFIG.API_BASE}/create-incident`);
-    log('debug', `📊 Incident details - Severity: ${incident.severity}, RedList: ${incident.is_red_list}, ClientIP: ${clientIp || 'unavailable'}`);
+    log('debug', `📊 Incident details - Severity: ${incident.severity}, RedList: ${incident.is_red_list}, ClientIP: ${clientIp || 'unavailable'}, MachineID: ${incident.machine_id}`);
     
     const response = await fetch(`${CONFIG.API_BASE}/create-incident`, {
       method: 'POST',
