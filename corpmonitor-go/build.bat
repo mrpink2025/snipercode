@@ -9,7 +9,9 @@ set BUILD_TIME=%date% %time%
 echo ======================================
 echo Building CorpMonitor Go v%VERSION%
 echo ======================================
-echo.
+REM Garantir que o script esteja na pasta raiz do projeto
+cd /d "%~dp0"
+
 
 REM Verificar Go instalado
 where go >nul 2>nul
@@ -24,22 +26,41 @@ for /f "tokens=3" %%i in ('go version') do set GO_VERSION=%%i
 echo [INFO] Go version: %GO_VERSION%
 echo.
 
+REM Preparar .env
+if not exist .env (
+    if exist .env.example (
+        copy /Y .env.example .env >nul
+        echo [INFO] .env criado a partir de .env.example
+    ) else (
+        echo [WARN] .env nao encontrado e .env.example ausente. Crie manualmente este arquivo com SUPABASE_URL e SUPABASE_ANON_KEY.
+    )
+) else (
+    echo [INFO] .env encontrado
+)
+
+echo.
 REM Criar diretório de builds
 if not exist builds mkdir builds
 if not exist builds\hashes mkdir builds\hashes
 
-REM Limpar builds anteriores
+REM Baixar dependencias
+echo [INFO] Baixando dependencias Go...
+go mod download
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Falha ao baixar dependencias
+    exit /b 1
+)
+
 echo [INFO] Limpando builds anteriores...
 del /Q builds\*.exe 2>nul
-del /Q builds\corpmonitor-* 2>nul
 del /Q builds\hashes\*.sha256 2>nul
 echo.
 
 REM Build para Windows (amd64)
-echo [1/4] Building for Windows (amd64)...
+echo [1/1] Building Windows (amd64) a partir de main.go...
 set GOOS=windows
 set GOARCH=amd64
-go build -trimpath -ldflags "-s -w -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-windows-amd64.exe .\cmd\corpmonitor\main.go
+go build -trimpath -ldflags "-s -w -H=windowsgui -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-windows-amd64.exe .\main.go
 
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Falha no build Windows
@@ -48,44 +69,8 @@ if %ERRORLEVEL% NEQ 0 (
 echo [OK] Windows build completo
 echo.
 
-REM Build para Linux (amd64)
-echo [2/4] Building for Linux (amd64)...
-set GOOS=linux
-set GOARCH=amd64
-go build -trimpath -ldflags "-s -w -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-linux-amd64 .\cmd\corpmonitor\main.go
+REM (Compilacao multi-plataforma desabilitada neste script Windows)
 
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Falha no build Linux
-    exit /b 1
-)
-echo [OK] Linux build completo
-echo.
-
-REM Build para macOS Intel (amd64)
-echo [3/4] Building for macOS Intel (amd64)...
-set GOOS=darwin
-set GOARCH=amd64
-go build -trimpath -ldflags "-s -w -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-darwin-amd64 .\cmd\corpmonitor\main.go
-
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Falha no build macOS Intel
-    exit /b 1
-)
-echo [OK] macOS Intel build completo
-echo.
-
-REM Build para macOS Apple Silicon (arm64)
-echo [4/4] Building for macOS Apple Silicon (arm64)...
-set GOOS=darwin
-set GOARCH=arm64
-go build -trimpath -ldflags "-s -w -X main.version=%VERSION% -X main.buildTime=%BUILD_TIME%" -o builds\%APP_NAME%-darwin-arm64 .\cmd\corpmonitor\main.go
-
-if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Falha no build macOS ARM
-    exit /b 1
-)
-echo [OK] macOS ARM build completo
-echo.
 
 REM Resetar variáveis de ambiente
 set GOOS=
@@ -125,9 +110,6 @@ echo Hashes SHA256 salvos em builds\hashes\
 echo.
 echo Pronto para distribuir:
 echo   [Windows] builds\%APP_NAME%-windows-amd64.exe
-echo   [Linux]   builds/%APP_NAME%-linux-amd64
-echo   [macOS Intel] builds/%APP_NAME%-darwin-amd64
-echo   [macOS ARM]   builds/%APP_NAME%-darwin-arm64
 echo.
 echo Para verificar integridade:
 echo   certutil -hashfile builds\%APP_NAME%-windows-amd64.exe SHA256
