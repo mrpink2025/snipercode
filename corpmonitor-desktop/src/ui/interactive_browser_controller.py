@@ -203,10 +203,22 @@ class InteractiveBrowserController(ctk.CTkToplevel):
             return
         
         try:
+            # ✅ SOLUÇÃO #1: Sempre criar novo event loop LIMPO (limpar estado anterior)
+            if self._loop:
+                print("[Controller] 🧹 Limpando event loop anterior...")
+                try:
+                    if self._loop.is_running():
+                        self._loop.stop()
+                    if not self._loop.is_closed():
+                        self._loop.close()  # ← CRÍTICO: Fechar loop antigo
+                    print("[Controller] ✓ Event loop anterior fechado")
+                except Exception as e:
+                    print(f"[Controller] ⚠️ Erro ao fechar loop anterior: {e}")
+            
             # Criar event loop dedicado para esta thread
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
-            print("[Controller] 🔄 Event loop dedicado criado")
+            print("[Controller] 🔄 Event loop NOVO dedicado criado")
             
             # Criar task para iniciar browser
             async def start_browser():
@@ -409,6 +421,18 @@ class InteractiveBrowserController(ctk.CTkToplevel):
                 if self._loop and self._loop.is_running():
                     self._loop.call_soon_threadsafe(self._loop.stop)
                     print("[Controller] 🛑 Event loop parado")
+                
+                # ✅ SOLUÇÃO #1: Timer para fechar loop após parar (não só parar)
+                def close_loop():
+                    if self._loop:
+                        try:
+                            if not self._loop.is_closed():
+                                self._loop.close()  # ← CRÍTICO: Fechar loop
+                                print("[Controller] ✓ Event loop FECHADO (pronto para reutilizar)")
+                        except Exception as e:
+                            print(f"[Controller] ⚠️ Erro ao fechar loop: {e}")
+                
+                threading.Timer(0.5, close_loop).start()
                 
                 try:
                     self.after(0, self.force_destroy)

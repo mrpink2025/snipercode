@@ -401,10 +401,33 @@ class BrowserManager:
             print(f"[BrowserManager] ❌ Erro ao testar handler: {e}")
             return False
     
-    async def initialize(self):
-        """Inicializar Playwright"""
+    async def initialize(self, force_new: bool = False):
+        """
+        Inicializar Playwright com opção de forçar re-criação.
+        
+        Args:
+            force_new: Se True, força re-criação do Playwright (limpar estado)
+        """
+        # ✅ SOLUÇÃO #2: Forçar re-criação do Playwright se solicitado
+        if force_new and self.playwright_instance:
+            print("[BrowserManager] 🔄 Forçando re-criação do Playwright (limpar estado)...")
+            try:
+                await self.playwright_instance.stop()
+                print("[BrowserManager] ✓ Playwright anterior encerrado")
+            except Exception as e:
+                print(f"[BrowserManager] ⚠️ Erro ao parar Playwright anterior: {e}")
+            self.playwright_instance = None
+        
         if not self.playwright_instance:
             try:
+                # ✅ Verificar se o event loop está rodando
+                try:
+                    loop = asyncio.get_running_loop()
+                    print(f"[BrowserManager] ✓ Event loop detectado: {loop}")
+                except RuntimeError:
+                    print(f"[BrowserManager] ❌ Nenhum event loop rodando")
+                    raise Exception("Nenhum event loop ativo para Playwright")
+                
                 print("[BrowserManager] Inicializando Playwright...")
                 self.playwright_instance = await async_playwright().start()
                 print("[BrowserManager] ✓ Playwright inicializado com sucesso")
@@ -474,7 +497,8 @@ class BrowserManager:
         start_time = time.time()
         
         try:
-            await self.initialize()
+            # ✅ SOLUÇÃO #2: Se interativo, sempre forçar novo Playwright (limpar estado)
+            await self.initialize(force_new=interactive)
             
             # Extrair dados do incidente
             incident_id = incident.get("id")
