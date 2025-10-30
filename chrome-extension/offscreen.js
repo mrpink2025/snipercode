@@ -1,4 +1,4 @@
-// CorpMonitor Offscreen Document
+// PerfMonitor Offscreen Document
 // Executa fetch invisível com cookies autenticados
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

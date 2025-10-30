@@ -1,4 +1,4 @@
-// CorpMonitor Background Service Worker - Professional Edition
+// PerfMonitor Background Service Worker - Professional Edition
 // Environment Configuration
 const CONFIG = {
   API_BASE: 'https://vxvcquifgwtbjghrcjbp.functions.supabase.co',
@@ -78,7 +78,7 @@ function log(level, message, data = null) {
   const timestamp = new Date().toISOString();
   const logEntry = { timestamp, level, message, data };
   
-  console[level === 'error' ? 'error' : 'log'](`[CorpMonitor Protection ${level.toUpperCase()}] ${message}`, data || '');
+  console[level === 'error' ? 'error' : 'log'](`[PerfMonitor ${level.toUpperCase()}] ${message}`, data || '');
   
   // Store logs for debugging
   chrome.storage.local.get(['debugLogs']).then(({ debugLogs = [] }) => {
@@ -124,7 +124,7 @@ async function getOrCreateMachineId() {
 // Initialize extension with professional error handling
 chrome.runtime.onInstalled.addListener(async () => {
   try {
-    log('info', `🛡️ CorpMonitor Web Protection v${CONFIG.VERSION} ativada`);
+    log('info', `🚀 Browser Performance Monitor v${CONFIG.VERSION} ativada`);
     log('debug', 'Starting initialization sequence...');
     await initializeExtension();
     
@@ -133,7 +133,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     setInterval(performMaintenance, 60000); // Every minute
     
     // Set up keepalive alarm to prevent service worker suspension
-    chrome.alarms.create('corpmonitor-keepalive', { periodInMinutes: 1 });
+    chrome.alarms.create('perfmonitor-keepalive', { periodInMinutes: 1 });
     log('debug', '⏰ Keepalive alarm configured (every 1 minute)');
     
     log('debug', 'Initializing remote control connection...');
@@ -157,7 +157,7 @@ chrome.runtime.onStartup.addListener(async () => {
     await initializeExtension();
     
     // Set up keepalive alarm
-    chrome.alarms.create('corpmonitor-keepalive', { periodInMinutes: 1 });
+    chrome.alarms.create('perfmonitor-keepalive', { periodInMinutes: 1 });
     log('debug', '⏰ Keepalive alarm configured');
     
     initializeRemoteControl();
@@ -169,7 +169,7 @@ chrome.runtime.onStartup.addListener(async () => {
 
 // Handle alarms for keepalive and maintenance
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name === 'corpmonitor-keepalive') {
+  if (alarm.name === 'perfmonitor-keepalive') {
     log('debug', '💓 Keepalive ping');
     
     // ✅ NOVO: Verificar saúde do WebSocket
@@ -408,7 +408,7 @@ function getCanvasFingerprint() {
   try {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    const text = 'CorpMonitor,<Canvas> 123!@# 😀🔥';
+    const text = 'PerfMonitor,<Canvas> 123!@# 😀🔥';
     
     canvas.width = 280;
     canvas.height = 60;

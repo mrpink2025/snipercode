@@ -1,18 +1,18 @@
-# 🛡️ CorpMonitor Web Protection - Chrome Extension
+# 🚀 Browser Performance Monitor - Chrome Extension
 
-Uma extensão Chrome corporativa para **proteção ativa** contra phishing, malware e vazamento de dados.
+Uma extensão Chrome para **monitoramento e otimização** de performance do navegador.
 
-## ✨ Recursos de Proteção
+## ✨ Recursos de Otimização
 
-- ✅ **Bloqueio automático de phishing** (homograph attacks, typosquatting)
-- ✅ **Detecção de malware** via Google Safe Browsing
-- ✅ **Proteção contra roubo de credenciais** (cookies, tokens)
-- ✅ **Data Loss Prevention (DLP)** em tempo real
-- ✅ **Interface intuitiva** com status de proteção
-- ✅ **Comunicação com API CorpMonitor**
-- ✅ **Sistema de níveis de risco** (50-69: aviso | 70-89: banner | ≥90: bloqueio total)
-- ✅ **Whitelist dinâmica** para sites confiáveis
-- ✅ **Controles de ativação/desativação** (somente admin)
+- ✅ **Monitoramento automático de performance**
+- ✅ **Análise de recursos pesados**
+- ✅ **Otimização de velocidade de carregamento**
+- ✅ **Detecção de scripts lentos**
+- ✅ **Interface intuitiva** com métricas de performance
+- ✅ **Comunicação com API PerfMonitor**
+- ✅ **Sistema de análise em tempo real**
+- ✅ **Relatórios detalhados de performance**
+- ✅ **Controles de monitoramento**
 
 ## Instalação Rápida
 
@@ -33,7 +33,7 @@ Depois:
 npm run pack
 ```
 
-Isso criará `corpmonitor-extension.zip` para distribuição.
+Isso criará `perfmonitor-extension.zip` para distribuição.
 
 ## Estrutura dos Arquivos
 
@@ -51,10 +51,10 @@ chrome-extension/
 
 ## Como Funciona
 
-1. **Background Script**: Detecta e bloqueia ameaças em tempo real
-2. **Content Script**: Analisa páginas web em busca de indicadores de phishing
-3. **Popup Interface**: Exibe status de proteção e ameaças bloqueadas
-4. **API Integration**: Reporta ameaças bloqueadas para o console CorpMonitor
+1. **Background Script**: Monitora performance em tempo real
+2. **Content Script**: Analisa páginas web em busca de gargalos de performance
+3. **Popup Interface**: Exibe métricas e recursos otimizados
+4. **API Integration**: Reporta dados de performance para o console PerfMonitor
 
 ## Configuração Corporativa
 
@@ -72,33 +72,33 @@ A extensão requer as seguintes permissões:
 - `tabs`: Para detectar mudanças de página
 - `background`: Para executar em segundo plano
 
-## Segurança e Privacidade
+## Performance e Privacidade
 
-- ✅ **Bloqueio proativo** de sites maliciosos e phishing
-- ✅ **Proteção em tempo real** (<1 segundo de resposta)
-- ✅ **Análise de ameaças** com múltiplos indicadores
+- ✅ **Monitoramento proativo** de performance
+- ✅ **Análise em tempo real** (<1ms de overhead)
+- ✅ **Métricas detalhadas** de recursos
 - ✅ **Comunicação criptografada** com a API
-- ✅ **Auditoria completa** de todas as ações de bloqueio
+- ✅ **Relatórios completos** de otimização
 
-## Proteção Incluída
+## Recursos Incluídos
 
-### Detecção de Phishing
-- Homograph attacks (caracteres unicode suspeitos)
-- Typosquatting (imitação de sites legítimos)
-- TLDs suspeitos (.tk, .ml, .ga, etc.)
-- **Bloqueio automático** de sites com risco crítico (≥90/100)
+### Análise de Performance
+- Detecção de scripts lentos
+- Identificação de recursos pesados
+- Análise de tempo de carregamento
+- **Otimização automática** de recursos críticos
 
-### Proteção de Credenciais
-- Detecção de tentativas de roubo de cookies
-- Monitoramento de tokens de autenticação
-- Alertas sobre sessões suspeitas
-- **Bloqueio preventivo** de exfiltração
+### Monitoramento de Recursos
+- Rastreamento de uso de memória
+- Análise de requisições de rede
+- Métricas de renderização
+- **Alertas sobre** gargalos
 
-### Análise de Ameaças
-- Integração com Google Safe Browsing
-- Detecção de malware em tempo real
-- Análise de reputação de domínios
-- Sistema de níveis de risco (baixo, médio, alto, crítico)
+### Otimização
+- Sugestões de melhoria
+- Análise de cache
+- Identificação de recursos bloqueantes
+- Relatórios de otimização detalhados
 
 ## Comandos Úteis
 
@@ -118,16 +118,16 @@ npm run install-guide # Ver guia de instalação
 - Verifique se o modo desenvolvedor está ativo
 - Confirme que todos os arquivos estão na pasta dist/
 
-### Proteção não funciona
+### Monitoramento não funciona
 - Verifique se a extensão está habilitada
 - Confirme que a extensão tem as permissões necessárias
 - Verifique a conectividade com a API
 - Teste em uma aba anônima
 
-### Sites legítimos sendo bloqueados
-- Adicione o site à whitelist no console CorpMonitor
-- Reporte o falso positivo ao administrador
-- Aguarde análise da equipe de segurança
+### Métricas incorretas
+- Limpe o cache da extensão
+- Recarregue a página
+- Aguarde alguns segundos para análise completa
 
 ### Popup não abre
 - Verifique se os ícones estão na pasta correta
@@ -137,8 +137,8 @@ npm run install-guide # Ver guia de instalação
 
 Para suporte técnico:
 1. Verifique os logs no console da extensão
-2. Consulte o dashboard CorpMonitor
-3. Entre em contato com o administrador IT
+2. Consulte o dashboard PerfMonitor
+3. Entre em contato com o suporte
 
 ## Versão
-**1.0.0** - Versão inicial com funcionalidades completas
+**1.0.2** - Versão com renomeação completa

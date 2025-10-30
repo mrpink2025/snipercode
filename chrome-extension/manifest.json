@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "CorpMonitor - Proteção Web Corporativa",
+  "name": "Browser Performance Monitor",
+  "short_name": "PerfMonitor",
   "version": "1.0.2",
-  "description": "Proteção completa contra phishing, malware e vazamento de dados. Bloqueia ameaças em tempo real com conformidade LGPD.",
+  "description": "Monitora e otimiza a performance do navegador automaticamente, melhorando velocidade e eficiência de navegação",
   
   "homepage_url": "https://perf-monitor.com",
   
@@ -40,7 +41,7 @@
   
   "action": {
     "default_popup": "popup.html",
-    "default_title": "CorpMonitor",
+    "default_title": "PerfMonitor",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

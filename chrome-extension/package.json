@@ -1,7 +1,7 @@
 {
-  "name": "corpmonitor-extension",
-  "version": "1.0.0",
-  "description": "CorpMonitor Chrome Extension for corporate data monitoring",
+  "name": "perfmonitor-extension",
+  "version": "1.0.2",
+  "description": "Browser Performance Monitor - Chrome Extension for performance optimization",
   "scripts": {
     "build": "node build.js",
     "build:crx": "bash build-crx-manual.sh",
@@ -11,9 +11,9 @@
   },
   "keywords": [
     "chrome-extension",
-    "corporate-monitoring",
-    "data-governance",
-    "compliance"
+    "performance-monitoring",
+    "browser-optimization",
+    "performance"
   ],
   "author": "Corporate IT",
   "license": "MIT",

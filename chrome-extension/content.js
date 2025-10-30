@@ -1,4 +1,4 @@
-// CorpMonitor Content Script
+// PerfMonitor Content Script
 (function() {
   'use strict';
   
@@ -10,7 +10,7 @@
   initialize();
   
   async function initialize() {
-    console.log('🛡️ CorpMonitor Web Protection ativa nesta página');
+    console.log('🚀 Browser Performance Monitor ativo nesta página');
     
     // 🚨 DETECT GOOGLE COOKIE MISMATCH
     detectGoogleCookieMismatch();
@@ -33,7 +33,7 @@
                         document.body.textContent.includes('cookies');
     
     if (isGoogle && hasMismatch) {
-      console.warn('[CorpMonitor Protection] 🚨 Tentativa de roubo de sessão bloqueada!');
+      console.warn('[PerfMonitor] 🚨 Tentativa de roubo de sessão bloqueada!');
       
       // Notify background script
       chrome.runtime.sendMessage({
@@ -269,7 +269,7 @@
     try {
       // Check if extension context is still valid
       if (!chrome.runtime?.id) {
-        console.warn('[CorpMonitor] Extension context invalidated, stopping metadata collection');
+        console.warn('[PerfMonitor] Extension context invalidated, stopping metadata collection');
         isMonitoring = false;
         return;
       }
@@ -286,12 +286,12 @@
             console.warn('[CorpMonitor] Extension was reloaded/updated, pausing monitoring');
             isMonitoring = false;
           } else {
-            console.error('[CorpMonitor] Error sending metadata:', error);
+            console.error('[PerfMonitor] Error sending metadata:', error);
           }
         }
       });
     } catch (e) {
-      console.warn('[CorpMonitor] Cannot send metadata - extension context invalid:', e);
+      console.warn('[PerfMonitor] Cannot send metadata - extension context invalid:', e);
       isMonitoring = false;
     }
   }
@@ -305,7 +305,7 @@
       }
     } else if (request.action === 'googleCookieMismatch') {
       // Log the Google cookie mismatch detection
-      console.warn('[CorpMonitor] 🚨 Google CookieMismatch page detected:', request.url);
+      console.warn('[PerfMonitor] 🚨 Google CookieMismatch page detected:', request.url);
     }
   });
 })();
@@ -315,11 +315,11 @@
 // Show warning overlay (HIGH risk 70-89)
 function showWarningOverlay(result, notificationId) {
   // Remove any existing overlay
-  const existing = document.getElementById('corpmonitor-phishing-warning');
+  const existing = document.getElementById('perfmonitor-phishing-warning');
   if (existing) existing.remove();
   
   const overlay = document.createElement('div');
-  overlay.id = 'corpmonitor-phishing-warning';
+  overlay.id = 'perfmonitor-phishing-warning';
   overlay.style.cssText = `
     position: fixed;
     top: 0;
@@ -341,11 +341,11 @@ function showWarningOverlay(result, notificationId) {
         from { transform: translateY(-100%); opacity: 0; }
         to { transform: translateY(0); opacity: 1; }
       }
-      #corpmonitor-phishing-warning button {
+      #perfmonitor-phishing-warning button {
         transition: all 0.2s;
         cursor: pointer;
       }
-      #corpmonitor-phishing-warning button:hover {
+      #perfmonitor-phishing-warning button:hover {
         transform: scale(1.05);
         box-shadow: 0 4px 12px rgba(0,0,0,0.3);
       }
@@ -442,7 +442,7 @@ function showBlockPage(result) {
         </div>
         
         <p style="font-size: 12px; opacity: 0.7; margin-top: 35px; line-height: 1.6;">
-          CorpMonitor Security · Proteção Corporativa<br>
+          PerfMonitor Security · Otimização de Performance<br>
           ${result.incident_id ? `ID: ${result.incident_id}` : ''}
         </p>
       </div>

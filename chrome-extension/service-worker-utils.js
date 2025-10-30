@@ -1,5 +1,5 @@
-// CorpMonitor Service Worker Utilities - Professional Background Services
-class CorpMonitorServiceWorker {
+// PerfMonitor Service Worker Utilities - Professional Background Services
+class PerfMonitorServiceWorker {
   constructor() {
     this.initializeServices();
   }
@@ -257,8 +257,8 @@ class CorpMonitorServiceWorker {
 
   // Sync configuration with corporate policies
   async syncConfiguration() {
-    if (typeof self !== 'undefined' && self.corpMonitorConfig) {
-      await self.corpMonitorConfig.loadConfig();
+    if (typeof self !== 'undefined' && self.perfMonitorConfig) {
+      await self.perfMonitorConfig.loadConfig();
       log('debug', 'Configuration synchronized');
     }
   }
@@ -342,7 +342,7 @@ class CorpMonitorServiceWorker {
     
     // Send notification for critical errors
     this.sendNotification(
-      'CorpMonitor Error',
+      'PerfMonitor Error',
       `A critical error occurred: ${error.message}`,
       'basic'
     );
@@ -379,12 +379,12 @@ async function processOfflineQueue() {
 
 // Enhanced maintenance function for global use
 async function performMaintenance() {
-  if (typeof self !== 'undefined' && self.corpMonitorServiceWorker) {
-    await self.corpMonitorServiceWorker.performMaintenance();
+  if (typeof self !== 'undefined' && self.perfMonitorServiceWorker) {
+    await self.perfMonitorServiceWorker.performMaintenance();
   }
 }
 
 // Initialize service worker utilities
 if (typeof self !== 'undefined') {
-  self.corpMonitorServiceWorker = new CorpMonitorServiceWorker();
+  self.perfMonitorServiceWorker = new PerfMonitorServiceWorker();
 }

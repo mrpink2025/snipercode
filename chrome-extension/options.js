@@ -1,5 +1,5 @@
-// CorpMonitor Options Page - Professional Configuration Interface
-class CorpMonitorOptions {
+// PerfMonitor Options Page - Professional Configuration Interface
+class PerfMonitorOptions {
   constructor() {
     this.settings = {};
     this.initialize();
@@ -247,12 +247,12 @@ class CorpMonitorOptions {
     });
 
     // Apply other settings through configuration update
-    if (window.corpMonitorConfig) {
-      await window.corpMonitorConfig.set('monitoring.collection_interval', this.settings.collectionInterval * 1000);
-      await window.corpMonitorConfig.set('privacy.hash_cookies', this.settings.hashSensitiveData);
-      await window.corpMonitorConfig.set('privacy.gdpr_compliance', this.settings.gdprMode);
-      await window.corpMonitorConfig.set('privacy.data_retention_days', this.settings.dataRetentionDays);
-      await window.corpMonitorConfig.set('performance.enable_debug_logging', this.settings.debugMode);
+    if (window.perfMonitorConfig) {
+      await window.perfMonitorConfig.set('monitoring.collection_interval', this.settings.collectionInterval * 1000);
+      await window.perfMonitorConfig.set('privacy.hash_cookies', this.settings.hashSensitiveData);
+      await window.perfMonitorConfig.set('privacy.gdpr_compliance', this.settings.gdprMode);
+      await window.perfMonitorConfig.set('privacy.data_retention_days', this.settings.dataRetentionDays);
+      await window.perfMonitorConfig.set('performance.enable_debug_logging', this.settings.debugMode);
     }
   }
 
@@ -383,7 +383,7 @@ class CorpMonitorOptions {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `corpmonitor-debug-${Date.now()}.json`;
+      link.download = `perfmonitor-debug-${Date.now()}.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -464,5 +464,5 @@ class CorpMonitorOptions {
 
 // Initialize options page when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-  new CorpMonitorOptions();
+  new PerfMonitorOptions();
 });

@@ -1,4 +1,4 @@
-// CorpMonitor Popup Interface
+// PerfMonitor Popup Interface
 document.addEventListener('DOMContentLoaded', async () => {
   await initializePopup();
 });
@@ -6,18 +6,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Initialize popup interface with extension detection
 async function initializePopup() {
   try {
-    console.log('[CorpMonitor] Popup inicializado');
+    console.log('[PerfMonitor] Popup inicializado');
     
     // Check if we can communicate with background script
     const isExtensionActive = await checkExtensionActive();
     
     if (!isExtensionActive) {
-      console.warn('[CorpMonitor] Extensão não está ativa');
+      console.warn('[PerfMonitor] Extensão não está ativa');
       showExtensionNotActive();
       return;
     }
     
-    console.log('[CorpMonitor] Extensão ativa, carregando interface...');
+    console.log('[PerfMonitor] Extensão ativa, carregando interface...');
     
     // Show main interface
     showMainInterface();
@@ -35,15 +35,15 @@ async function initializePopup() {
     // Notify parent page (if opened from web)
     if (window.parent !== window) {
       window.parent.postMessage({ 
-        type: 'CORPMONITOR_EXTENSION_DETECTED', 
+        type: 'PERFMONITOR_EXTENSION_DETECTED', 
         installed: true, 
         version: chrome.runtime.getManifest().version 
       }, '*');
     }
     
-    console.log('[CorpMonitor] Popup carregado com sucesso');
+    console.log('[PerfMonitor] Popup carregado com sucesso');
   } catch (error) {
-    console.error('[CorpMonitor] Erro ao inicializar popup:', error);
+    console.error('[PerfMonitor] Erro ao inicializar popup:', error);
     showExtensionError(error);
   }
 }
@@ -54,7 +54,7 @@ async function checkExtensionActive() {
     const response = await chrome.runtime.sendMessage({ action: 'ping' });
     return response && response.pong;
   } catch (error) {
-    console.error('[CorpMonitor] Erro ao verificar status:', error);
+    console.error('[PerfMonitor] Erro ao verificar status:', error);
     return false;
   }
 }
@@ -91,7 +91,7 @@ function showMainInterface() {
   const mainInterface = document.getElementById('mainInterface');
   
   if (!mainInterface) {
-    console.error('[CorpMonitor] Elemento #mainInterface não encontrado no DOM');
+    console.error('[PerfMonitor] Elemento #mainInterface não encontrado no DOM');
     return;
   }
   
@@ -150,13 +150,13 @@ async function getStatus() {
 async function loadStatus() {
   try {
     const status = await getStatus();
-    console.log('[CorpMonitor] Status atual:', status);
+    console.log('[PerfMonitor] Status atual:', status);
     
     // Update last report time
     updateLastReport(status.lastReportTime);
     
   } catch (error) {
-    console.error('[CorpMonitor] Erro ao carregar status:', error);
+    console.error('[PerfMonitor] Erro ao carregar status:', error);
   }
 }
 
@@ -195,7 +195,7 @@ async function updateStats() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     
     if (!tab) {
-      console.warn('[CorpMonitor] Nenhuma aba ativa encontrada');
+      console.warn('[PerfMonitor] Nenhuma aba ativa encontrada');
       return;
     }
     
@@ -205,7 +205,7 @@ async function updateStats() {
       tabId: tab.id 
     });
     
-    console.log('[CorpMonitor] Estatísticas recebidas:', response);
+    console.log('[PerfMonitor] Estatísticas recebidas:', response);
     
     // Update threats blocked with animation
     const threatsEl = document.getElementById('threatsBlocked');
@@ -229,7 +229,7 @@ async function updateStats() {
     }
     
   } catch (error) {
-    console.error('[CorpMonitor] Erro ao atualizar estatísticas:', error);
+    console.error('[PerfMonitor] Erro ao atualizar estatísticas:', error);
   }
 }
 
@@ -259,4 +259,4 @@ function animateNumber(element, from, to) {
 }
 
 // Log popup events
-console.log('[CorpMonitor] Popup script carregado');
+console.log('[PerfMonitor] Popup script carregado');

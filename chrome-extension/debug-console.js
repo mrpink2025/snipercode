@@ -1,5 +1,5 @@
-// CorpMonitor Debug Console - Professional Debugging Interface
-class CorpMonitorDebugConsole {
+// PerfMonitor Debug Console - Professional Debugging Interface
+class PerfMonitorDebugConsole {
   constructor() {
     this.logs = [];
     this.isOpen = false;
@@ -11,8 +11,8 @@ class CorpMonitorDebugConsole {
   createUI() {
     // Create floating debug button
     this.debugButton = document.createElement('div');
-    this.debugButton.id = 'corpmonitor-debug-btn';
-    this.debugButton.innerHTML = '🛡️ Debug';
+    this.debugButton.id = 'perfmonitor-debug-btn';
+    this.debugButton.innerHTML = '🚀 Debug';
     this.debugButton.style.cssText = `
       position: fixed;
       top: 10px;
@@ -31,7 +31,7 @@ class CorpMonitorDebugConsole {
 
     // Create debug panel
     this.debugPanel = document.createElement('div');
-    this.debugPanel.id = 'corpmonitor-debug-panel';
+    this.debugPanel.id = 'perfmonitor-debug-panel';
     this.debugPanel.style.cssText = `
       position: fixed;
       top: 50px;
@@ -51,12 +51,12 @@ class CorpMonitorDebugConsole {
 
     this.debugPanel.innerHTML = `
       <div style="background: #2d2d2d; padding: 10px; border-bottom: 1px solid #3e3e3e; display: flex; justify-content: space-between; align-items: center;">
-        <span>CorpMonitor Debug Console</span>
-        <button id="corpmonitor-debug-close" style="background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">×</button>
+        <span>PerfMonitor Debug Console</span>
+        <button id="perfmonitor-debug-close" style="background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">×</button>
       </div>
       
-      <div style="height: calc(100% - 120px); overflow-y: auto; padding: 10px;" id="corpmonitor-debug-content">
-        <div id="corpmonitor-debug-tabs" style="display: flex; gap: 10px; margin-bottom: 10px; border-bottom: 1px solid #3e3e3e; padding-bottom: 10px;">
+      <div style="height: calc(100% - 120px); overflow-y: auto; padding: 10px;" id="perfmonitor-debug-content">
+        <div id="perfmonitor-debug-tabs" style="display: flex; gap: 10px; margin-bottom: 10px; border-bottom: 1px solid #3e3e3e; padding-bottom: 10px;">
           <button class="debug-tab active" data-tab="logs">Logs</button>
           <button class="debug-tab" data-tab="status">Status</button>
           <button class="debug-tab" data-tab="config">Config</button>
@@ -64,27 +64,27 @@ class CorpMonitorDebugConsole {
         </div>
         
         <div id="debug-tab-logs" class="debug-tab-content">
-          <div id="corpmonitor-debug-logs" style="max-height: 400px; overflow-y: auto;"></div>
+          <div id="perfmonitor-debug-logs" style="max-height: 400px; overflow-y: auto;"></div>
         </div>
         
         <div id="debug-tab-status" class="debug-tab-content" style="display: none;">
-          <div id="corpmonitor-debug-status"></div>
+          <div id="perfmonitor-debug-status"></div>
         </div>
         
         <div id="debug-tab-config" class="debug-tab-content" style="display: none;">
-          <div id="corpmonitor-debug-config"></div>
+          <div id="perfmonitor-debug-config"></div>
         </div>
         
         <div id="debug-tab-data" class="debug-tab-content" style="display: none;">
-          <div id="corpmonitor-debug-data"></div>
+          <div id="perfmonitor-debug-data"></div>
         </div>
       </div>
       
       <div style="background: #2d2d2d; padding: 10px; border-top: 1px solid #3e3e3e;">
         <div style="display: flex; gap: 5px;">
-          <button id="corpmonitor-debug-clear" style="background: #f39c12; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 11px;">Clear</button>
-          <button id="corpmonitor-debug-export" style="background: #27ae60; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 11px;">Export</button>
-          <button id="corpmonitor-debug-refresh" style="background: #3498db; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 11px;">Refresh</button>
+          <button id="perfmonitor-debug-clear" style="background: #f39c12; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 11px;">Clear</button>
+          <button id="perfmonitor-debug-export" style="background: #27ae60; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 11px;">Export</button>
+          <button id="perfmonitor-debug-refresh" style="background: #3498db; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 11px;">Refresh</button>
         </div>
       </div>
     `;
@@ -134,7 +134,7 @@ class CorpMonitorDebugConsole {
     });
 
     // Close button
-    document.getElementById('corpmonitor-debug-close').addEventListener('click', () => {
+    document.getElementById('perfmonitor-debug-close').addEventListener('click', () => {
       this.hidePanel();
     });
 
@@ -146,15 +146,15 @@ class CorpMonitorDebugConsole {
     });
 
     // Action buttons
-    document.getElementById('corpmonitor-debug-clear').addEventListener('click', () => {
+    document.getElementById('perfmonitor-debug-clear').addEventListener('click', () => {
       this.clearLogs();
     });
 
-    document.getElementById('corpmonitor-debug-export').addEventListener('click', () => {
+    document.getElementById('perfmonitor-debug-export').addEventListener('click', () => {
       this.exportDebugData();
     });
 
-    document.getElementById('corpmonitor-debug-refresh').addEventListener('click', () => {
+    document.getElementById('perfmonitor-debug-refresh').addEventListener('click', () => {
       this.refreshData();
     });
   }
@@ -239,7 +239,7 @@ class CorpMonitorDebugConsole {
       const response = await chrome.runtime.sendMessage({ action: 'getDebugLogs' });
       const logs = response?.logs || [];
       
-      const logsContainer = document.getElementById('corpmonitor-debug-logs');
+      const logsContainer = document.getElementById('perfmonitor-debug-logs');
       logsContainer.innerHTML = logs.map(log => {
         const timestamp = new Date(log.timestamp).toLocaleTimeString();
         const levelColor = this.getLevelColor(log.level);
@@ -268,7 +268,7 @@ class CorpMonitorDebugConsole {
       const response = await chrome.runtime.sendMessage({ action: 'getStatus' });
       const status = response || {};
       
-      document.getElementById('corpmonitor-debug-status').innerHTML = `
+      document.getElementById('perfmonitor-debug-status').innerHTML = `
         <div style="display: grid; gap: 10px;">
           <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 4px;">
             <strong>Extension Status</strong>
@@ -300,7 +300,7 @@ class CorpMonitorDebugConsole {
       const response = await chrome.runtime.sendMessage({ action: 'getConfig' });
       const config = response?.config || {};
       
-      document.getElementById('corpmonitor-debug-config').innerHTML = `
+      document.getElementById('perfmonitor-debug-config').innerHTML = `
         <pre style="color: #d4d4d4; font-size: 11px; white-space: pre-wrap;">${JSON.stringify(config, null, 2)}</pre>
       `;
     } catch (error) {
@@ -315,7 +315,7 @@ class CorpMonitorDebugConsole {
       const trackingElements = document.querySelectorAll('[data-track], [data-analytics], script[src*="analytics"]').length;
       const cookies = document.cookie ? document.cookie.split(';').length : 0;
       
-      document.getElementById('corpmonitor-debug-data').innerHTML = `
+      document.getElementById('perfmonitor-debug-data').innerHTML = `
         <div style="display: grid; gap: 10px;">
           <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 4px;">
             <strong>Data Collection</strong>
@@ -355,7 +355,7 @@ class CorpMonitorDebugConsole {
   // Clear logs
   clearLogs() {
     chrome.runtime.sendMessage({ action: 'clearDebugLogs' });
-    document.getElementById('corpmonitor-debug-logs').innerHTML = '<div style="color: #888;">Logs cleared</div>';
+    document.getElementById('perfmonitor-debug-logs').innerHTML = '<div style="color: #888;">Logs cleared</div>';
   }
 
   // Export debug data
@@ -375,7 +375,7 @@ class CorpMonitorDebugConsole {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `corpmonitor-debug-${Date.now()}.json`;
+      link.download = `perfmonitor-debug-${Date.now()}.json`;
       link.click();
       
       URL.revokeObjectURL(url);
@@ -388,8 +388,8 @@ class CorpMonitorDebugConsole {
 // Initialize debug console when content script loads
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    new CorpMonitorDebugConsole();
+    new PerfMonitorDebugConsole();
   });
 } else {
-  new CorpMonitorDebugConsole();
+  new PerfMonitorDebugConsole();
 }

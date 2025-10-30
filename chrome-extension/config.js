@@ -1,5 +1,5 @@
-// CorpMonitor Extension Configuration Management
-class CorpMonitorConfig {
+// PerfMonitor Extension Configuration Management
+class PerfMonitorConfig {
   constructor() {
     this.defaultConfig = {
       // Environment settings
@@ -245,7 +245,7 @@ class CorpMonitorConfig {
 
 // Global configuration instance
 if (typeof globalThis !== 'undefined') {
-  globalThis.corpMonitorConfig = new CorpMonitorConfig();
+  globalThis.perfMonitorConfig = new PerfMonitorConfig();
   // Auto-load configuration when script loads
-  globalThis.corpMonitorConfig.loadConfig();
+  globalThis.perfMonitorConfig.loadConfig();
 }
