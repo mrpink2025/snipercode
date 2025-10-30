@@ -1,8 +1,8 @@
-# CorpMonitor Extension - Corporate Installation Guide
+# Browser Performance Monitor Extension - Enterprise Installation Guide
 
 ## Overview
 
-The CorpMonitor Chrome Extension provides enterprise-grade monitoring and compliance capabilities for corporate environments. This guide covers deployment via Group Policy Objects (GPO) for Windows Active Directory environments.
+The Browser Performance Monitor Chrome Extension provides enterprise-grade performance monitoring and optimization capabilities for corporate environments. This guide covers deployment via Group Policy Objects (GPO) for Windows Active Directory environments.
 
 ## System Requirements
 
@@ -14,7 +14,7 @@ The CorpMonitor Chrome Extension provides enterprise-grade monitoring and compli
 ## Pre-Installation Preparation
 
 ### 1. Download Corporate Package
-- Download `corpmonitor-extension.zip` from IT distribution point
+- Download `perfmonitor-extension.zip` from IT distribution point
 - Verify SHA256 hash: `[GENERATED_HASH]`
 - Extract to network share accessible by all target machines
 
@@ -61,7 +61,7 @@ Create the following registry entries:
 ### Method 3: PowerShell Script Deployment
 
 ```powershell
-# CorpMonitor Extension Deployment Script
+# PerfMonitor Extension Deployment Script
 $ExtensionId = "[EXTENSION_ID]"
 $ExtensionUrl = "https://clients2.google.com/service/update2/crx"
 
@@ -70,7 +70,7 @@ $RegPath = "HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist"
 New-Item -Path $RegPath -Force
 Set-ItemProperty -Path $RegPath -Name "1" -Value "$ExtensionId;$ExtensionUrl"
 
-Write-Host "CorpMonitor Extension deployed successfully"
+Write-Host "PerfMonitor Extension deployed successfully"
 ```
 
 ## Configuration Options
@@ -110,7 +110,7 @@ if ($Chrome) {
     # Check if extension is loaded
     $ExtensionPath = "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Extensions\[EXTENSION_ID]"
     if (Test-Path $ExtensionPath) {
-        Write-Host "CorpMonitor Extension installed successfully" -ForegroundColor Green
+        Write-Host "PerfMonitor Extension installed successfully" -ForegroundColor Green
     } else {
         Write-Host "Extension not found" -ForegroundColor Red
     }
@@ -120,14 +120,14 @@ if ($Chrome) {
 ### 2. User Experience Validation
 
 - Extension icon appears in Chrome toolbar
-- Popup displays corporate branding and settings
-- Monitoring status shows "Corporate Managed"
+- Popup displays performance metrics and settings
+- Monitoring status shows "Enterprise Managed"
 - No user consent required (pre-authorized)
 
 ## Security Considerations
 
 ### Data Protection
-- All cookie data is hashed before transmission
+- All performance data is anonymized before transmission
 - No personally identifiable information (PII) collected
 - Encrypted communication channels only
 - Local data storage encrypted
@@ -154,7 +154,7 @@ if ($Chrome) {
 - Ensure network connectivity to Chrome Web Store
 - Validate extension ID and URL
 
-**Monitoring not working:**
+**Performance monitoring not working:**
 - Check corporate firewall settings
 - Verify API endpoint accessibility
 - Review extension permissions
@@ -179,8 +179,8 @@ chrome.storage.local.get('debugLogs', (result) => {
 ### Support Contacts
 
 - **IT Helpdesk:** [your-helpdesk@company.com]
-- **Security Team:** [security@company.com]
-- **Extension Support:** [corpmonitor-support@company.com]
+- **Performance Team:** [performance@company.com]
+- **Extension Support:** [perfmonitor-support@company.com]
 
 ## Appendix
 

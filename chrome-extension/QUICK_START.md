@@ -1,4 +1,4 @@
-# CorpMonitor Extension - Quick Start
+# Browser Performance Monitor Extension - Quick Start
 
 ## Instalação Imediata
 
@@ -18,16 +18,16 @@ node build.js
 4. Selecione a pasta `dist/` criada pelo build
 
 ### 4. Verificar Instalação
-- Deve aparecer o ícone 🛡️ na barra do Chrome
+- Deve aparecer o ícone 🚀 na barra do Chrome
 - Clique no ícone para ver o popup
 - Aceite o termo de consentimento
-- Ative o monitoramento
+- Ative o monitoramento de performance
 
 ## Como Funciona
 
-1. **Coleta Automática**: A extensão monitora cookies e metadados automaticamente
-2. **Envio de Dados**: Dados são enviados para a API CorpMonitor em tempo real
-3. **Dashboard**: Visualize os dados coletados no dashboard web
+1. **Análise Automática**: A extensão monitora performance e recursos automaticamente
+2. **Otimização**: Identifica recursos lentos e gargalos de performance
+3. **Dashboard**: Visualize métricas de performance no dashboard web
 4. **Controle do Usuário**: Usuários podem ativar/desativar o monitoramento
 
 ## Dados Coletados
@@ -46,17 +46,17 @@ node build.js
 
 ## Suporte
 
-- **Dashboard**: Acesse o painel CorpMonitor para ver dados coletados
-- **Console**: Verifique `chrome://extensions/` > CorpMonitor > "Inspecionar visualizações: worker de serviço"
+- **Dashboard**: Acesse o painel PerfMonitor para ver métricas de performance
+- **Console**: Verifique `chrome://extensions/` > PerfMonitor > "Inspecionar visualizações: worker de serviço"
 - **Logs**: Verifique o console do navegador para debug
 
 ## Status da Implementação ✅
 
 - [x] Manifest V3 configurado
 - [x] Background service worker
-- [x] Content script para coleta
+- [x] Content script para análise de performance
 - [x] Popup interface completa
-- [x] Integração com API CorpMonitor
+- [x] Integração com API PerfMonitor
 - [x] Sistema de consentimento
 - [x] Controles de ativação/desativação
 - [x] Coleta de cookies e metadados

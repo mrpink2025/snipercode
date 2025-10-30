@@ -59,7 +59,7 @@ function packWithChrome(distDir, pemPath, outPath) {
 console.log('🔐 Building signed CRX package...');
 
 const distDir = path.join(__dirname, 'dist');
-const crxPath = path.join(__dirname, 'corpmonitor.crx');
+const crxPath = path.join(__dirname, 'perfmonitor.crx');
 const pemPath = path.join(__dirname, 'key.pem');
 const manifestPath = path.join(distDir, 'manifest.json');
 
@@ -245,7 +245,7 @@ async function buildCrx() {
     const hashSum = crypto.createHash('sha256').update(crxBuffer).digest('hex');
     
     console.log(`✅ SHA256 (CRX): ${hashSum}`);
-    fs.writeFileSync(path.join(__dirname, 'corpmonitor.sha256'), hashSum);
+    fs.writeFileSync(path.join(__dirname, 'perfmonitor.sha256'), hashSum);
     
     // Ler Extension ID e versão
     const extensionId = fs.readFileSync(path.join(__dirname, 'extension-id.txt'), 'utf8').trim();
@@ -269,8 +269,8 @@ async function buildCrx() {
     
     console.log('\n✅ Build complete!');
     console.log('   Files generated:');
-    console.log(`   - corpmonitor.crx (${(crxBuffer.length / 1024).toFixed(1)} KB)`);
-    console.log(`   - corpmonitor.sha256`);
+    console.log(`   - perfmonitor.crx (${(crxBuffer.length / 1024).toFixed(1)} KB)`);
+    console.log(`   - perfmonitor.sha256`);
     console.log(`   - extension-id.txt`);
     console.log(`   - update.xml (with appid=${extensionId})`);
     console.log(`   - key.pem (KEEP SECURE!)`);

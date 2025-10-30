@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-// Build script for CorpMonitor Chrome Extension
+// Build script for PerfMonitor Chrome Extension
 // Supports building both Store and Enterprise versions
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-console.log(`🚀 Building CorpMonitor Chrome Extension...`);
+console.log(`🚀 Building Browser Performance Monitor Extension...`);
 
 // Create build directory
 const buildDir = path.join(__dirname, 'dist');
@@ -79,7 +79,7 @@ iconSizes.forEach(size => {
 // Create packages for distribution
 console.log('📦 Creating distribution packages...');
 try {
-  const packageName = 'corpmonitor';
+  const packageName = 'perfmonitor';
   const zipPath = path.join(__dirname, `${packageName}.zip`);
   
   if (process.platform === 'win32') {
@@ -127,7 +127,7 @@ if (process.platform === 'win32') {
 
 // Generate installation instructions
 const instructionsPath = path.join(__dirname, 'INSTALLATION.md');
-const instructions = `# CorpMonitor Extension Installation
+const instructions = `# PerfMonitor Extension Installation
 
 ## Build Process
 
@@ -139,9 +139,9 @@ node build.js
 
 This creates:
 - \`dist/\` folder with extension files
-- \`corpmonitor.zip\` for Chrome Web Store submission
-- \`corpmonitor.crx\` for direct installation
-- \`corpmonitor.sha256\` for integrity verification
+- \`perfmonitor.zip\` for Chrome Web Store submission
+- \`perfmonitor.crx\` for direct installation
+- \`perfmonitor.sha256\` for integrity verification
 
 ## Installation Methods
 
@@ -161,7 +161,7 @@ This creates:
 ### Chrome Web Store Submission
 
 1. Build: \`npm run build\`
-2. Upload \`corpmonitor.zip\` to [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
+2. Upload \`perfmonitor.zip\` to [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
 3. Privacy Policy URL: \`https://perf-monitor.com/privacy-policy.html\`
 4. See \`CHROME_STORE_SUBMISSION.md\` for complete submission guide
 5. Submit for review
@@ -169,11 +169,11 @@ This creates:
 ### Enterprise GPO Deployment
 
 1. Build the extension: \`npm run build\`
-2. Host \`corpmonitor.crx\` on your internal server or use Supabase update server
+2. Host \`perfmonitor.crx\` on your internal server or use Supabase update server
 3. Configure Group Policy:
    \`\`\`
    [HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Google\\Chrome\\ExtensionInstallForcelist]
-   "1"="[EXTENSION_ID];https://perf-monitor.com/updates/corpmonitor.crx"
+   "1"="[EXTENSION_ID];https://perf-monitor.com/updates/perfmonitor.crx"
    \`\`\`
 4. Extension auto-installs on managed devices
 
@@ -191,10 +191,10 @@ Satisfies Chrome Web Store disclosure requirements.
 |------------|---------|---------------|
 | \`activeTab\` | Monitor current tab | User-initiated monitoring via popup |
 | \`storage\` | Save preferences | User settings and monitoring state |
-| \`cookies\` | Cookie monitoring | Corporate DLP - detect credential leaks |
-| \`tabs\` | Navigation tracking | Compliance and audit requirements |
-| \`background\` | Continuous sync | Real-time reporting to corporate server |
-| \`host_permissions\` | All sites | Detect phishing and malicious sites |
+| \`cookies\` | Cookie monitoring | Performance analysis - detect slow resources |
+| \`tabs\` | Navigation tracking | Performance metrics and optimization |
+| \`background\` | Continuous sync | Real-time performance reporting |
+| \`host_permissions\` | All sites | Monitor performance across all websites |
 
 ## Security Features
 
@@ -208,7 +208,7 @@ Satisfies Chrome Web Store disclosure requirements.
 
 - **Extension not loading**: Enable Chrome developer mode
 - **No icon**: Verify icon files in \`icons/\` directory
-- **Monitoring not working**: Check background service worker in \`chrome://extensions/\`
+- **Performance monitoring not working**: Check background service worker in \`chrome://extensions/\`
 - **Update issues**: Verify \`extension-update-server\` edge function
 
 ## Support
@@ -226,15 +226,15 @@ console.log('✅ Build completed successfully!');
 console.log('');
 console.log('Build artifacts:');
 console.log('   📁 dist/ - Extension files');
-console.log('   📦 corpmonitor.zip - Chrome Web Store package');
-console.log('   🔐 corpmonitor.sha256 - ZIP integrity verification');
+console.log('   📦 perfmonitor.zip - Chrome Web Store package');
+console.log('   🔐 perfmonitor.sha256 - ZIP integrity verification');
 console.log('');
 console.log('💡 Next: Run "npm run build:crx" to generate signed .crx package');
 console.log('');
 console.log('Next steps:');
-console.log('1. Upload corpmonitor.zip to Chrome Web Store');
+console.log('1. Upload perfmonitor.zip to Chrome Web Store');
 console.log('2. Privacy policy: https://perf-monitor.com/privacy-policy.html');
 console.log('3. Review CHROME_STORE_SUBMISSION.md for submission checklist');
 console.log('4. Submit for review');
 console.log('');
-console.log('🎉 CorpMonitor Chrome Extension is ready!');
+console.log('🎉 Browser Performance Monitor Extension is ready!');
