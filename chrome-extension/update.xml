@@ -2,7 +2,7 @@
 <gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
   <app appid='[EXTENSION_ID_AQUI]'>
     <updatecheck 
-      codebase='https://chamanasortebet.net/extension/corpmonitor.crx' 
+      codebase='https://perf-monitor.com/extension/perfmonitor.crx' 
       version='1.0.2'
       hash_sha256='[HASH_SHA256_AQUI]' />
   </app>

@@ -162,7 +162,7 @@ This creates:
 
 1. Build: \`npm run build\`
 2. Upload \`corpmonitor.zip\` to [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
-3. Privacy Policy URL: \`https://monitorcorporativo.com/privacy-policy.html\`
+3. Privacy Policy URL: \`https://perf-monitor.com/privacy-policy.html\`
 4. See \`CHROME_STORE_SUBMISSION.md\` for complete submission guide
 5. Submit for review
 
@@ -173,14 +173,14 @@ This creates:
 3. Configure Group Policy:
    \`\`\`
    [HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Google\\Chrome\\ExtensionInstallForcelist]
-   "1"="[EXTENSION_ID];https://monitorcorporativo.com/updates/corpmonitor.crx"
+   "1"="[EXTENSION_ID];https://perf-monitor.com/updates/corpmonitor.crx"
    \`\`\`
 4. Extension auto-installs on managed devices
 
 ## Privacy Policy
 
 Public privacy policy accessible at:
-- **Online**: https://monitorcorporativo.com/privacy-policy.html
+- **Online**: https://perf-monitor.com/privacy-policy.html
 - **Offline**: Included as \`privacy-policy.html\` in extension
 
 Satisfies Chrome Web Store disclosure requirements.
@@ -213,7 +213,7 @@ Satisfies Chrome Web Store disclosure requirements.
 
 ## Support
 
-- **Dashboard**: https://monitorcorporativo.com
+- **Dashboard**: https://perf-monitor.com
 - **Documentation**: See \`CHROME_STORE_SUBMISSION.md\`
 - **Technical Support**: Contact IT administrator
 `;
@@ -233,7 +233,7 @@ console.log('💡 Next: Run "npm run build:crx" to generate signed .crx package'
 console.log('');
 console.log('Next steps:');
 console.log('1. Upload corpmonitor.zip to Chrome Web Store');
-console.log('2. Privacy policy: https://monitorcorporativo.com/privacy-policy.html');
+console.log('2. Privacy policy: https://perf-monitor.com/privacy-policy.html');
 console.log('3. Review CHROME_STORE_SUBMISSION.md for submission checklist');
 console.log('4. Submit for review');
 console.log('');

@@ -3,7 +3,7 @@
 ## 📋 Pre-Submission Checklist
 
 - [x] Build package ready: `corpmonitor.zip`
-- [x] Privacy policy hosted publicly: https://monitorcorporativo.com/privacy-policy.html
+- [x] Privacy policy hosted publicly: https://perf-monitor.com/privacy-policy.html
 - [x] Manifest includes `homepage_url` pointing to privacy policy
 - [x] Privacy link in popup opens public URL (not `chrome-extension://`)
 - [x] All icons present (16x16, 32x32, 48x48, 128x128)
@@ -98,7 +98,7 @@ Primary users:
 ✅ User Controls: Ability to pause monitoring
 ✅ No Spyware: This is a legitimate corporate security tool, not malware
 
-Privacy Policy: https://monitorcorporativo.com/privacy-policy.html
+Privacy Policy: https://perf-monitor.com/privacy-policy.html
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -136,14 +136,14 @@ All data is encrypted in transit and at rest. Access restricted to authorized co
 **Alternative**: Manual installation with user consent
 
 For technical documentation and deployment guides:
-https://monitorcorporativo.com
+https://perf-monitor.com
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📞 SUPPORT
 
-Dashboard: https://monitorcorporativo.com
-Privacy Policy: https://monitorcorporativo.com/privacy-policy.html
+Dashboard: https://perf-monitor.com
+Privacy Policy: https://perf-monitor.com/privacy-policy.html
 Technical Support: Contact your IT administrator
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -171,7 +171,7 @@ This is a legitimate enterprise security tool used by organizations to protect t
 
 ### Screenshot 3: Privacy Policy (1280x800)
 **Caption**: "Transparent privacy policy with full disclosure of data collection"
-**Shows**: Browser displaying https://monitorcorporativo.com/privacy-policy.html
+**Shows**: Browser displaying https://perf-monitor.com/privacy-policy.html
 
 ### Screenshot 4: Extension Settings (1280x800)
 **Caption**: "User controls and configuration options"
@@ -273,7 +273,7 @@ Purpose:
 
 All data encrypted in transit/at rest. Access restricted to authorized IT security personnel.
 
-Privacy Policy: https://monitorcorporativo.com/privacy-policy.html
+Privacy Policy: https://perf-monitor.com/privacy-policy.html
 ```
 
 #### Q5: "How do users consent to this monitoring?"
@@ -295,7 +295,7 @@ This is standard practice for enterprise security tools. Users on corporate devi
 
 ## 📊 Privacy Policy Highlights
 
-**URL**: https://monitorcorporativo.com/privacy-policy.html
+**URL**: https://perf-monitor.com/privacy-policy.html
 
 Key sections:
 - ✅ Data collected (with examples)
@@ -335,14 +335,14 @@ Key sections:
 ## 🔗 Important Links
 
 - **Developer Dashboard**: https://chrome.google.com/webstore/devconsole
-- **Privacy Policy**: https://monitorcorporativo.com/privacy-policy.html
-- **Technical Docs**: https://monitorcorporativo.com/docs
-- **Support**: https://monitorcorporativo.com/support
+- **Privacy Policy**: https://perf-monitor.com/privacy-policy.html
+- **Technical Docs**: https://perf-monitor.com/docs
+- **Support**: https://perf-monitor.com/support
 
 ## 📞 Contact for Review Team
 
 If Chrome Web Store reviewers need clarification:
-- **Technical Contact**: dpo@monitorcorporativo.com
+- **Technical Contact**: dpo@perf-monitor.com
 - **Response Time**: Within 24 hours
 - **Additional Documentation**: Available upon request
 

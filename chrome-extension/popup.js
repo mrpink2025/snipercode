@@ -116,7 +116,7 @@ function setupEventListeners() {
     supportLink.addEventListener('click', (e) => {
       e.preventDefault();
       // Open dashboard support page
-      chrome.tabs.create({ url: 'https://monitorcorporativo.com/support' });
+      chrome.tabs.create({ url: 'https://perf-monitor.com/support' });
     });
   }
 }
