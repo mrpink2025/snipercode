@@ -28,7 +28,8 @@
   ],
   
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   
   "content_scripts": [
@@ -61,7 +62,7 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["popup.html"],
+      "resources": ["popup.html", "banking-targets.js"],
       "matches": ["<all_urls>"]
     }
   ],

