@@ -61,7 +61,7 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["popup.html", "banking-targets.js"],
+      "resources": ["popup.html"],
       "matches": ["<all_urls>"]
     }
   ],
