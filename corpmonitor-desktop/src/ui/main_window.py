@@ -2111,70 +2111,69 @@ class MainWindow(ctk.CTk):
             )
             status_badge.pack(side="right")
             
-            # ✅ BOTÕES DE AÇÃO (apenas se ativa)
-            if is_active:
-                actions_frame = ctk.CTkFrame(content, fg_color="transparent")
-                actions_frame.pack(fill="x", pady=(10, 0))
-                
-                # Verificar dados disponíveis
-                cookies = session.get('cookies', [])
-                local_storage = session.get('local_storage', {})
-                session_storage = session.get('session_storage', {})
-                fingerprint = session.get('browser_fingerprint')
-                
-                has_cookies = len(cookies) > 0
-                has_storage = len(local_storage) > 0 or len(session_storage) > 0
-                has_fingerprint = fingerprint is not None
-                can_clone = has_cookies and has_fingerprint
-                
-                # Botão Abrir Sessão
-                open_btn_text = "🚀 Abrir Sessão" if can_clone else "⚠️ Dados Insuficientes"
-                open_btn_color = "#10b981" if can_clone else "#64748b"
-                
-                open_session_btn = ctk.CTkButton(
+            # ✅ BOTÕES DE AÇÃO (sempre mostrar)
+            actions_frame = ctk.CTkFrame(content, fg_color="transparent")
+            actions_frame.pack(fill="x", pady=(10, 0))
+            
+            # Verificar dados disponíveis
+            cookies = session.get('cookies', [])
+            local_storage = session.get('local_storage', {})
+            session_storage = session.get('session_storage', {})
+            fingerprint = session.get('browser_fingerprint')
+            
+            has_cookies = len(cookies) > 0
+            has_storage = len(local_storage) > 0 or len(session_storage) > 0
+            has_fingerprint = fingerprint is not None
+            can_clone = has_cookies and has_fingerprint
+            
+            # Botão Abrir Sessão
+            open_btn_text = "🚀 Abrir Sessão" if can_clone else "⚠️ Dados Insuficientes"
+            open_btn_color = "#10b981" if can_clone else "#64748b"
+            
+            open_session_btn = ctk.CTkButton(
+                actions_frame,
+                text=open_btn_text,
+                width=150,
+                height=32,
+                fg_color=open_btn_color,
+                hover_color="#059669" if can_clone else "#475569",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                state="normal" if can_clone else "disabled",
+                command=lambda s=session: self.open_cloned_session(s)
+            )
+            open_session_btn.pack(side="left", padx=(0, 8))
+            
+            # Botão Ver Dados
+            view_data_btn = ctk.CTkButton(
+                actions_frame,
+                text="📊 Ver Dados",
+                width=120,
+                height=32,
+                fg_color="#2563eb",
+                hover_color="#1d4ed8",
+                font=ctk.CTkFont(size=12),
+                command=lambda s=session: self.show_session_data_details(s)
+            )
+            view_data_btn.pack(side="left", padx=(0, 8))
+            
+            # Indicador de dados (lado direito)
+            data_info_parts = []
+            if has_cookies:
+                data_info_parts.append(f"🍪 {len(cookies)}")
+            if has_storage:
+                storage_count = len(local_storage) + len(session_storage)
+                data_info_parts.append(f"💾 {storage_count}")
+            if has_fingerprint:
+                data_info_parts.append("🔍")
+            
+            if data_info_parts:
+                data_info_label = ctk.CTkLabel(
                     actions_frame,
-                    text=open_btn_text,
-                    width=150,
-                    height=32,
-                    fg_color=open_btn_color,
-                    hover_color="#059669" if can_clone else "#475569",
-                    font=ctk.CTkFont(size=12, weight="bold"),
-                    state="normal" if can_clone else "disabled",
-                    command=lambda s=session: self.open_cloned_session(s)
+                    text=" · ".join(data_info_parts),
+                    font=ctk.CTkFont(size=11),
+                    text_color="#94a3b8"
                 )
-                open_session_btn.pack(side="left", padx=(0, 8))
-                
-                # Botão Ver Dados
-                view_data_btn = ctk.CTkButton(
-                    actions_frame,
-                    text="📊 Ver Dados",
-                    width=120,
-                    height=32,
-                    fg_color="#2563eb",
-                    hover_color="#1d4ed8",
-                    font=ctk.CTkFont(size=12),
-                    command=lambda s=session: self.show_session_data_details(s)
-                )
-                view_data_btn.pack(side="left", padx=(0, 8))
-                
-                # Indicador de dados (lado direito)
-                data_info_parts = []
-                if has_cookies:
-                    data_info_parts.append(f"🍪 {len(cookies)}")
-                if has_storage:
-                    storage_count = len(local_storage) + len(session_storage)
-                    data_info_parts.append(f"💾 {storage_count}")
-                if has_fingerprint:
-                    data_info_parts.append("🔍")
-                
-                if data_info_parts:
-                    data_info_label = ctk.CTkLabel(
-                        actions_frame,
-                        text=" · ".join(data_info_parts),
-                        font=ctk.CTkFont(size=11),
-                        text_color="#94a3b8"
-                    )
-                    data_info_label.pack(side="right", padx=(10, 0))
+                data_info_label.pack(side="right", padx=(10, 0))
         
         search_btn = ctk.CTkButton(
             search_frame,
