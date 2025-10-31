@@ -7,6 +7,7 @@ from io import BytesIO
 from PIL import Image, ImageTk
 import threading
 from datetime import datetime
+from postgrest.exceptions import APIError
 
 class LiveScreenshotViewer(ctk.CTkToplevel):
     """Visualizador de screenshot em tempo real de uma máquina"""
@@ -21,6 +22,7 @@ class LiveScreenshotViewer(ctk.CTkToplevel):
         self.current_image = None
         self._destroyed = False
         self._refresh_job = None
+        self._fetching = False  # Guard contra chamadas concorrentes
         
         # Configuração da janela
         self.title(f"🎥 Tela ao Vivo - {self.machine_id}")
@@ -122,33 +124,51 @@ class LiveScreenshotViewer(ctk.CTkToplevel):
     def refresh_screenshot(self):
         """Buscar e exibir screenshot mais recente"""
         def fetch():
+            # Guard contra chamadas concorrentes
+            if self._fetching:
+                return
+            self._fetching = True
+            
             try:
                 logger.info(f"🔍 Buscando screenshot para {self.machine_id}")
                 
-                # Buscar do Supabase
+                # Buscar do Supabase (sem .single() para evitar PGRST116)
                 response = self.supabase.table('live_screenshots') \
-                    .select('*') \
+                    .select('screenshot_data,domain,url,captured_at') \
                     .eq('machine_id', self.machine_id) \
-                    .single() \
+                    .order('captured_at', desc=True) \
+                    .limit(1) \
                     .execute()
                 
-                if response.data:
-                    screenshot_data = response.data.get('screenshot_data')
-                    domain = response.data.get('domain', 'Desconhecido')
-                    url = response.data.get('url', '')
-                    captured_at = response.data.get('captured_at')
-                    
-                    if screenshot_data:
-                        # Converter Base64 para imagem
-                        self.update_screenshot(screenshot_data, domain, url, captured_at)
-                    else:
-                        self.show_no_screenshot()
+                # Extrair dados (compatível com diferentes versões da lib)
+                rows = getattr(response, 'data', None) or response.get('data', [])
+                
+                if not rows:
+                    # Nenhuma screenshot encontrada ainda
+                    self.show_no_screenshot()
+                    return
+                
+                row = rows[0]
+                screenshot_data = row.get('screenshot_data')
+                domain = row.get('domain', 'Desconhecido')
+                url = row.get('url', '')
+                captured_at = row.get('captured_at')
+                
+                if screenshot_data:
+                    # Converter Base64 para imagem
+                    self.update_screenshot(screenshot_data, domain, url, captured_at)
                 else:
                     self.show_no_screenshot()
                     
+            except APIError as e:
+                # Erro de RLS ou outro erro do Supabase
+                logger.warning(f"APIError ao buscar screenshot: {e}")
+                self.show_no_screenshot()
             except Exception as e:
                 logger.error(f"Erro ao buscar screenshot: {e}", exc_info=True)
                 self.show_error(str(e))
+            finally:
+                self._fetching = False
         
         # Executar em thread separada
         threading.Thread(target=fetch, daemon=True).start()
