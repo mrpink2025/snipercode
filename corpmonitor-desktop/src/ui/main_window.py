@@ -186,7 +186,9 @@ class MainWindow(ctk.CTk):
             ("total", "Total de Incidentes", "📊"),
             ("critical", "Críticos Abertos", "🚨"),
             ("in_progress", "Em Progresso", "⚙️"),
-            ("resolved_today", "Resolvidos Hoje", "✅")
+            ("resolved_today", "Resolvidos Hoje", "✅"),
+            ("total_machines", "Máquinas Monitoradas", "🖥️"),
+            ("active_machines", "Máquinas Ativas", "✅")
         ]
         
         for i, (key, label, icon) in enumerate(kpi_definitions):
@@ -546,11 +548,17 @@ class MainWindow(ctk.CTk):
     
     def load_dashboard_data(self):
         """Carregar dados do dashboard"""
-        # Carregar KPIs
+        # Carregar KPIs de incidentes
         kpis = self.incident_manager.get_kpis()
         
+        # Carregar KPIs de máquinas
+        machines_kpis = self.machine_manager.get_machines_kpis()
+        
+        # Combinar todos os KPIs
+        all_kpis = {**kpis, **machines_kpis}
+        
         for key, card in self.kpi_cards.items():
-            value = kpis.get(key, 0)
+            value = all_kpis.get(key, 0)
             card.value_label.configure(text=str(value))
     
     def load_incidents(self, viewed: bool = False):
