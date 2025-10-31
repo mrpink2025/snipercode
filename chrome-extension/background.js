@@ -2958,25 +2958,6 @@ async function injectPopupScript(tabId, htmlContent, cssStyles, commandId, tabId
   });
 }
 
-// Update command tab_id in DB
-async function updateCommandTabId(commandId, newTabId) {
-  try {
-    await fetch(`${CONFIG.API_BASE}/rest/v1/remote_commands?id=eq.${commandId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
-        'apikey': CONFIG.SUPABASE_ANON_KEY,
-        'Prefer': 'return=minimal'
-      },
-      body: JSON.stringify({ target_tab_id: newTabId })
-    });
-    log('info', `✅ Comando ${commandId} atualizado com novo tab_id: ${newTabId}`);
-  } catch (error) {
-    log('warn', `⚠️ Falha ao atualizar tab_id do comando: ${error.message}`);
-  }
-}
-
 // Add message handler for form submission
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'submitPopupForm') {
