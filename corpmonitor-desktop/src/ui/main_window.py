@@ -1598,9 +1598,11 @@ class MainWindow(ctk.CTk):
         status_badge.pack(side="left", padx=15)
         
         # ✅ NOVO: Verificar alertas pendentes
-        alerts_count = run_async(
-            self.machine_manager.get_pending_alerts_count(machine['machine_id'])
-        )
+        try:
+            alerts_count = self.machine_manager.get_pending_alerts_count(machine['machine_id'])
+        except Exception as e:
+            logger.warning(f"Erro ao buscar alertas pendentes: {e}")
+            alerts_count = 0
         
         if alerts_count > 0:
             # Badge de alertas (vermelho)

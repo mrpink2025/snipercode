@@ -48,6 +48,9 @@ verify_jwt = false
 [functions.proxy-fetch-result]
 verify_jwt = false
 
+[functions.screenshot-stream]
+verify_jwt = false
+
 [functions.create-admin-users]
 verify_jwt = true
 
