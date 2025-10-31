@@ -1704,6 +1704,18 @@ class MainWindow(ctk.CTk):
             command=lambda: self.show_machine_sessions(machine)
         )
         view_sessions_btn.pack(side="left")
+        
+        # Botão Ver Tela ao Vivo
+        view_live_btn = ctk.CTkButton(
+            actions_frame,
+            text="🎥 Ver Tela ao Vivo",
+            width=140,
+            height=32,
+            fg_color="#10b981",
+            hover_color="#059669",
+            command=lambda: self.show_live_screenshot(machine)
+        )
+        view_live_btn.pack(side="left", padx=(10, 0))
     
     def test_alert_sound(self):
         """Testar som de alerta crítico"""
@@ -3647,3 +3659,21 @@ class MainWindow(ctk.CTk):
             threading.Thread(target=play, daemon=True).start()
         except Exception as e:
             logger.warning(f"Erro ao tocar som crítico: {e}")
+    
+    def show_live_screenshot(self, machine: Dict):
+        """Abrir visualizador de screenshot em tempo real"""
+        try:
+            from src.ui.live_screenshot_viewer import LiveScreenshotViewer
+            
+            logger.info(f"Abrindo visualizador de tela ao vivo para {machine['machine_id']}")
+            
+            viewer = LiveScreenshotViewer(self, machine, self.supabase)
+            viewer.focus()
+            
+        except Exception as e:
+            logger.error(f"Erro ao abrir visualizador: {e}", exc_info=True)
+            from tkinter import messagebox
+            messagebox.showerror(
+                "Erro",
+                f"Erro ao abrir visualizador de tela:\n{str(e)}"
+            )

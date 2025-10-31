@@ -383,6 +383,33 @@ export type Database = {
           },
         ]
       }
+      live_screenshots: {
+        Row: {
+          captured_at: string | null
+          domain: string | null
+          id: string
+          machine_id: string
+          screenshot_data: string
+          url: string | null
+        }
+        Insert: {
+          captured_at?: string | null
+          domain?: string | null
+          id?: string
+          machine_id: string
+          screenshot_data: string
+          url?: string | null
+        }
+        Update: {
+          captured_at?: string | null
+          domain?: string | null
+          id?: string
+          machine_id?: string
+          screenshot_data?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
       machine_blocked_domains: {
         Row: {
           blocked_by: string
